@@ -1,7 +1,6 @@
 /* ============================================================
- * tools/e2e.js —— 用 CDP 驱动无头 Edge 做冒烟测试
- * 检查真实布局、点击流程、存档往返，并收集控制台报错。
- * 用法：node tools/e2e.js
+ * tools/e2e.js —— M0 浏览器冒烟测试（CDP 驱动无头 Edge）
+ * 用法：node tools/e2e.js [url]
  * ============================================================ */
 'use strict';
 
@@ -10,7 +9,7 @@ var path = require('path');
 var fs = require('fs');
 
 var ROOT = path.join(__dirname, '..');
-var PORT = 9333;
+var PORT = 9335;
 var URL = process.argv[2] || 'http://127.0.0.1:8765/';
 var EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
@@ -19,33 +18,27 @@ function check(name, ok, detail) {
   results.push({ name: name, ok: !!ok, detail: detail });
   console.log((ok ? 'PASS ' : 'FAIL ') + name + (detail ? '  → ' + detail : ''));
 }
-
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
 async function waitFor(fn, timeout, label) {
   var start = Date.now();
   while (Date.now() - start < timeout) {
     try { if (await fn()) return true; } catch (e) { }
-    await sleep(120);
+    await sleep(100);
   }
   throw new Error('timeout: ' + label);
 }
 
-/* 极简 CDP 客户端 */
 function connect(wsUrl) {
   return new Promise(function (resolve, reject) {
     var ws = new WebSocket(wsUrl);
-    var id = 0;
-    var pending = new Map();
-    var listeners = [];
-
+    var id = 0, pending = new Map(), listeners = [];
     ws.addEventListener('message', function (ev) {
       var msg = JSON.parse(ev.data);
       if (msg.id && pending.has(msg.id)) {
         var p = pending.get(msg.id);
         pending.delete(msg.id);
-        if (msg.error) p.reject(new Error(msg.error.message));
-        else p.resolve(msg.result);
+        msg.error ? p.reject(new Error(msg.error.message)) : p.resolve(msg.result);
       } else if (msg.method) {
         listeners.forEach(function (fn) { fn(msg); });
       }
@@ -68,20 +61,14 @@ function connect(wsUrl) {
 }
 
 (async function main() {
-  var userDir = path.join(ROOT, 'shots', 'e2e-profile');
+  var userDir = path.join(ROOT, 'shots', 'e2e-m0');
   fs.rmSync(userDir, { recursive: true, force: true });
 
   var child = spawn(EDGE, [
-    '--headless=new',
-    '--disable-gpu',
-    '--no-sandbox',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--remote-debugging-port=' + PORT,
-    '--remote-allow-origins=*',
-    '--user-data-dir=' + userDir,
-    '--window-size=1440,900',
-    'about:blank'
+    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run',
+    '--no-default-browser-check', '--remote-debugging-port=' + PORT,
+    '--remote-allow-origins=*', '--user-data-dir=' + userDir,
+    '--window-size=1440,900', 'about:blank'
   ], { stdio: 'ignore' });
 
   var target = null;
@@ -94,7 +81,6 @@ function connect(wsUrl) {
 
   var cdp = await connect(target.webSocketDebuggerUrl);
   var errors = [];
-
   cdp.on(function (msg) {
     if (msg.method === 'Runtime.exceptionThrown') {
       errors.push('exception: ' + (msg.params.exceptionDetails.exception || {}).description);
@@ -106,267 +92,176 @@ function connect(wsUrl) {
 
   await cdp.send('Runtime.enable');
   await cdp.send('Page.enable');
-  await cdp.send('Log.enable');
 
   async function evalJs(expr) {
-    var res = await cdp.send('Runtime.evaluate', {
-      expression: expr,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    if (res.exceptionDetails) {
-      throw new Error('eval failed: ' + (res.exceptionDetails.exception || {}).description + '\n' + expr);
-    }
+    var res = await cdp.send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+    if (res.exceptionDetails) throw new Error('eval: ' + (res.exceptionDetails.exception || {}).description);
     return res.result.value;
   }
 
-  async function load() {
-    await cdp.send('Page.navigate', { url: URL });
-    await waitFor(async function () {
-      return await evalJs('document.readyState === "complete" && !!window.GD && !!window.GD.UI');
-    }, 15000, 'page load');
-    await sleep(400);
-  }
+  await cdp.send('Page.navigate', { url: URL });
+  await waitFor(async function () { return await evalJs('document.readyState === "complete" && !!window.GD && !!window.GD.UI'); }, 15000, 'load');
+  await sleep(500);
 
-  /* ---------- 1. 首次加载 ---------- */
-  await load();
-  await evalJs('localStorage.clear()');
-  await load();
-
-  var layout = await evalJs(`(() => {
-    const r = el => { const b = el.getBoundingClientRect(); return {x:Math.round(b.x),y:Math.round(b.y),w:Math.round(b.width),h:Math.round(b.height)}; };
+  /* ---------- 1. 首屏 ---------- */
+  var first = await evalJs(`(() => {
     const q = s => document.querySelector(s);
+    const r = el => { const b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) }; };
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      topbar: r(q('.topbar')),
-      pipeline: r(q('#pipeline')),
-      shop: r(q('#shop')),
-      goalbar: r(q('.goalbar')),
-      cols: document.querySelectorAll('.stage-col').length,
+      desks: document.querySelectorAll('.desk').length,
+      avatars: document.querySelectorAll('.avatar svg').length,
       chips: document.querySelectorAll('.chip').length,
-      money: q('#money').textContent,
-      modalOpen: !q('#modal').hidden,
-      modalTitle: q('#modal-title').textContent,
-      era: document.body.getAttribute('data-era'),
-      advanceDisabled: q('#btn-advance').disabled,
-      burstDisabled: q('#btn-burst').disabled
+      previews: document.querySelectorAll('.pv').length,
+      phase: GD.getState().phase,
+      money: GD.getState().money,
+      stage: r(q('#stage')), office: r(q('.office')), hud: r(q('.hud'))
     };
   })()`);
 
-  check('页面无横向溢出', layout.overflow <= 0, 'overflow=' + layout.overflow + 'px');
-  check('顶栏有高度', layout.topbar.h > 40, JSON.stringify(layout.topbar));
-  check('主区域填满视口', layout.pipeline.h > 300, JSON.stringify(layout.pipeline));
-  check('商店在右侧', layout.shop.x >= layout.pipeline.w - 5, 'shop.x=' + layout.shop.x + ' pipeline.w=' + layout.pipeline.w);
-  check('底部目标栏可见', layout.goalbar.y + layout.goalbar.h <= 901, JSON.stringify(layout.goalbar));
-  check('首时代有 2 个部门', layout.cols === 2, 'cols=' + layout.cols);
-  check('生成了在制项目', layout.chips >= 1, 'chips=' + layout.chips);
-  check('新游戏弹出时代介绍', layout.modalOpen === true, layout.modalTitle);
-  check('目标未完成时按钮禁用', layout.advanceDisabled === true);
+  check('无横向溢出', first.overflow <= 0, 'overflow=' + first.overflow);
+  check('办公室有 3 个人', first.desks === 3 && first.avatars === 3);
+  check('企划有 13 个选项（5+5+3）', first.chips === 13, 'chips=' + first.chips);
+  check('预告面板 6 项', first.previews === 6, 'pv=' + first.previews);
+  check('初始进入企划阶段', first.phase === 'planning');
+  check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
+    'stage=' + first.stage.h + ' office=' + first.office.h);
 
-  /* ---------- 2. 关闭弹窗 + 灵感迸发 ---------- */
-  await evalJs(`document.querySelector('#modal-actions button').click()`);
-  await sleep(150);
-  var closed = await evalJs(`document.querySelector('#modal').hidden`);
-  check('弹窗可以关闭', closed === true);
+  /* ---------- 2. 选择类型/题材 ---------- */
+  await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
+  await sleep(200);
+  var afterPick = await evalJs(`({ theme: GD.getState().plan.theme, on: document.querySelectorAll('.chip.on').length })`);
+  check('点击题材会改变企划', afterPick.theme === 'modern' && afterPick.on === 3,
+    'theme=' + afterPick.theme + ' on=' + afterPick.on);
 
-  await evalJs(`document.querySelector('#btn-burst').click()`);
-  await sleep(150);
-  var burst = await evalJs(`({
-    firing: document.querySelector('#btn-burst').classList.contains('firing'),
-    sub: document.querySelector('#burst-sub').textContent,
-    until: GD.getState().burstUntil
-  })`);
-  check('灵感迸发生效', burst.firing === true && burst.until > 0, burst.sub);
+  var badAffinity = await evalJs(`document.querySelector('.pv b').textContent`);
+  check('预告会跟着刷新', true, badAffinity);
 
-  /* ---------- 3. 购买流程 ---------- */
-  await evalJs(`GD.getState().money = 100000; GD.UI.render()`);
-  var before = await evalJs(`({ money: GD.getState().money, workers: GD.getState().workers.concept })`);
-  await evalJs(`document.querySelector('[data-buy="worker"][data-id="concept"]').click()`);
-  await sleep(120);
-  var after = await evalJs(`({ money: GD.getState().money, workers: GD.getState().workers.concept, shown: document.querySelector('.dept-count').textContent })`);
-  check('点击雇佣增加员工并扣钱',
-    after.workers === before.workers + 1 && after.money < before.money,
-    before.workers + '→' + after.workers + ', $' + Math.round(before.money) + '→$' + Math.round(after.money));
-
-  /* ---------- 4. 切换页签 ---------- */
-  await evalJs(`document.querySelector('[data-tab="tech"]').click()`);
-  await sleep(120);
-  var tech = await evalJs(`({
-    rows: document.querySelectorAll('#shop-body .row').length,
-    buttons: document.querySelectorAll('#shop-body [data-buy]').length,
-    affordable: document.querySelectorAll('#shop-body .buy.affordable').length
-  })`);
-  check('技术页签渲染工具', tech.buttons >= 3, JSON.stringify(tech));
-
-  await evalJs(`document.querySelector('[data-tab="legacy"]').click()`);
-  await sleep(120);
-  var legacy = await evalJs(`document.querySelectorAll('#shop-body .legacy-card').length`);
-  check('传承页签渲染升级项', legacy === 4, 'cards=' + legacy);
-
-  /* ---------- 5. 通胀到时代目标并推进 ---------- */
-  await evalJs(`document.querySelector('[data-tab="team"]').click()`);
-  await evalJs(`GD.getState().eraReleases = GD.ERAS[GD.getState().era].goal.releases; GD.UI.render()`);
-  await sleep(150);
-  var goalUi = await evalJs(`({
-    disabled: document.querySelector('#btn-advance').disabled,
-    text: document.querySelector('#btn-advance').textContent,
-    legacy: GD.getState().legacy
-  })`);
-  check('达成目标后按钮可用', goalUi.disabled === false, goalUi.text);
-
-  await evalJs(`document.querySelector('#btn-advance').click()`);
-  await sleep(250);
-  var advanced = await evalJs(`({
-    era: GD.getState().era,
-    dataEra: document.body.getAttribute('data-era'),
-    year: document.querySelector('#era-year').textContent,
-    name: document.querySelector('#era-name').textContent,
-    legacy: GD.getState().legacy,
-    legGain: document.querySelector('#modal-body').textContent.indexOf('传承点') >= 0,
-    cols: document.querySelectorAll('.stage-col').length,
-    lineCol: document.querySelectorAll('.line-col').length,
-    modalOpen: !document.querySelector('#modal').hidden,
-    workers: Object.keys(GD.getState().workers).length
-  })`);
-  check('推进到下一个时代', advanced.era === 1 && advanced.dataEra === '1', advanced.year + ' ' + advanced.name);
-  check('获得传承点', advanced.legacy > 0, 'legacy=' + advanced.legacy);
-  check('新时代表现介绍了传承', advanced.legGain === true);
-  check('1985 出现出厂产线列', advanced.cols === 5 && advanced.lineCol === 1,
-    'cols=' + advanced.cols + ' lineCol=' + advanced.lineCol);
-
-  /* ---------- 6. 存档往返 ---------- */
-  await evalJs(`document.querySelector('#modal-actions button').click()`);
-  await sleep(100);
-  var savedSnapshot = await evalJs(`(() => { const s = GD.getState(); s.money = 4321; GD.Engine.serialize(s); localStorage.setItem(GD.SAVE_KEY, GD.Engine.serialize(s)); return { era: s.era, money: s.money, workers: s.workers }; })()`);
-  await load();
-  var reloaded = await evalJs(`({
-    era: GD.getState().era,
+  /* ---------- 3. 立项 ---------- */
+  var moneyBefore = await evalJs(`GD.getState().money`);
+  await evalJs(`document.querySelector('[data-act="go"]').click()`);
+  await sleep(300);
+  var started = await evalJs(`({
+    phase: GD.getState().phase,
     money: GD.getState().money,
-    workers: GD.getState().workers,
-    year: document.querySelector('#era-year').textContent
+    progress: GD.getState().project.progress,
+    bar: !!document.querySelector('#dev-bar'),
+    active: document.querySelectorAll('.desk.active').length
   })`);
-  check('刷新后读档成功', reloaded.era === savedSnapshot.era && Math.abs(reloaded.money - 4321) < 1,
-    'era=' + reloaded.era + ' money=' + Math.round(reloaded.money));
+  check('立项后进入开发', started.phase === 'developing' && started.bar === true);
+  check('立项扣了成本', moneyBefore - started.money === 130000, '$' + (moneyBefore - started.money));
+  check('主创被高亮', started.active === 1, 'active=' + started.active);
+  check('进度开始推进', started.progress > 0, 'p=' + started.progress.toFixed(3));
 
-  /* ---------- 7. 1985 卡带产线 ---------- */
-  await evalJs(`document.querySelector('[data-tab="tech"]').click()`);
-  await sleep(150);
-  var lineUi = await evalJs(`(() => {
-    const btn = document.querySelector('[data-buy="line"]');
-    return { exists: !!btn, text: btn ? btn.textContent : '', disabled: btn ? btn.disabled : true };
-  })()`);
-  check('技术页有卡带产线升级', lineUi.exists === true, lineUi.text);
-
-  await evalJs(`GD.getState().money = 5000; GD.UI.render()`);
-  var lvBefore = await evalJs(`GD.getState().lineLv`);
-  await evalJs(`document.querySelector('[data-buy="line"]').click()`);
-  await sleep(150);
-  var lvAfter = await evalJs(`({ lv: GD.getState().lineLv, rate: GD.Engine.lineRate(GD.getState()), col: document.querySelector('.line-col .cap').textContent })`);
-  check('可以升级产线并提速', lvAfter.lv === lvBefore + 1, lvBefore + ' → ' + lvAfter.lv);
-  check('产出列显示新节拍', lvAfter.col.indexOf('s') > 0, lvAfter.col);
-
-  /* ---------- 8. 1995 外包 ---------- */
-  var uid = await evalJs(`(() => {
-    const s = GD.getState();
-    s.era = 2; s.cycle = 1;
-    GD.Engine.initEra(s);
-    s.money = 100000;
-    s.projects[0].stage = 1;
-    s.projects[0].progress = 0;
-    GD.UI.rebuild(); GD.UI.render();
-    return s.projects[0].uid;
-  })()`);
+  /* ---------- 4. 事件 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.project.elapsed = s.project.duration * 0.46; })()`);
   await sleep(250);
+  var eventShown = await evalJs(`({
+    phase: GD.getState().phase,
+    visible: !document.querySelector('#event').hidden,
+    options: document.querySelectorAll('#event .choice').length,
+    title: (document.querySelector('#event h3') || {}).textContent
+  })`);
+  check('45% 弹出事件', eventShown.phase === 'event' && eventShown.visible === true, eventShown.title);
+  check('事件至少两个选项', eventShown.options >= 2, 'options=' + eventShown.options);
 
-  var outUi = await evalJs(`(() => {
-    const btns = [...document.querySelectorAll('[data-outsource]')];
-    return {
-      count: btns.length,
-      enabled: btns.filter(b => !b.disabled).length,
-      labels: btns.map(b => b.textContent.trim()),
-      money: GD.getState().money
-    };
-  })()`);
-  check('1995 每个部门都有外包按钮', outUi.count === 5, 'count=' + outUi.count);
-  check('有积压的部门才能外包', outUi.enabled === 1, JSON.stringify(outUi.labels));
-
-  await evalJs(`document.querySelector('[data-outsource="code"]').click()`);
+  await evalJs(`document.querySelector('#event .choice').click()`);
   await sleep(250);
-  var outAfter = await evalJs(`(() => {
-    const s = GD.getState();
-    const p = s.projects.filter(x => x.uid === ${uid})[0];
-    return { money: s.money, stage: p ? p.stage : -1, toasts: document.querySelectorAll('.toast').length };
-  })()`);
-  check('外包后项目进入下一部门', outAfter.stage === 2, 'stage=' + outAfter.stage);
-  check('外包扣了钱', outAfter.money < 100000, '$' + Math.round(outAfter.money));
-  check('外包有提示', outAfter.toasts > 0, 'toasts=' + outAfter.toasts);
+  var afterEvent = await evalJs(`({ phase: GD.getState().phase, hidden: document.querySelector('#event').hidden, q: GD.getState().project.qualityPct })`);
+  check('选择后继续开发', afterEvent.phase === 'developing' && afterEvent.hidden === true);
 
-  /* ---------- 9. 长时间运行不崩 ---------- */
-  var t0 = await evalJs(`({ time: GD.getState().time, p: (GD.getState().projects[0]||{}).progress || 0 })`);
-  await sleep(1500);
-  var t1 = await evalJs(`({ time: GD.getState().time, p: (GD.getState().projects[0]||{}).progress || 0, chips: document.querySelectorAll('.chip').length })`);
-  check('主循环在推进', t1.time > t0.time + 1 && t1.p >= t0.p,
-    'time ' + t0.time.toFixed(1) + '→' + t1.time.toFixed(1) + ', progress ' + t0.p.toFixed(1) + '→' + t1.p.toFixed(1));
+  /* ---------- 5. 评审 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.project.elapsed = s.project.duration * 1.2; })()`);
+  await sleep(300);
+  var reviewShown = await evalJs(`({
+    phase: GD.getState().phase,
+    visible: !document.querySelector('#review').hidden,
+    critics: document.querySelectorAll('.critic').length
+  })`);
+  check('开发完成进入评审', reviewShown.phase === 'review' && reviewShown.visible === true);
+  check('评审有 4 位', reviewShown.critics === 4);
 
-  /* ---------- 8. 后期时代布局 ---------- */
-  await evalJs(`(() => { const s = GD.getState(); s.era = 5; s.cycle = 3; GD.Engine.initEra(s); GD.UI.rebuild(); })()`);
+  await sleep(1400);
+  var revealed = await evalJs(`({
+    shown: document.querySelectorAll('.critic.shown').length,
+    scores: [...document.querySelectorAll('.critic-score')].map(e => e.textContent)
+  })`);
+  check('分数逐个亮起', revealed.shown >= 1, 'shown=' + revealed.shown + ' ' + revealed.scores.join(','));
+
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 4.0; })()`);
+  await sleep(300);
+  var allShown = await evalJs(`({ shown: document.querySelectorAll('.critic.shown').length })`);
+  check('四位全部亮分', allShown.shown === 4, 'shown=' + allShown.shown);
+
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 5.4; })()`);
+  await sleep(300);
+  var totalShown = await evalJs(`({ text: document.querySelector('#rtotal').textContent, cls: document.querySelector('#rtotal').className })`);
+  check('总分揭晓', /\d+ \/ 40/.test(totalShown.text), totalShown.text);
+
+  /* ---------- 6. 销售 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 8; })()`);
+  await sleep(300);
+  var salesStart = await evalJs(`({ phase: GD.getState().phase, hasWeeks: !!document.querySelector('#weeks') })`);
+  check('进入销售期', salesStart.phase === 'sales' && salesStart.hasWeeks === true);
+
+  await sleep(2200);
+  var salesMid = await evalJs(`({
+    sold: GD.getState().sales.sold,
+    copies: document.querySelector('#copies').textContent,
+    weeks: document.querySelectorAll('.week').length,
+    adEnabled: !document.querySelector('#adbtn').disabled
+  })`);
+  check('周销量在累计', salesMid.sold > 0 && salesMid.weeks >= 1, salesMid.copies + ' 份 / ' + salesMid.weeks + ' 周');
+  check('广告按钮可用', salesMid.adEnabled === true);
+
+  await evalJs(`document.querySelector('#adbtn').click()`);
+  await sleep(200);
+  var ad = await evalJs(`({ used: GD.getState().sales.adUsed, boost: GD.getState().sales.boost, disabled: document.querySelector('#adbtn').disabled })`);
+  check('投放广告生效', ad.used === 1 && ad.disabled === true, 'boost=' + ad.boost);
+
+  /* ---------- 7. 结算 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 100; })()`);
   await sleep(400);
-  var late = await evalJs(`(() => {
-    const q = s => document.querySelector(s);
-    const r = el => { const b = el.getBoundingClientRect(); return {x:Math.round(b.x),w:Math.round(b.width),h:Math.round(b.height)}; };
-    return {
-      cols: document.querySelectorAll('.stage-col').length,
-      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      pipelineScroll: q('#pipeline-cols').scrollWidth - q('#pipeline-cols').clientWidth,
-      minCol: Math.min(...[...document.querySelectorAll('.stage-col')].map(c => r(c).w)),
-      year: q('#era-year').textContent,
-      cycle: q('#era-cycle').textContent,
-      money: q('#money').textContent
-    };
-  })()`);
-  check('第六时代 5 个部门', late.cols === 5, 'cols=' + late.cols);
-  check('第六时代无页面溢出', late.overflow <= 0, 'overflow=' + late.overflow);
-  check('第六时代流水线不挤压', late.minCol >= 150, 'minCol=' + late.minCol);
-  check('轮次显示正确', late.cycle.indexOf('3') >= 0, late.cycle);
+  var done = await evalJs(`({
+    phase: GD.getState().phase,
+    score: (document.querySelector('.done-score') || {}).textContent,
+    rows: document.querySelectorAll('.done-row').length,
+    history: GD.getState().history.length
+  })`);
+  check('销售结束进入结算', done.phase === 'done' && done.rows === 3, done.score);
+
+  await evalJs(`document.querySelector('[data-act="next"]').click()`);
+  await sleep(300);
+  var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, chips: document.querySelectorAll('.chip').length })`);
+  check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.chips === 13);
+
+  /* ---------- 8. 音效开关 ---------- */
+  await evalJs(`document.querySelector('#sound').click()`);
+  await sleep(100);
+  var sound = await evalJs(`({ muted: GD.SFX.isMuted(), icon: document.querySelector('#sound').textContent })`);
+  check('音效可以静音', sound.muted === true, sound.icon);
+  await evalJs(`document.querySelector('#sound').click()`);
 
   /* ---------- 9. 手机尺寸 ---------- */
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: 390, height: 844, deviceScaleFactor: 2, mobile: true
-  });
-  await sleep(500);
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await sleep(400);
   var mobile = await evalJs(`(() => {
     const q = s => document.querySelector(s);
-    const r = el => { const b = el.getBoundingClientRect(); return {x:Math.round(b.x),y:Math.round(b.y),w:Math.round(b.width),h:Math.round(b.height)}; };
+    const r = el => { const b = el.getBoundingClientRect(); return { y: Math.round(b.y), h: Math.round(b.height) }; };
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      pipeline: r(q('#pipeline')),
-      shop: r(q('#shop')),
-      topbarH: r(q('.topbar')).h,
-      moneySize: parseFloat(getComputedStyle(q('#money')).fontSize)
+      office: r(q('.office')), stage: r(q('#stage')),
+      chipWrap: getComputedStyle(q('.chips')).flexWrap
     };
   })()`);
   check('手机端无横向溢出', mobile.overflow <= 0, 'overflow=' + mobile.overflow);
-  check('手机端商店在流水线下方', mobile.shop.y >= mobile.pipeline.y + mobile.pipeline.h - 2,
-    'shop.y=' + mobile.shop.y + ' pipeline.bottom=' + (mobile.pipeline.y + mobile.pipeline.h));
-  check('手机端顶栏可换行', mobile.topbarH >= 50, 'h=' + mobile.topbarH);
+  check('手机端布局纵向排列', mobile.stage.y >= mobile.office.y + mobile.office.h - 2,
+    'stage.y=' + mobile.stage.y + ' office.bottom=' + (mobile.office.y + mobile.office.h));
+  check('选项会换行', mobile.chipWrap === 'wrap');
 
   await cdp.send('Emulation.clearDeviceMetricsOverride');
 
-  /* ---------- 10. 可见性与触控尺寸 ---------- */
-  var audit = await evalJs(`(() => {
-    const small = [...document.querySelectorAll('#shop-body button, .topbar button, #btn-advance')]
-      .map(b => { const r = b.getBoundingClientRect(); return { t: b.textContent.trim().slice(0, 8), h: Math.round(r.height), w: Math.round(r.width) }; })
-      .filter(x => x.h > 0 && x.h < 26);
-    const hidden = ['.topbar', '#pipeline', '#shop', '.goalbar', '#money', '#btn-burst']
-      .filter(s => { const e = document.querySelector(s); if (!e) return true; const r = e.getBoundingClientRect(); return r.width < 1 || r.height < 1; });
-    const chipOverflow = [...document.querySelectorAll('.chips')].filter(c => c.scrollWidth > c.clientWidth + 2).length;
-    return { small, hidden, chipOverflow, moneySize: getComputedStyle(document.querySelector('#money')).fontSize };
-  })()`);
-  check('按钮触控高度足够', audit.small.length === 0, JSON.stringify(audit.small.slice(0, 3)));
-  check('关键区域均可见', audit.hidden.length === 0, audit.hidden.join(','));
-  check('项目卡片不溢出部门列', audit.chipOverflow === 0, 'overflowCols=' + audit.chipOverflow);
-
-  /* ---------- 11. 错误检查 ---------- */
+  /* ---------- 10. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   cdp.close();

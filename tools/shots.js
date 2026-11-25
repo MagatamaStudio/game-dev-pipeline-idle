@@ -1,5 +1,5 @@
 /* ============================================================
- * tools/shots.js —— 生成展示用截图（需要本机 Edge）
+ * tools/shots.js —— 生成 M0 展示截图
  * 用法：node tools/shots.js
  * ============================================================ */
 'use strict';
@@ -9,7 +9,7 @@ var path = require('path');
 var fs = require('fs');
 
 var ROOT = path.join(__dirname, '..');
-var PORT = 9334;
+var PORT = 9336;
 var URL = process.argv[2] || 'http://127.0.0.1:8765/';
 var EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 var OUT = path.join(ROOT, 'shots');
@@ -55,7 +55,7 @@ function connect(wsUrl) {
 
 (async function main() {
   fs.mkdirSync(OUT, { recursive: true });
-  var userDir = path.join(OUT, 'shot-profile');
+  var userDir = path.join(OUT, 'shot-m0');
   fs.rmSync(userDir, { recursive: true, force: true });
 
   var child = spawn(EDGE, [
@@ -89,75 +89,40 @@ function connect(wsUrl) {
     console.log('saved', name + '.png');
   }
 
-  async function load() {
-    await cdp.send('Page.navigate', { url: URL });
-    await waitFor(async function () {
-      return await evalJs('document.readyState === "complete" && !!window.GD && !!window.GD.UI');
-    }, 15000, 'load');
-    await sleep(500);
-  }
+  await cdp.send('Page.navigate', { url: URL });
+  await waitFor(async function () { return await evalJs('document.readyState === "complete" && !!window.GD'); }, 15000, 'load');
+  await sleep(600);
 
-  /* 1. 1972 开局 + 时代介绍 */
-  await load();
-  await evalJs('localStorage.clear()');
-  await load();
-  await sleep(700);
-  await shot('01-1972-intro');
-
-  /* 2. 1985：卡带产线 */
-  await evalJs('document.querySelector("#modal-actions button").click()');
-  await evalJs(`(() => {
-    const s = GD.getState();
-    s.era = 1; s.cycle = 1;
-    GD.Engine.initEra(s);
-    s.workers = { concept: 3, code: 4, art: 3, audio: 3 };
-    s.toolLv = { b_code: 1, b_art: 1 };
-    s.engineLv = 1;
-    s.slots = 2;
-    s.lineLv = 1;
-    s.money = 640;
-    s.fame = 46;
-    s.eraReleases = 6;
-    GD.UI.rebuild();
-    // 造两部做完、正在等产线的作品
-    const p = s.projects[0];
-    if (p) { p.stage = GD.ERAS[1].stages.length; p.progress = 0.35; }
-  })()`);
-  await sleep(1800);
-  await evalJs(`document.querySelector('[data-tab="team"]').click()`);
+  /* 1. 企划 */
+  await evalJs(`document.querySelector('[data-plan="theme:fantasy"]').click()`);
   await sleep(300);
-  await shot('02-1985-line');
+  await shot('m0-01-planning');
 
-  /* 3. 1995：外包 */
+  /* 2. 开发中（带事件气泡） */
+  await evalJs(`document.querySelector('[data-act="go"]').click()`);
+  await sleep(1200);
+  await shot('m0-02-developing');
+
+  /* 3. 评审（全部亮分） */
   await evalJs(`(() => {
     const s = GD.getState();
-    s.era = 2; s.cycle = 1;
-    GD.Engine.initEra(s);
-    s.workers = { concept: 4, code: 5, art: 4, audio: 4, polish: 4 };
-    s.toolLv = { c_code: 1, c_art: 1, c_audio: 1 };
-    s.engineLv = 1;
-    s.slots = 3;
-    s.money = 5600;
-    s.fame = 96;
-    s.eraReleases = 9;
-    GD.UI.rebuild();
+    s.project.elapsed = s.project.duration * 1.01;
   })()`);
-  await sleep(2600);
-  await shot('03-1995-outsource');
+  await sleep(400);
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'review') s.timer = 5.2; })()`);
+  await sleep(500);
+  await shot('m0-03-review');
 
-  /* 4. 2022 手机端 */
+  /* 4. 销售 */
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 12; })()`);
+  await sleep(600);
+  await shot('m0-04-sales');
+
+  /* 5. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
-  await evalJs(`(() => {
-    const s = GD.getState();
-    s.era = 5; s.cycle = 2;
-    GD.Engine.initEra(s);
-    s.workers = { concept: 5, code: 6, art: 5, audio: 4, polish: 4 };
-    s.toolLv = { f_code: 1, f_art: 1 };
-    s.engineLv = 1; s.slots = 3; s.money = 268000; s.fame = 260; s.eraReleases = 17;
-    GD.UI.rebuild();
-  })()`);
-  await sleep(2200);
-  await shot('04-2022-mobile');
+  await evalJs(`GD.reset()`);
+  await sleep(500);
+  await shot('m0-05-mobile');
 
   cdp.close();
   child.kill();

@@ -1,345 +1,168 @@
 /* ============================================================
- * config.js —— 数值、文案、时代表
- * 想调平衡，只改这一个文件。
- * 无构建、无依赖：挂在全局 GD 上，用普通 <script> 顺序加载。
- *
- * 费用标定原则：以「开局每秒收入」为基准，
- *   员工 ≈ 20 秒收入、工具 ≈ 70 秒、引擎 ≈ 250 秒、项目槽 ≈ 50 秒。
+ * config.js —— M0 数据表
+ * 5 类型 × 5 题材、3 名员工、4 位评审、4 个事件、1 个平台
  * ============================================================ */
 (function (GD) {
   'use strict';
 
-  /* ---------- 数字格式化 ---------- */
-  var SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
-
-  GD.fmt = function (n) {
-    if (!isFinite(n)) return '∞';
-    if (n < 0) return '-' + GD.fmt(-n);
-    if (n < 1000) return n < 10 ? String(Math.round(n * 10) / 10) : String(Math.floor(n));
-    var tier = Math.floor(Math.log10(n) / 3);
-    if (tier >= SUFFIX.length) return n.toExponential(2);
-    var scaled = n / Math.pow(1000, tier);
-    var digits = scaled < 10 ? 2 : scaled < 100 ? 1 : 0;
-    return scaled.toFixed(digits) + SUFFIX[tier];
+  /* ---------------- 平台 ---------------- */
+  GD.PLATFORM = {
+    code: 'L-3',
+    alias: '客厅盒',
+    year: 1983,
+    cap: 58,          // 品质上限
+    price: 22,        // 单价
+    license: 15000,   // 授权费
+    install: 1.6      // 销量系数
   };
 
-  GD.fmtMoney = function (n) { return '$' + GD.fmt(n); };
+  /* ---------------- 类型 ---------------- */
+  GD.GENRES = [
+    { id: 'rpg', name: 'RPG', icon: '⚔', weights: { code: .25, script: .40, art: .20, audio: .15 } },
+    { id: 'action', name: '动作', icon: '✦', weights: { code: .45, script: .15, art: .25, audio: .15 } },
+    { id: 'shooter', name: '射击', icon: '◎', weights: { code: .40, script: .15, art: .25, audio: .20 } },
+    { id: 'adv', name: '冒险', icon: '❖', weights: { code: .20, script: .40, art: .25, audio: .15 } },
+    { id: 'sim', name: '模拟', icon: '⚙', weights: { code: .35, script: .20, art: .30, audio: .15 } }
+  ];
 
-  GD.fmtTime = function (sec) {
-    sec = Math.max(0, Math.floor(sec));
-    var h = Math.floor(sec / 3600);
-    var m = Math.floor((sec % 3600) / 60);
-    var s = sec % 60;
-    if (h > 0) return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-    return m + ':' + (s < 10 ? '0' : '') + s;
+  /* ---------------- 题材 ---------------- */
+  GD.THEMES = [
+    { id: 'fantasy', name: '幻想', icon: '☾' },
+    { id: 'scifi', name: '科幻', icon: '◈' },
+    { id: 'medieval', name: '中世纪', icon: '⚑' },
+    { id: 'modern', name: '现代', icon: '▤' },
+    { id: 'warring', name: '战国', icon: '⚔' }
+  ];
+
+  /* 相性表：行=类型，列=题材（顺序同上） */
+  GD.COMBO = {
+    rpg: { fantasy: 1.35, scifi: 1.15, medieval: 1.25, modern: 0.95, warring: 1.30 },
+    action: { fantasy: 1.05, scifi: 1.10, medieval: 1.10, modern: 1.15, warring: 1.15 },
+    shooter: { fantasy: 0.95, scifi: 1.20, medieval: 0.85, modern: 1.10, warring: 0.90 },
+    adv: { fantasy: 1.15, scifi: 1.10, medieval: 1.25, modern: 1.05, warring: 1.05 },
+    sim: { fantasy: 1.00, scifi: 1.05, medieval: 1.05, modern: 1.20, warring: 1.00 }
   };
 
-  /* ---------- 全局常量 ---------- */
-  GD.SAVE_KEY = 'gameDevPipeline.save.v1';
-  GD.TICK_MS = 100;                 // 逻辑步长
-  GD.SAVE_EVERY_MS = 8000;          // 自动存档间隔
-  GD.OFFLINE_CAP = 8 * 3600;        // 最多结算 8 小时
-  GD.OFFLINE_STEP = 5;              // 离线按 5 秒一步模拟
-  GD.BURST_DURATION = 8;            // 灵感迸发持续秒数
-  GD.BURST_COOLDOWN = 26;           // 冷却秒数
-  GD.BURST_MULT = 2.5;
-  GD.MAX_SLOTS = 6;
-
-  /* ---------- 传承（跨时代永久加成） ---------- */
-  GD.LEGACY = [
+  /* ---------------- 员工 ---------------- */
+  GD.STAFF = [
     {
-      id: 'cash', name: '启动资金',
-      desc: '每次进入新时代，账户里多一笔钱',
-      max: 12,
-      cost: function (lv) { return Math.ceil(2 * Math.pow(1.75, lv)); },
-      effectText: function (lv, era) { return '起始 $' + GD.fmt((era ? era.price * 2 : 100) * lv); }
+      id: 'zhou', name: '老周', seed: 7, role: '剧本',
+      stats: { code: 18, script: 42, art: 15, audio: 20, speed: 30 },
+      quote: '故事讲不好，画面再花也没用。'
     },
     {
-      id: 'speed', name: '方法论',
-      desc: '所有部门的产能永久提升',
-      max: 12,
-      cost: function (lv) { return Math.ceil(3 * Math.pow(1.8, lv)); },
-      effectText: function (lv) { return '产能 ×' + (1 + 0.12 * lv).toFixed(2); }
+      id: 'lin', name: '小林', seed: 23, role: '程序',
+      stats: { code: 45, script: 15, art: 22, audio: 18, speed: 35 },
+      quote: '手感，一切都是手感。'
     },
     {
-      id: 'offline', name: '远程办公',
-      desc: '离线收益效率提升',
-      max: 6,
-      cost: function (lv) { return Math.ceil(4 * Math.pow(2.1, lv)); },
-      effectText: function (lv) { return '离线 ' + Math.round((0.5 + 0.08 * lv) * 100) + '%'; }
-    },
-    {
-      id: 'crew', name: '核心班底',
-      desc: '每次进入新时代，每个部门自带一名老员工',
-      max: 6,
-      cost: function (lv) { return Math.ceil(5 * Math.pow(2.3, lv)); },
-      effectText: function (lv) { return '起始 ' + (1 + lv) + ' 人/部门'; }
+      id: 'ya', name: '阿雅', seed: 41, role: '美术',
+      stats: { code: 12, script: 20, art: 44, audio: 25, speed: 28 },
+      quote: '我要玩家第一眼就记住这个世界。'
     }
   ];
 
-  /* ---------- 时代表 ----------
-   * eff：单个员工的基础产能（时代越晚，工具越强）
-   * stages[].need：完成 size=1 的项目在该部门需要的进度 = eff × 秒数
-   * price：size=1 作品的基础售价
-   * 目标统一是「本时代发行 N 部作品」
-   */
-  GD.ERAS = [
-    {
-      key: 'arcade',
-      year: '1972',
-      name: '街机黎明',
-      tagline: '一枚硬币，两块挡板，一个行业。',
-      intro: '你在车库里用示波器做出第一个会动的光点。没有引擎、没有美术、没有发行商——只有你、一卷打孔纸带，和一台不肯散热的机器。',
-      price: 10,
-      eff: 1,
-      startCash: 0,
-      sizes: [{ size: 1, w: 0.7 }, { size: 2, w: 0.3 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 5 },
-        { id: 'code', name: '程序', icon: '⌨', need: 12 }
-      ],
-      wages: { concept: 14, code: 20 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'a_concept', stage: 'concept', name: '餐巾纸草图', mult: 1.7, cost: 30 },
-        { id: 'a_code', stage: 'code', name: '汇编宏库', mult: 1.7, cost: 40 }
-      ],
-      engine: { name: '自研街机基板', mult: 1.3, cost: 46 },
-      slotCost: 40,
-      slotGrowth: 1.9,
-      goal: { releases: 10 },
-      words: {
-        pre: ['像素', '太空', '迷宫', '弹球', '赛车', '方块'],
-        post: ['入侵者', '大冒险', '对决', '冲刺', '传说', '弹珠']
-      },
-      nextHint: '家用机把游戏搬进了客厅。'
-    },
+  GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };
 
+  /* ---------------- 评审 ---------------- */
+  GD.CRITICS = [
     {
-      key: 'nes',
-      year: '1985',
-      name: '8 位家用机',
-      tagline: '客厅里的战争。',
-      intro: '卡带、手柄、电视机。玩家第一次不用投币就能玩上一整晚。你需要一支真正的团队：程序、美术、音效——而且做完还不算完，卡带要一片片压出来。开发再快，出厂跟不上也没用。',
-      price: 50,
-      eff: 5,
-      startCash: 80,
-      sizes: [{ size: 1, w: 0.5 }, { size: 2, w: 0.35 }, { size: 3, w: 0.15 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 30 },
-        { id: 'code', name: '程序', icon: '⌨', need: 45 },
-        { id: 'art', name: '美术', icon: '◈', need: 35 },
-        { id: 'audio', name: '音效', icon: '♪', need: 20 }
-      ],
-      wages: { concept: 60, code: 80, art: 68, audio: 50 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'b_concept', stage: 'concept', name: '关卡设计手册', mult: 1.7, cost: 110 },
-        { id: 'b_code', stage: 'code', name: '图形加速芯片', mult: 1.7, cost: 140 },
-        { id: 'b_art', stage: 'art', name: '像素绘图板', mult: 1.7, cost: 120 },
-        { id: 'b_audio', stage: 'audio', name: 'FM 音源芯片', mult: 1.7, cost: 90 }
-      ],
-      engine: { name: '滚动卷轴引擎', mult: 1.3, cost: 190 },
-      slotCost: 160,
-      slotGrowth: 1.9,
-      goal: { releases: 14 },
-      /* 本时代专属：卡带必须真的生产出来。
-       * 出厂速度被产线节拍封顶，开发再快也得等产线；产线可以花钱扩。 */
-      line: {
-        name: '卡带产线',
-        base: 0.12,       // 部 / 秒（约 8 秒一部）
-        mult: 1.6,
-        cost: 120,
-        growth: 1.8,
-        desc: '就算开发完了，卡带也得一片片压出来。'
-      },
-      words: {
-        pre: ['超级', '影子', '忍者', '魔界', '银河', '热血'],
-        post: ['兄弟', '冒险', '战记', '物语', '传说', '奇兵']
-      },
-      nextHint: '十六位色与光盘，把游戏变成了电影。'
+      id: 'chen', name: '老陈', tag: '纸媒老炮', seed: 3,
+      fav: 'rpg', hate: 'shooter', bias: 1.4,
+      lines: {
+        low: ['我玩了三个小时，还是不知道主角想干嘛。', '这种东西也配叫 RPG？'],
+        mid: ['故事还行，可惜系统太单薄。', '中规中矩，我会给它一个及格分。'],
+        high: ['这代人的 RPG 记忆，会从这一部开始。', '很久没为一款游戏熬夜了。']
+      }
     },
-
     {
-      key: 'pc16',
-      year: '1995',
-      name: '16 位与 PC',
-      tagline: '光盘转动的声音，就是野心。',
-      intro: '光盘容量突然变大，玩家开始要求剧情、配乐、过场动画。测试部门第一次成为必需品。进度卡在某个部门时，你可以花钱把整个部门的活外包出去——只是这笔钱花得心疼。',
-      price: 300,
-      eff: 30,
-      startCash: 500,
-      sizes: [{ size: 1, w: 0.4 }, { size: 2, w: 0.4 }, { size: 3, w: 0.2 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 180 },
-        { id: 'code', name: '程序', icon: '⌨', need: 300 },
-        { id: 'art', name: '美术', icon: '◈', need: 240 },
-        { id: 'audio', name: '音效', icon: '♪', need: 150 },
-        { id: 'polish', name: '测试', icon: '✓', need: 120 }
-      ],
-      wages: { concept: 330, code: 440, art: 380, audio: 290, polish: 250 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'c_concept', stage: 'concept', name: '剧本工坊', mult: 1.7, cost: 580 },
-        { id: 'c_code', stage: 'code', name: 'C 编译器', mult: 1.7, cost: 750 },
-        { id: 'c_art', stage: 'art', name: '3D 建模软件', mult: 1.7, cost: 650 },
-        { id: 'c_audio', stage: 'audio', name: 'CD 音轨', mult: 1.7, cost: 500 },
-        { id: 'c_polish', stage: 'polish', name: '自动化测试', mult: 1.7, cost: 450 }
-      ],
-      engine: { name: '自研 3D 软渲染', mult: 1.3, cost: 985 },
-      slotCost: 820,
-      slotGrowth: 1.9,
-      goal: { releases: 17 },
-      /* 本时代专属：外包。钱可以买时间——按剩余工作量付费，立刻清空某个部门的积压。 */
-      outsource: {
-        rate: 0.55,   // 相当于该作品收入的 55%，越早介入越贵
-        label: '外包'
-      },
-      words: {
-        pre: ['暗黑', '星际', '极速', '幻境', '铁血', '最终'],
-        post: ['远征', '指挥官', '幻想', '战线', '余晖', '战记']
-      },
-      nextHint: '显卡、互联网、和一群通宵的人。'
+      id: 'lin2', name: '小林', tag: '前职业选手', seed: 11,
+      fav: 'action', hate: 'sim', bias: 1.4,
+      lines: {
+        low: ['输入延迟有一帧，我就没法玩。', '手感像在糖浆里挥拳。'],
+        mid: ['判定还行，节奏可以再快一点。', '能玩，但打不出爽感。'],
+        high: ['这个手感，我想打职业。', '每一帧都在回应我的操作。']
+      }
     },
-
     {
-      key: 'polygon',
-      year: '2005',
-      name: '3D 与在线',
-      tagline: '多边形数量就是排面。',
-      intro: '硬件每 18 个月翻倍，玩家开始用显卡跑分。你在做一件以前无法想象的事：让上千人同时出现在同一个世界里。',
-      price: 2000,
-      eff: 200,
-      startCash: 3000,
-      sizes: [{ size: 1, w: 0.35 }, { size: 2, w: 0.4 }, { size: 3, w: 0.25 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 1000 },
-        { id: 'code', name: '程序', icon: '⌨', need: 1800 },
-        { id: 'art', name: '美术', icon: '◈', need: 1400 },
-        { id: 'audio', name: '音效', icon: '♪', need: 800 },
-        { id: 'polish', name: '测试', icon: '✓', need: 800 }
-      ],
-      wages: { concept: 2600, code: 3400, art: 3000, audio: 2300, polish: 2000 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'd_concept', stage: 'concept', name: '关卡编辑器', mult: 1.7, cost: 4600 },
-        { id: 'd_code', stage: 'code', name: '物理中间件', mult: 1.7, cost: 6000 },
-        { id: 'd_art', stage: 'art', name: '法线贴图流程', mult: 1.7, cost: 5200 },
-        { id: 'd_audio', stage: 'audio', name: '环绕声混音', mult: 1.7, cost: 4100 },
-        { id: 'd_polish', stage: 'polish', name: '兼容性实验室', mult: 1.7, cost: 3800 }
-      ],
-      engine: { name: '自研网络引擎', mult: 1.3, cost: 7860 },
-      slotCost: 6600,
-      slotGrowth: 1.9,
-      goal: { releases: 19 },
-      words: {
-        pre: ['赛博', '末日', '暗影', '钢铁', '量子', '深渊'],
-        post: ['协议', '前线', '裂痕', '回响', '纪元', '行动']
-      },
-      nextHint: '每个人都有一块屏幕，而且永远在线。'
+      id: 'ya2', name: '阿雅', tag: '插画师', seed: 19,
+      fav: 'adv', hate: 'shooter', bias: 1.2,
+      lines: {
+        low: ['配色像打翻的调色盘。', '我闭上了眼睛，画面更好看。'],
+        mid: ['有几张场景我愿意截图。', '美术有想法，执行还差一口气。'],
+        high: ['我想把每一帧都画下来。', '这不是游戏，是一本会动的画册。']
+      }
     },
-
     {
-      key: 'mobile',
-      year: '2013',
-      name: '移动与独立',
-      tagline: '口袋里的一千款游戏。',
-      intro: '渠道变了，玩家变了，赚钱的方式也变了。三个人做出的小游戏可能比三千万美元的大作更赚钱——但前提是，你得懂运营。',
-      price: 15000,
-      eff: 1500,
-      startCash: 20000,
-      sizes: [{ size: 1, w: 0.3 }, { size: 2, w: 0.4 }, { size: 3, w: 0.3 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 7500 },
-        { id: 'code', name: '程序', icon: '⌨', need: 13500 },
-        { id: 'art', name: '美术', icon: '◈', need: 10500 },
-        { id: 'audio', name: '音效', icon: '♪', need: 6000 },
-        { id: 'polish', name: '运营', icon: '◎', need: 6000 }
-      ],
-      wages: { concept: 21000, code: 27000, art: 24000, audio: 18500, polish: 16000 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'e_concept', stage: 'concept', name: '数据选品', mult: 1.7, cost: 36000 },
-        { id: 'e_code', stage: 'code', name: '跨平台套件', mult: 1.7, cost: 48000 },
-        { id: 'e_art', stage: 'art', name: '美术外包管线', mult: 1.7, cost: 42000 },
-        { id: 'e_audio', stage: 'audio', name: '免版权音库', mult: 1.7, cost: 32000 },
-        { id: 'e_polish', stage: 'polish', name: 'A/B 测试系统', mult: 1.7, cost: 30000 }
-      ],
-      engine: { name: '商业化 SDK', mult: 1.3, cost: 62000 },
-      slotCost: 52000,
-      slotGrowth: 1.9,
-      goal: { releases: 21 },
-      words: {
-        pre: ['放置', '合成', '塔防', '休闲', '奇幻', '迷你'],
-        post: ['大亨', '传奇', '物语', '远征', '日记', '工坊']
-      },
-      nextHint: '游戏不再是一个产品，而是一项长期服务。'
-    },
-
-    {
-      key: 'live',
-      year: '2022',
-      name: '服务型时代',
-      tagline: '上线只是开始。',
-      intro: '赛季、通行证、社区、创作者经济。你做的已经不只是一个游戏，而是一个持续十年、跨越所有平台的宇宙。',
-      price: 120000,
-      eff: 12000,
-      startCash: 150000,
-      sizes: [{ size: 1, w: 0.25 }, { size: 2, w: 0.4 }, { size: 3, w: 0.35 }],
-      stages: [
-        { id: 'concept', name: '概念', icon: '✎', need: 60000 },
-        { id: 'code', name: '程序', icon: '⌨', need: 108000 },
-        { id: 'art', name: '美术', icon: '◈', need: 84000 },
-        { id: 'audio', name: '音效', icon: '♪', need: 48000 },
-        { id: 'polish', name: '长线运营', icon: '◎', need: 48000 }
-      ],
-      wages: { concept: 170000, code: 220000, art: 195000, audio: 150000, polish: 130000 },
-      wageGrowth: 1.18,
-      tools: [
-        { id: 'f_concept', stage: 'concept', name: '玩家共创平台', mult: 1.7, cost: 304000 },
-        { id: 'f_code', stage: 'code', name: '云原生后端', mult: 1.7, cost: 390000 },
-        { id: 'f_art', stage: 'art', name: '程序化内容生成', mult: 1.7, cost: 350000 },
-        { id: 'f_audio', stage: 'audio', name: '自适应配乐', mult: 1.7, cost: 280000 },
-        { id: 'f_polish', stage: 'polish', name: '实时数据看板', mult: 1.7, cost: 260000 }
-      ],
-      engine: { name: '全球发行网络', mult: 1.3, cost: 520000 },
-      slotCost: 430000,
-      slotGrowth: 1.9,
-      goal: { releases: 24 },
-      words: {
-        pre: ['开放世界', '服务型', '跨平台', '云原生', '共创', '长线'],
-        post: ['宇宙', '生态', '平台', '赛季', '传奇', '计划']
-      },
-      nextHint: '你写下的每一行代码，都变成了这个行业的历史。'
+      id: 'k', name: '老K', tag: '电视主持', seed: 31,
+      fav: null, hate: null, bias: 0.6,
+      lines: {
+        low: ['观众朋友们，这款我们就跳过了。', '嗯……下一款。'],
+        mid: ['周末可以试试，别抱太大期望。', '中规中矩，适合打发时间。'],
+        high: ['年度节目必须给它一期专题。', '我太太都在玩这个。']
+      }
     }
   ];
 
-  /* ---------- 阶段配色 ---------- */
-  GD.STAGE_STYLE = {
-    concept: { color: '#e8b04b' },
-    code: { color: '#4fc3a1' },
-    art: { color: '#d98bd8' },
-    audio: { color: '#7fb2ff' },
-    polish: { color: '#ff8f6b' }
+  /* ---------------- 事件 ---------------- */
+  GD.EVENTS = [
+    {
+      id: 'inspire',
+      title: '灵感迸发',
+      body: '凌晨三点，主创突然冲进办公室，说他想到一个能让整部作品升华的点子。',
+      options: [
+        { label: '通宵做出来', cost: 0, quality: 8, progress: -6, tip: '品质 +8%，进度倒退一点' },
+        { label: '按原计划走', cost: 0, quality: 0, progress: 0, tip: '不冒险' }
+      ]
+    },
+    {
+      id: 'disk',
+      title: '硬盘烧了',
+      body: '三周的工程文件，随着一阵焦味消失了。备份停留在两周前。',
+      options: [
+        { label: '花钱做数据恢复', cost: 15000, quality: 0, progress: 0, tip: '花 $15,000，进度无损' },
+        { label: '重做一遍', cost: 0, quality: -2, progress: -12, tip: '进度 −12%，品质 −2%' }
+      ]
+    },
+    {
+      id: 'fight',
+      title: '程序和美术吵起来了',
+      body: '「这个特效根本跑不动！」「那是你的代码烂！」两个人已经三天没说话。',
+      options: [
+        { label: '请大家吃顿好的', cost: 8000, quality: 2, progress: 0, tip: '花 $8,000，品质 +2%' },
+        { label: '让他们自己解决', cost: 0, quality: -5, progress: 0, tip: '品质 −5%' }
+      ]
+    },
+    {
+      id: 'bug',
+      title: '测试挖出一个神级 Bug',
+      body: '角色在特定操作下会穿墙，然后掉进一个没做完的隐藏房间。好像……还挺好玩？',
+      options: [
+        { label: '修掉它', cost: 0, quality: -1, progress: -8, tip: '进度 −8%，品质 −1%' },
+        { label: '做成彩蛋', cost: 0, quality: 5, progress: 0, tip: '品质 +5%' }
+      ]
+    }
+  ];
+
+  /* ---------------- 数值 ---------- */
+  GD.BAL = {
+    startMoney: 500000,
+    devCost: 130000,          // 每部作品的固定成本
+    devSeconds: 54,           // 基础开发时长（会被主创速度削减）
+    speedFactor: 0.4,
+    eventAt: 0.45,            // 进度到 45% 触发事件
+    reviewPerCritic: 1.1,     // 每位评审亮分间隔
+    reviewTail: 1.4,          // 总分亮出后的停顿
+    salesWeeks: 12,
+    salesWeekSeconds: 2.0,
+    salesBase: 12000,
+    adCost: 50000,
+    adBoost: 1.4,
+    fanPerCopy: 1 / 500,
+    rescue: 200000
   };
 
-  /* ---------- 工具函数 ---------- */
-  GD.pickSize = function (sizes) {
-    var r = Math.random(), acc = 0;
-    for (var i = 0; i < sizes.length; i++) {
-      acc += sizes[i].w;
-      if (r <= acc) return sizes[i].size;
-    }
-    return sizes[sizes.length - 1].size;
-  };
-
-  GD.pickName = function (words, used) {
-    var pre = words.pre, post = words.post;
-    for (var attempt = 0; attempt < 12; attempt++) {
-      var name = pre[(Math.random() * pre.length) | 0] + post[(Math.random() * post.length) | 0];
-      if (!used || used.indexOf(name) === -1) return name;
-    }
-    return pre[(Math.random() * pre.length) | 0] + post[(Math.random() * post.length) | 0];
-  };
+  /* 周销量分布（12 周） */
+  GD.SALES_CURVE = [0.30, 0.22, 0.14, 0.09, 0.06, 0.045, 0.035, 0.027, 0.021, 0.017, 0.013, 0.011];
 
 })(window.GD = window.GD || {});
