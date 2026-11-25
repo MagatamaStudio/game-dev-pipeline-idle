@@ -1,0 +1,13 @@
+{
+  "name": "game-dev-pipeline-idle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "一款关于做游戏的增量放置游戏，纯静态，可托管在 GitHub Pages",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "serve": "node tools/serve.js",
+    "sim": "node tools/sim.js",
+    "test": "node tools/e2e.js"
+  },
+  "license": "MIT"
+}
