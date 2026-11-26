@@ -812,8 +812,8 @@
 
   /* ---------------- 存档 ---------------- */
 
-  E.SAVE_VERSION = 1;
-  E.SAVE_KEY = 'garageStudio.save.v1';
+  E.SAVE_VERSION = 2;
+  E.SAVE_KEY = 'garageStudio.save.v2';
 
   E.serialize = function (s) {
     s.version = E.SAVE_VERSION;
