@@ -341,7 +341,7 @@
     px(c, deskL - 1, LEG_BOT, deskW + 2, 1, 'rgba(0,0,0,.22)');
   }
 
-  function drawMonitor(c, x, pal) {
+  function drawMonitor(c, x, pal, prog) {
     if (pal.crt) {
       px(c, x, DESK_TOP - 9, 10, 8, pal.case);              // 机身
       px(c, x, DESK_TOP - 9, 10, 1, '#ffffff33');           // 顶部高光
@@ -355,6 +355,13 @@
       px(c, x + 1, DESK_TOP - 7, 8, 1, '#ffffff35');
       px(c, x + 4, DESK_TOP - 2, 2, 2, pal.case);           // 支架
       px(c, x + 2, DESK_TOP - 1, 6, 1, pal.case);
+    }
+    /* 屏幕最底一行做进度条：开发中能直接看出做到哪了 */
+    if (prog != null) {
+      var w = pal.crt ? 6 : 8;
+      var bx = x + (pal.crt ? 2 : 1);
+      px(c, bx, DESK_TOP - 4, w, 1, '#15151a');
+      px(c, bx, DESK_TOP - 4, Math.max(1, Math.round(w * prog)), 1, '#7fe0a0');
     }
   }
 
@@ -383,6 +390,11 @@
     var seats = Math.max(staff.length, state.seats || 3);
     seats = Math.max(1, Math.min(seats, 8));
     var mood = moodFor(state.phase);
+    var working = state.phase === 'developing' || state.phase === 'event';
+    var prog = state.project && working
+      ? Math.max(0, Math.min(1, state.project.progress || 0))
+      : null;
+    var leaderId = state.plan && state.plan.leader;
 
     drawShell(pal);
     drawWallDecor(pal, year, frac);
@@ -399,10 +411,19 @@
       var groupW = compact ? 10 : 22;
       var gL = Math.round(cx - groupW / 2);
 
-      if (st) drawPerson(ctx, gL, P_TOP, look(st.seed), mood, frame);
-      else px(ctx, gL + 1, P_TOP + 8, 8, 4, '#2b2b33');       // 空位＝空椅子
+      if (st) {
+        drawPerson(ctx, gL, P_TOP, look(st.seed), mood, frame);
+        if (working && st.id === leaderId) {
+          /* 主创头顶一个小三角，跟办公室卡片上的高亮对应 */
+          var my = P_TOP - 3 - (frame ? 0 : 1);
+          px(ctx, gL + 4, my, 2, 1, '#ffb454');
+          px(ctx, gL + 3, my + 1, 4, 1, '#ffb454');
+        }
+      } else {
+        px(ctx, gL + 1, P_TOP + 8, 8, 4, '#2b2b33');       // 空位＝空椅子
+      }
       drawDesk(ctx, deskL, deskW, pal, !!st);
-      if (!compact) drawMonitor(ctx, gL + 12, pal);
+      if (!compact) drawMonitor(ctx, gL + 12, pal, prog);
       else if (st) px(ctx, gL, DESK_TOP - 5, 8, 5, pal.case);
     }
 
