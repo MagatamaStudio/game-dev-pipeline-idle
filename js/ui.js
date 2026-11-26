@@ -11,7 +11,7 @@
   var s = null, hooks = {}, el = {};
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
-    weekCount: 0, lines: {}
+    weekCount: 0, lines: {}, logCount: -1
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -109,9 +109,16 @@
 
   function bind() {
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode]');
       if (!t) return;
       GD.SFX.unlock();
+
+      var modeAttr = t.getAttribute('data-mode');
+      if (modeAttr) {
+        if (E.setMode(s, modeAttr)) { GD.SFX.click(); }
+        UI.render();
+        return;
+      }
 
       var planAttr = t.getAttribute('data-plan');
       if (planAttr) {
@@ -165,6 +172,7 @@
     if (!s) return;
 
     el.money.textContent = money(s.money);
+    el.money.classList.toggle('negative', s.money < 0);
     el.fans.textContent = num(s.fans);
     el.round.textContent = String(s.round);
     el.platform.textContent = GD.PLATFORM.code;
@@ -198,6 +206,23 @@
       if (bar) {
         bar.style.width = (s.project.progress * 100).toFixed(1) + '%';
         byId('dev-pct').textContent = Math.round(s.project.progress * 100) + '%';
+        byId('dev-phase').textContent = E.devPhase(s);
+        byId('dev-q').textContent = '品质 ' + E.liveQuality(s).toFixed(1);
+
+        var btns = document.querySelectorAll('#modes [data-mode]');
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].classList.toggle('on', btns[i].getAttribute('data-mode') === s.project.mode);
+        }
+
+        if (s.project.log.length !== ui.logCount) {
+          ui.logCount = s.project.log.length;
+          var logEl = byId('devlog');
+          if (logEl) {
+            logEl.innerHTML = s.project.log.slice(-4).map(function (line) {
+              return '<div class="line">' + esc(line) + '</div>';
+            }).join('');
+          }
+        }
       }
     } else if (s.phase === 'review') {
       updateReview();
@@ -245,7 +270,7 @@
       '<div class="pv"><label>主创</label><b>' + esc(leader.name) + '</b></div>' +
       '</div>';
 
-    var enough = s.money >= GD.BAL.devCost;
+    var enough = s.money >= GD.BAL.license;
     html += '<div class="plan-actions">';
     html += '<button class="primary big" data-act="go"' + (enough ? '' : ' disabled') + '>立项开发</button>';
     if (!enough) html += '<button class="ghost" data-act="rescue">找发行商预支 ' + money(GD.BAL.rescue) + '</button>';
@@ -264,12 +289,23 @@
       '<div class="dev">' +
       '<div class="dev-head">' +
       '<span class="dev-name">《' + esc(g.name) + ' · ' + esc(t.name) + '》</span>' +
-      '<span class="dev-leader">主创 ' + esc(E.staff(s.plan.leader).name) + '</span>' +
+      '<span class="dev-cost">-$' + Math.round(GD.BAL.salaryPerDay * GD.BAL.daysPerSecond).toLocaleString('en-US') + ' / 天</span>' +
       '</div>' +
       '<div class="bar"><i id="dev-bar" style="width:0%"></i></div>' +
-      '<div class="dev-meta"><span id="dev-pct">0%</span><span>开发中…</span></div>' +
+      '<div class="dev-meta">' +
+      '<span id="dev-phase">原型</span>' +
+      '<span id="dev-pct">0%</span>' +
+      '<span id="dev-q">品质 —</span>' +
+      '</div>' +
+      '<div class="modes" id="modes">' +
+      '<button data-mode="crunch"><b>赶工</b><small>+45% 速度 · −6% 品质</small></button>' +
+      '<button data-mode="normal" class="on"><b>正常</b><small>按时交付</small></button>' +
+      '<button data-mode="polish"><b>打磨</b><small>−25% 速度 · +7% 品质</small></button>' +
+      '</div>' +
+      '<div class="devlog" id="devlog"></div>' +
       '</div>';
-    el.hint.textContent = '开发中会触发一个事件。你的选择会影响这一部的品质。';
+    el.hint.textContent = '每过一天都在烧工资。赶工省钱但伤品质，打磨费钱但做得更好——随时可以切。';
+    ui.logCount = -1;
   }
 
   /* ---------------- 事件 ---------------- */
@@ -414,6 +450,9 @@
       '<div class="done-score ' + cls + '">' + r.total + '<span>/40</span></div>' +
       '<div class="done-row"><span>销量</span><b>' + num(r.copies) + ' 份</b></div>' +
       '<div class="done-row"><span>收入</span><b>' + money(r.revenue) + '</b></div>' +
+      '<div class="done-row"><span>成本</span><b>' + money(r.cost || 0) + '</b></div>' +
+      '<div class="done-row"><span>利润</span><b class="' + ((r.profit || 0) >= 0 ? 'good' : 'bad') + '">' +
+        ((r.profit || 0) >= 0 ? '+' : '−') + money(Math.abs(r.profit || 0)) + '</b></div>' +
       '<div class="done-row"><span>评价</span><b class="' + cls + '">' + verdict + '</b></div>' +
       '<button class="primary big" data-act="next">再来一部</button>' +
       '</div>';

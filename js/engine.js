@@ -60,14 +60,25 @@
   E.preview = function (plan) {
     var q = E.baseQuality(plan.genre, plan.theme, plan.leader);
     var cap = GD.PLATFORM.cap;
+    var duration = E.devDuration(plan.leader);
+    var days = duration * BAL.daysPerSecond;
     return {
       affinity: E.affinity(plan.genre, plan.theme),
       quality: q,
-      duration: E.devDuration(plan.leader),
-      cost: BAL.devCost,
+      duration: duration,
+      days: days,
+      cost: BAL.license + BAL.salaryPerDay * days,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
       scoreHigh: Math.min(40, Math.round(40 * q * 1.10 / cap))
     };
+  };
+
+  /* 开发中的实时品质（不含随机） */
+  E.liveQuality = function (s) {
+    if (!s.project) return 0;
+    var avg = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
+    return E.baseQuality(s.plan.genre, s.plan.theme, s.plan.leader) *
+      (1 + ((s.project.eventQualityPct || 0) + avg) / 100);
   };
 
   /* ---------------- 新游戏 ---------------- */
@@ -96,17 +107,22 @@
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
-    if (s.money < BAL.devCost) return false;
+    if (s.money < BAL.license) return false;
 
     s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader };
-    s.money -= BAL.devCost;
+    s.money -= BAL.license;
     s.project = {
+      baseDuration: E.devDuration(plan.leader),
       elapsed: 0,
       progress: 0,
-      duration: E.devDuration(plan.leader),
-      qualityPct: 0,
+      mode: 'normal',
+      modeQSum: 0,
+      eventQualityPct: 0,
       eventFired: false,
-      quality: 0
+      quality: 0,
+      cost: BAL.license,
+      log: [],
+      logAt: 0
     };
     s.event = null;
     s.review = null;
@@ -114,6 +130,21 @@
     s.timer = 0;
     s.phase = 'developing';
     return true;
+  };
+
+  E.setMode = function (s, mode) {
+    if (s.phase !== 'developing' || !s.project) return false;
+    if (!BAL.modes[mode]) return false;
+    s.project.mode = mode;
+    return true;
+  };
+
+  E.devPhase = function (s) {
+    if (!s.project) return '';
+    var p = s.project.progress;
+    var name = GD.PHASES[0].name;
+    for (var i = 0; i < GD.PHASES.length; i++) if (p >= GD.PHASES[i].at) name = GD.PHASES[i].name;
+    return name;
   };
 
   function pickEvent(s) {
@@ -128,7 +159,8 @@
     if (opt.cost > s.money) return false;
 
     s.money -= opt.cost;
-    s.project.qualityPct += opt.quality;
+    s.project.cost += opt.cost;
+    s.project.eventQualityPct += opt.quality;
     if (opt.progress < 0) {
       s.project.elapsed = Math.max(0.5, s.project.elapsed * (1 + opt.progress / 100));
     }
@@ -141,8 +173,9 @@
   /* ---------------- 开发完成 → 评审 ---------------- */
 
   function rollQuality(s) {
+    var avgMode = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
     var q = E.baseQuality(s.plan.genre, s.plan.theme, s.plan.leader);
-    q *= 1 + (s.project.qualityPct / 100);
+    q *= 1 + ((s.project.eventQualityPct || 0) + avgMode) / 100;
     q += Math.random() * 6 - 3;
     return Math.max(5, Math.min(100, q));
   }
@@ -232,10 +265,27 @@
     if (!(dt > 0)) return out;
 
     if (s.phase === 'developing') {
+      var mode = BAL.modes[s.project.mode] || BAL.modes.normal;
+
       s.project.elapsed += dt;
-      s.project.progress = Math.min(1, s.project.elapsed / s.project.duration);
+      s.project.modeQSum += mode.quality * dt;
+      s.project.progress += (dt * mode.rate) / s.project.baseDuration;
+
+      /* 每过一天，工资就烧一天——这是「时间有代价」的来源 */
+      var burn = BAL.salaryPerDay * BAL.daysPerSecond * dt;
+      s.money -= burn;
+      s.project.cost += burn;
+
+      var LOG_AT = [0.12, 0.32, 0.55, 0.78, 0.93];
+      while (s.project.logAt < LOG_AT.length && s.project.progress >= LOG_AT[s.project.logAt]) {
+        var at = s.project.progress;
+        var pool = at < 0.3 ? GD.DEV_LOG.proto : at < 0.7 ? GD.DEV_LOG.build : GD.DEV_LOG.polish;
+        s.project.log.push(pool[Math.floor(Math.random() * pool.length)]);
+        s.project.logAt++;
+      }
 
       if (s.project.progress >= 1) {
+        s.project.progress = 1;
         E.finishDev(s);
         out.push({ type: 'devDone' });
       } else if (!s.project.eventFired && s.project.progress >= BAL.eventAt) {
@@ -280,7 +330,9 @@
           quality: s.project.quality,
           total: s.review.total,
           copies: s.sales.sold,
-          revenue: s.sales.revenue
+          revenue: s.sales.revenue,
+          cost: s.project.cost,
+          profit: s.sales.revenue - s.project.cost
         };
         s.history.push(s.lastResult);
         s.phase = 'done';
@@ -312,7 +364,7 @@
   };
 
   E.needRescue = function (s) {
-    return s.phase === 'planning' && s.money < BAL.devCost;
+    return s.phase === 'planning' && s.money < BAL.license;
   };
 
   E.rescue = function (s) {

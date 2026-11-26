@@ -98,15 +98,19 @@ function connect(wsUrl) {
   await sleep(300);
   await shot('m0-01-planning');
 
-  /* 2. 开发中（带事件气泡） */
+  /* 2. 开发中（档位 + 日志） */
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
-  await sleep(1200);
+  await sleep(700);
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.36; })()`);
+  await sleep(600);
+  await evalJs(`document.querySelector('[data-mode="crunch"]').click()`);
+  await sleep(400);
   await shot('m0-02-developing');
 
   /* 3. 评审（全部亮分） */
   await evalJs(`(() => {
     const s = GD.getState();
-    s.project.elapsed = s.project.duration * 1.01;
+    s.project.progress = 1.01;
   })()`);
   await sleep(400);
   await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'review') s.timer = 5.2; })()`);

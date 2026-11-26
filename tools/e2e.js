@@ -115,7 +115,7 @@ function connect(wsUrl) {
       previews: document.querySelectorAll('.pv').length,
       phase: GD.getState().phase,
       money: GD.getState().money,
-      stage: r(q('#stage')), office: r(q('.office')), hud: r(q('.hud'))
+      stage: r(q('#stage')), office: r(q('.office'))
     };
   })()`);
 
@@ -134,9 +134,6 @@ function connect(wsUrl) {
   check('点击题材会改变企划', afterPick.theme === 'modern' && afterPick.on === 3,
     'theme=' + afterPick.theme + ' on=' + afterPick.on);
 
-  var badAffinity = await evalJs(`document.querySelector('.pv b').textContent`);
-  check('预告会跟着刷新', true, badAffinity);
-
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
@@ -149,12 +146,42 @@ function connect(wsUrl) {
     active: document.querySelectorAll('.desk.active').length
   })`);
   check('立项后进入开发', started.phase === 'developing' && started.bar === true);
-  check('立项扣了成本', moneyBefore - started.money === 130000, '$' + (moneyBefore - started.money));
+  check('立项扣了平台授权费', moneyBefore - started.money >= 15000, '$' + (moneyBefore - started.money));
   check('主创被高亮', started.active === 1, 'active=' + started.active);
   check('进度开始推进', started.progress > 0, 'p=' + started.progress.toFixed(3));
 
-  /* ---------- 4. 事件 ---------- */
-  await evalJs(`(() => { const s = GD.getState(); s.project.elapsed = s.project.duration * 0.46; })()`);
+  /* ---------- 4. 开发档位与烧钱 ---------- */
+  var modes = await evalJs(`({
+    count: document.querySelectorAll('#modes [data-mode]').length,
+    on: document.querySelector('#modes .on') ? document.querySelector('#modes .on').getAttribute('data-mode') : null,
+    phase: (document.querySelector('#dev-phase') || {}).textContent || '',
+    q: (document.querySelector('#dev-q') || {}).textContent || ''
+  })`);
+  check('开发有三档速度', modes.count === 3 && modes.on === 'normal', JSON.stringify(modes));
+  check('显示阶段与实时品质', modes.phase.length > 0 && modes.q.indexOf('品质') === 0,
+    modes.phase + ' / ' + modes.q);
+
+  var m1 = await evalJs(`GD.getState().money`);
+  await sleep(1600);
+  var m2 = await evalJs(`GD.getState().money`);
+  check('开发中钱在烧', m2 < m1, '$' + Math.round(m1 - m2) + ' / 1.6 秒');
+
+  await evalJs(`document.querySelector('[data-mode="crunch"]').click()`);
+  await sleep(400);
+  var mode = await evalJs(`({
+    mode: GD.getState().project.mode,
+    on: document.querySelector('#modes .on').getAttribute('data-mode'),
+    lines: document.querySelectorAll('#devlog .line').length
+  })`);
+  check('可以切到赶工', mode.mode === 'crunch' && mode.on === 'crunch');
+
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.2; })()`);
+  await sleep(300);
+  var logCount = await evalJs(`({ lines: document.querySelectorAll('#devlog .line').length, text: (document.querySelector('#devlog .line') || {}).textContent || '' })`);
+  check('开发日志在滚动', logCount.lines > 0, logCount.text.slice(0, 20));
+
+  /* ---------- 5. 事件 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.project.progress = 0.46; })()`);
   await sleep(250);
   var eventShown = await evalJs(`({
     phase: GD.getState().phase,
@@ -167,12 +194,12 @@ function connect(wsUrl) {
 
   await evalJs(`document.querySelector('#event .choice').click()`);
   await sleep(250);
-  var afterEvent = await evalJs(`({ phase: GD.getState().phase, hidden: document.querySelector('#event').hidden, q: GD.getState().project.qualityPct })`);
+  var afterEvent = await evalJs(`({ phase: GD.getState().phase, hidden: document.querySelector('#event').hidden })`);
   check('选择后继续开发', afterEvent.phase === 'developing' && afterEvent.hidden === true);
 
-  /* ---------- 5. 评审 ---------- */
-  await evalJs(`(() => { const s = GD.getState(); s.project.elapsed = s.project.duration * 1.2; })()`);
-  await sleep(300);
+  /* ---------- 6. 评审 ---------- */
+  await evalJs(`(() => { const s = GD.getState(); s.project.progress = 1.2; })()`);
+  await sleep(350);
   var reviewShown = await evalJs(`({
     phase: GD.getState().phase,
     visible: !document.querySelector('#review').hidden,
@@ -182,11 +209,8 @@ function connect(wsUrl) {
   check('评审有 4 位', reviewShown.critics === 4);
 
   await sleep(1400);
-  var revealed = await evalJs(`({
-    shown: document.querySelectorAll('.critic.shown').length,
-    scores: [...document.querySelectorAll('.critic-score')].map(e => e.textContent)
-  })`);
-  check('分数逐个亮起', revealed.shown >= 1, 'shown=' + revealed.shown + ' ' + revealed.scores.join(','));
+  var revealed = await evalJs(`({ shown: document.querySelectorAll('.critic.shown').length })`);
+  check('分数逐个亮起', revealed.shown >= 1, 'shown=' + revealed.shown);
 
   await evalJs(`(() => { const s = GD.getState(); s.timer = 4.0; })()`);
   await sleep(300);
@@ -195,23 +219,22 @@ function connect(wsUrl) {
 
   await evalJs(`(() => { const s = GD.getState(); s.timer = 5.4; })()`);
   await sleep(300);
-  var totalShown = await evalJs(`({ text: document.querySelector('#rtotal').textContent, cls: document.querySelector('#rtotal').className })`);
+  var totalShown = await evalJs(`({ text: document.querySelector('#rtotal').textContent })`);
   check('总分揭晓', /\d+ \/ 40/.test(totalShown.text), totalShown.text);
 
-  /* ---------- 6. 销售 ---------- */
+  /* ---------- 7. 销售 ---------- */
   await evalJs(`(() => { const s = GD.getState(); s.timer = 8; })()`);
   await sleep(300);
   var salesStart = await evalJs(`({ phase: GD.getState().phase, hasWeeks: !!document.querySelector('#weeks') })`);
   check('进入销售期', salesStart.phase === 'sales' && salesStart.hasWeeks === true);
 
-  await sleep(2200);
+  await sleep(2300);
   var salesMid = await evalJs(`({
     sold: GD.getState().sales.sold,
-    copies: document.querySelector('#copies').textContent,
     weeks: document.querySelectorAll('.week').length,
     adEnabled: !document.querySelector('#adbtn').disabled
   })`);
-  check('周销量在累计', salesMid.sold > 0 && salesMid.weeks >= 1, salesMid.copies + ' 份 / ' + salesMid.weeks + ' 周');
+  check('周销量在累计', salesMid.sold > 0 && salesMid.weeks >= 1, salesMid.weeks + ' 周');
   check('广告按钮可用', salesMid.adEnabled === true);
 
   await evalJs(`document.querySelector('#adbtn').click()`);
@@ -219,30 +242,31 @@ function connect(wsUrl) {
   var ad = await evalJs(`({ used: GD.getState().sales.adUsed, boost: GD.getState().sales.boost, disabled: document.querySelector('#adbtn').disabled })`);
   check('投放广告生效', ad.used === 1 && ad.disabled === true, 'boost=' + ad.boost);
 
-  /* ---------- 7. 结算 ---------- */
+  /* ---------- 8. 结算 ---------- */
   await evalJs(`(() => { const s = GD.getState(); s.timer = 100; })()`);
   await sleep(400);
   var done = await evalJs(`({
     phase: GD.getState().phase,
-    score: (document.querySelector('.done-score') || {}).textContent,
     rows: document.querySelectorAll('.done-row').length,
+    hasProfit: !!document.querySelector('.done-row b.good, .done-row b.bad'),
     history: GD.getState().history.length
   })`);
-  check('销售结束进入结算', done.phase === 'done' && done.rows === 3, done.score);
+  check('销售结束进入结算', done.phase === 'done' && done.rows === 5, 'rows=' + done.rows);
+  check('结算显示利润', done.hasProfit === true);
 
   await evalJs(`document.querySelector('[data-act="next"]').click()`);
   await sleep(300);
   var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, chips: document.querySelectorAll('.chip').length })`);
   check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.chips === 13);
 
-  /* ---------- 8. 音效开关 ---------- */
+  /* ---------- 9. 音效开关 ---------- */
   await evalJs(`document.querySelector('#sound').click()`);
   await sleep(100);
   var sound = await evalJs(`({ muted: GD.SFX.isMuted(), icon: document.querySelector('#sound').textContent })`);
   check('音效可以静音', sound.muted === true, sound.icon);
   await evalJs(`document.querySelector('#sound').click()`);
 
-  /* ---------- 9. 手机尺寸 ---------- */
+  /* ---------- 10. 手机尺寸 ---------- */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await sleep(400);
   var mobile = await evalJs(`(() => {
@@ -261,7 +285,7 @@ function connect(wsUrl) {
 
   await cdp.send('Emulation.clearDeviceMetricsOverride');
 
-  /* ---------- 10. 错误 ---------- */
+  /* ---------- 11. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   cdp.close();

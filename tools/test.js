@@ -73,9 +73,9 @@ function playOne(s, plan, choice) {
   var before = s.money;
   var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
   ok('可以立项', E.startProject(s, plan) === true);
-  ok('立项扣成本', near(s.money, before - BAL.devCost));
+  ok('立项扣平台授权费', near(s.money, before - BAL.license));
   ok('进入开发阶段', s.phase === 'developing');
-  ok('开发时长按主创速度算', near(s.project.duration, E.devDuration('zhou')));
+  ok('开发时长按主创速度算', near(s.project.baseDuration, E.devDuration('zhou')));
 
   ok('开发中不能重复立项', E.startProject(s, plan) === false);
 
@@ -88,7 +88,7 @@ function playOne(s, plan, choice) {
 (function () {
   var s = E.newGame();
   E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
-  s.project.elapsed = s.project.duration * (BAL.eventAt + 0.01);
+  s.project.progress = BAL.eventAt + 0.01;
   E.tick(s, 1 / 30);
   ok('45% 触发事件', s.phase === 'event' && !!s.event);
 
@@ -106,11 +106,71 @@ function playOne(s, plan, choice) {
   ok('钱不够可以选免费选项', E.chooseEvent(s2, 1) === true);
 })();
 
+/* ---------- 开发档位与烧钱 ---------- */
+(function () {
+  var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
+
+  var s = E.newGame();
+  E.startProject(s, plan);
+  var m0 = s.money;
+  E.tick(s, 1);
+  ok('开发中按天烧工资', s.money < m0, 'Δ=' + Math.round(m0 - s.money));
+  ok('烧钱速率符合配置',
+    Math.abs((m0 - s.money) - GD.BAL.salaryPerDay * GD.BAL.daysPerSecond) < 1,
+    Math.round(m0 - s.money) + ' / 秒');
+
+  ok('可以切换开发档位', E.setMode(s, 'crunch') === true && s.project.mode === 'crunch');
+  ok('非法档位被拒绝', E.setMode(s, 'nope') === false);
+
+  var p0 = s.project.progress;
+  E.tick(s, 1);
+  var crunchRate = s.project.progress - p0;
+
+  var s2 = E.newGame();
+  E.startProject(s2, plan);
+  var q0 = s2.project.progress;
+  E.tick(s2, 1);
+  var normalRate = s2.project.progress - q0;
+
+  ok('赶工比正常快', crunchRate > normalRate * 1.3,
+    crunchRate.toFixed(4) + ' vs ' + normalRate.toFixed(4));
+
+  var s3 = E.newGame();
+  E.startProject(s3, plan);
+  E.setMode(s3, 'polish');
+  var r0 = s3.project.progress;
+  E.tick(s3, 1);
+  ok('打磨比正常慢', (s3.project.progress - r0) < normalRate,
+    (s3.project.progress - r0).toFixed(4) + ' vs ' + normalRate.toFixed(4));
+
+  var s4 = E.newGame();
+  E.startProject(s4, plan);
+  E.setMode(s4, 'crunch');
+  for (var i = 0; i < 10; i++) E.tick(s4, 1);
+  ok('品质修正按停留时间累积', Math.abs(s4.project.modeQSum + 60) < 1.5,
+    'sum=' + s4.project.modeQSum.toFixed(1));
+
+  ok('打磨的实时品质更高', E.liveQuality(s3) > E.liveQuality(s2),
+    E.liveQuality(s3).toFixed(1) + ' vs ' + E.liveQuality(s2).toFixed(1));
+
+  ok('开发阶段名会变化', E.devPhase(s2) === '原型' || E.devPhase(s2) === '制作', E.devPhase(s2));
+
+  /* 总成本 = 授权 + 工资（这次不触发事件） */
+  var s5 = E.newGame();
+  E.startProject(s5, plan);
+  s5.project.eventFired = true;
+  var guard = 0;
+  while (s5.phase !== 'review' && guard++ < 20000) E.tick(s5, 1 / 30);
+  var expectCost = GD.BAL.license + GD.BAL.salaryPerDay * GD.BAL.daysPerSecond * s5.project.elapsed;
+  ok('总成本 = 授权 + 工资', Math.abs(s5.project.cost - expectCost) < 50,
+    Math.round(s5.project.cost) + ' vs ' + Math.round(expectCost));
+})();
+
 /* ---------- 评审 ---------- */
 (function () {
   var s = E.newGame();
   E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
-  s.project.elapsed = s.project.duration;
+  s.project.progress = 1;
   E.tick(s, 1 / 30);
 
   ok('开发完成进入评审', s.phase === 'review');
@@ -177,9 +237,9 @@ function playOne(s, plan, choice) {
   ok('粉丝增长', s.fans > 0, 'fans=' + Math.round(s.fans));
   ok('记入历史', s.history.length === 1);
 
-  var expected = before - BAL.devCost + r.revenue;
-  ok('资金账目对得上', Math.abs(s.money - expected) < 30000,
-    'money=' + Math.round(s.money) + ' expected≈' + Math.round(expected));
+  var expected = before - r.cost + r.revenue;
+  ok('资金账目对得上', Math.abs(s.money - expected) < 1,
+    'money=' + Math.round(s.money) + ' expected=' + Math.round(expected));
 
   ok('可以进入下一部', E.nextRound(s) === true);
   ok('下一部回到企划', s.phase === 'planning' && s.round === 2);
@@ -192,7 +252,7 @@ function playOne(s, plan, choice) {
   s.money = 1000;
   ok('没钱时提示救援', E.needRescue(s) === true);
   ok('没钱不能立项', E.startProject(s, s.plan) === false);
-  ok('可以预支', E.rescue(s) === true && s.money >= BAL.devCost);
+  ok('可以预支', E.rescue(s) === true && s.money >= BAL.license);
   ok('有钱时不需要救援', E.needRescue(s) === false);
 })();
 
@@ -208,7 +268,7 @@ function playOne(s, plan, choice) {
   ];
   var scores = [];
   for (var i = 0; i < plans.length; i++) {
-    if (s.money < BAL.devCost) E.rescue(s);
+    if (s.money < BAL.license) E.rescue(s);
     var r = playOne(s, plans[i]);
     if (r) scores.push(r.total);
     if (s.phase === 'done') E.nextRound(s);
@@ -229,7 +289,7 @@ function playOne(s, plan, choice) {
     var start = s.money;
     var r = playOne(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
     totals.push(r.total);
-    margins.push((s.money - start) / BAL.devCost);
+    margins.push((s.money - start) / r.cost);
   }
   totals.sort(function (a, b) { return a - b; });
   margins.sort(function (a, b) { return a - b; });

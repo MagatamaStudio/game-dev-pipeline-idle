@@ -554,3 +554,33 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; transition-duration: .001s !important; }
 }
+
+.dev-cost { font-family: var(--mono); font-size: 11.5px; color: var(--bad); letter-spacing: .5px; }
+
+.modes { display: flex; gap: 8px; margin-top: 18px; }
+.modes button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 12px;
+  text-align: left;
+}
+.modes button b { font-size: 13px; }
+.modes button small { font-size: 10px; color: var(--dim2); }
+.modes button.on { border-color: var(--accent); background: rgba(255, 180, 84, .12); }
+.modes button.on b { color: var(--accent); }
+
+.devlog {
+  margin-top: 16px;
+  min-height: 78px;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: var(--dim2);
+}
+.devlog .line { opacity: .5; }
+.devlog .line:last-child { opacity: 1; color: var(--dim); }
+
+#money.negative { color: var(--bad); }
+.done-row b.neg { color: var(--bad); }
