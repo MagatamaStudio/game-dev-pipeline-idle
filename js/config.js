@@ -43,24 +43,26 @@
     sim: { fantasy: 1.00, scifi: 1.05, medieval: 1.05, modern: 1.20, warring: 1.00 }
   };
 
-  /* ---------------- 员工 ---------------- */
-  GD.STAFF = [
-    {
-      id: 'zhou', name: '老周', seed: 7, role: '剧本',
-      stats: { code: 18, script: 42, art: 15, audio: 20, speed: 30 },
-      quote: '故事讲不好，画面再花也没用。'
-    },
-    {
-      id: 'lin', name: '小林', seed: 23, role: '程序',
-      stats: { code: 45, script: 15, art: 22, audio: 18, speed: 35 },
-      quote: '手感，一切都是手感。'
-    },
-    {
-      id: 'ya', name: '阿雅', seed: 41, role: '美术',
-      stats: { code: 12, script: 20, art: 44, audio: 25, speed: 28 },
-      quote: '我要玩家第一眼就记住这个世界。'
-    }
+  /* ---------------- 员工 ----------------
+   * 前三位是创始人，其余是招聘池。
+   * role 用于升级时的成长方向；salary 是日薪。 */
+  GD.ROSTER = [
+    { id: 'zhou', name: '老周', seed: 7, role: 'script', salary: 460, quote: '故事讲不好，画面再花也没用。', stats: { code: 18, script: 42, art: 15, audio: 20, speed: 30 } },
+    { id: 'lin', name: '小林', seed: 23, role: 'code', salary: 480, quote: '手感，一切都是手感。', stats: { code: 45, script: 15, art: 22, audio: 18, speed: 35 } },
+    { id: 'ya', name: '阿雅', seed: 41, role: 'art', salary: 440, quote: '我要玩家第一眼就记住这个世界。', stats: { code: 12, script: 20, art: 44, audio: 25, speed: 28 } },
+
+    { id: 'song', name: '老宋', seed: 58, role: 'code', salary: 560, quote: '代码写干净，改需求的时候才不慌。', stats: { code: 38, script: 20, art: 18, audio: 22, speed: 26 } },
+    { id: 'man', name: '小满', seed: 66, role: 'art', salary: 540, quote: '给我三天，我给你一座城。', stats: { code: 14, script: 24, art: 36, audio: 20, speed: 30 } },
+    { id: 'kang', name: '阿康', seed: 73, role: 'audio', salary: 520, quote: '声音是最容易被忽略的那一半。', stats: { code: 16, script: 14, art: 18, audio: 40, speed: 25 } },
+    { id: 'xi', name: '林夕', seed: 81, role: 'script', salary: 600, quote: '玩家记不住系统，只记得住人。', stats: { code: 20, script: 38, art: 22, audio: 16, speed: 27 } },
+    { id: 'bear', name: '大熊', seed: 88, role: 'code', salary: 680, quote: '给我一周，没有我做不出来的东西。', stats: { code: 42, script: 12, art: 14, audio: 14, speed: 22 } },
+    { id: 'qi', name: '小七', seed: 95, role: 'art', salary: 640, quote: '配色不对，我睡不着。', stats: { code: 18, script: 18, art: 40, audio: 24, speed: 32 } },
+    { id: 'li', name: '老李', seed: 102, role: 'code', salary: 500, quote: '做了十年，什么坑没见过。', stats: { code: 34, script: 26, art: 20, audio: 18, speed: 20 } },
+    { id: 'may', name: '阿May', seed: 111, role: 'audio', salary: 580, quote: '音乐一响，玩家就知道该紧张了。', stats: { code: 12, script: 20, art: 26, audio: 34, speed: 28 } },
+    { id: 'zhao', name: '小赵', seed: 118, role: 'script', salary: 520, quote: '我什么都干一点，什么都还行。', stats: { code: 24, script: 26, art: 24, audio: 24, speed: 30 } }
   ];
+
+  GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };
 
@@ -330,8 +332,16 @@
     /* 开发成本 = 平台授权 + 每日工资 × 开发天数
      * 天数往前走，钱就在烧。这是「赶工 / 打磨」有意义的前提。 */
     license: 15000,
-    salaryPerDay: 1380,
     daysPerSecond: 2,
+
+    /* 团队 */
+    hireFeeDays: 70,          // 签约金 = 日薪 × 70 天
+    seatCosts: [120000, 220000, 380000],   // 第 4/5/6 个工位
+    refreshCost: 10000,       // 换一批候选人
+    teamSpeedBonus: 4,        // 每多一人，开发快 4 秒
+    teamQualityBonus: 0.04,   // 每多一人，品质 +4%
+    minDevSeconds: 18,
+    xpBase: 15,               // 每部作品经验 = 15 + 评分
 
     devSeconds: 54,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,

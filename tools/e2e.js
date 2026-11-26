@@ -127,6 +127,30 @@ function connect(wsUrl) {
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
     'stage=' + first.stage.h + ' office=' + first.office.h);
 
+  /* ---------- 1.5 团队与作品集面板 ---------- */
+  await evalJs(`document.querySelector('[data-act="team"]').click()`);
+  await sleep(220);
+  var team = await evalJs(`({
+    open: !document.querySelector('#team').hidden,
+    rows: document.querySelectorAll('#team .staff-row').length,
+    cands: document.querySelectorAll('#team .cand').length,
+    salary: (document.querySelector('#team .panel-sub') || {}).textContent || ''
+  })`);
+  check('团队面板显示 3 人', team.open === true && team.rows === 3, 'rows=' + team.rows);
+  check('团队面板显示候选人', team.cands >= 1, 'cands=' + team.cands);
+  check('团队面板显示日薪', team.salary.indexOf('日薪') > 0, team.salary);
+
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(150);
+  check('团队面板可以关闭', await evalJs(`document.querySelector('#team').hidden`) === true);
+
+  await evalJs(`document.querySelector('[data-act="archive"]').click()`);
+  await sleep(150);
+  var arch0 = await evalJs(`({ open: !document.querySelector('#archive').hidden, rows: document.querySelectorAll('#archive .arch-row').length })`);
+  check('作品集初始为空', arch0.open === true && arch0.rows === 0);
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(150);
+
   /* ---------- 2. 选择类型/题材 ---------- */
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);
@@ -296,6 +320,25 @@ function connect(wsUrl) {
   await sleep(300);
   var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, chips: document.querySelectorAll('.chip').length })`);
   check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.chips === 13);
+
+  /* ---------- 8.5 作品集与存档 ---------- */
+  await evalJs(`document.querySelector('[data-act="archive"]').click()`);
+  await sleep(200);
+  var arch1 = await evalJs(`({ rows: document.querySelectorAll('#archive .arch-row').length, text: (document.querySelector('.arch-name') || {}).textContent || '' })`);
+  check('作品集记录了这一部', arch1.rows === 1, arch1.text);
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(150);
+
+  var beforeReload = await evalJs(`({ round: GD.getState().round, money: Math.round(GD.getState().money), history: GD.getState().history.length })`);
+  await cdp.send('Page.navigate', { url: URL });
+  await waitFor(async function () {
+    return await evalJs('document.readyState === "complete" && !!window.GD && !!GD.getState()');
+  }, 15000, 'reload');
+  await sleep(500);
+  var afterReload = await evalJs(`({ round: GD.getState().round, money: Math.round(GD.getState().money), history: GD.getState().history.length })`);
+  check('刷新后进度还在',
+    afterReload.round === beforeReload.round && afterReload.history === beforeReload.history,
+    JSON.stringify(afterReload) + ' vs ' + JSON.stringify(beforeReload));
 
   /* ---------- 9. 音效开关 ---------- */
   await evalJs(`document.querySelector('#sound').click()`);

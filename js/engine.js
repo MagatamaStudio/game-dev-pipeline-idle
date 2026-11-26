@@ -11,9 +11,20 @@
 
   /* ---------------- 查询 ---------------- */
 
-  E.staff = function (id) {
-    for (var i = 0; i < GD.STAFF.length; i++) if (GD.STAFF[i].id === id) return GD.STAFF[i];
-    return GD.STAFF[0];
+  E.staffById = function (s, id) {
+    for (var i = 0; i < s.staff.length; i++) if (s.staff[i].id === id) return s.staff[i];
+    return s.staff[0];
+  };
+
+  E.teamSalary = function (s) {
+    var sum = 0;
+    for (var i = 0; i < s.staff.length; i++) sum += s.staff[i].salary;
+    return sum;
+  };
+
+  E.rosterById = function (id) {
+    for (var i = 0; i < GD.ROSTER.length; i++) if (GD.ROSTER[i].id === id) return GD.ROSTER[i];
+    return GD.ROSTER[0];
   };
 
   E.genre = function (id) {
@@ -31,43 +42,49 @@
     return (row && row[themeId]) || 1;
   };
 
-  E.teamStat = function (stat) {
+  E.teamStat = function (s, stat) {
     var sum = 0;
-    for (var i = 0; i < GD.STAFF.length; i++) sum += GD.STAFF[i].stats[stat];
-    return sum / GD.STAFF.length;
+    for (var i = 0; i < s.staff.length; i++) sum += s.staff[i].stats[stat];
+    return sum / s.staff.length;
+  };
+
+  E.teamBonus = function (s) {
+    return 1 + Math.max(0, s.staff.length - 3) * BAL.teamQualityBonus;
   };
 
   /* 确定性品质（不含随机与事件），用于企划预告 */
-  E.baseQuality = function (genreId, themeId, leaderId) {
+  E.baseQuality = function (s, genreId, themeId, leaderId) {
     var g = E.genre(genreId);
-    var leader = E.staff(leaderId);
+    var leader = E.staffById(s, leaderId);
     var w = g.weights;
     var leaderQ = 0, teamQ = 0;
     for (var k in w) {
       leaderQ += w[k] * leader.stats[k];
-      teamQ += w[k] * E.teamStat(k);
+      teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08;
+    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s);
   };
 
-  E.devDuration = function (leaderId) {
-    var leader = E.staff(leaderId);
-    return BAL.devSeconds - leader.stats.speed * BAL.speedFactor;
+  E.devDuration = function (s, leaderId) {
+    var leader = E.staffById(s, leaderId);
+    var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
+      Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
+    return Math.max(BAL.minDevSeconds, d);
   };
 
   /* 企划面板的预估 */
-  E.preview = function (plan) {
-    var q = E.baseQuality(plan.genre, plan.theme, plan.leader);
+  E.preview = function (s, plan) {
+    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader);
     var cap = GD.PLATFORM.cap;
-    var duration = E.devDuration(plan.leader);
+    var duration = E.devDuration(s, plan.leader);
     var days = duration * BAL.daysPerSecond;
     return {
       affinity: E.affinity(plan.genre, plan.theme),
       quality: q,
       duration: duration,
       days: days,
-      cost: BAL.license + BAL.salaryPerDay * days,
+      cost: BAL.license + E.teamSalary(s) * days,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
       scoreHigh: Math.min(40, Math.round(40 * q * 1.10 / cap))
     };
@@ -77,14 +94,93 @@
   E.liveQuality = function (s) {
     if (!s.project) return 0;
     var avg = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
-    return E.baseQuality(s.plan.genre, s.plan.theme, s.plan.leader) *
+    return E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader) *
       (1 + ((s.project.eventQualityPct || 0) + avg) / 100);
+  };
+
+  /* ---------------- 团队 ---------------- */
+
+  E.makeStaff = function (id) {
+    var r = E.rosterById(id);
+    return {
+      id: r.id, name: r.name, seed: r.seed, role: r.role, salary: r.salary,
+      quote: r.quote, level: 1, xp: 0,
+      stats: { code: r.stats.code, script: r.stats.script, art: r.stats.art, audio: r.stats.audio, speed: r.stats.speed }
+    };
+  };
+
+  E.rollCandidates = function (s) {
+    var taken = s.staff.map(function (x) { return x.id; });
+    var pool = GD.ROSTER.filter(function (r) { return taken.indexOf(r.id) === -1; });
+    var out = [];
+    while (out.length < 3 && pool.length) {
+      var i = Math.floor(Math.random() * pool.length);
+      out.push(pool.splice(i, 1)[0].id);
+    }
+    s.candidates = out;
+    return out;
+  };
+
+  E.hire = function (s, id) {
+    if (s.staff.length >= s.seats) return false;
+    if (s.candidates.indexOf(id) === -1) return false;
+    var r = E.rosterById(id);
+    var fee = r.salary * BAL.hireFeeDays;
+    if (s.money < fee) return false;
+    s.money -= fee;
+    s.staff.push(E.makeStaff(id));
+    s.hiredFee = (s.hiredFee || 0) + fee;
+    E.rollCandidates(s);
+    return true;
+  };
+
+  E.expandOffice = function (s) {
+    var idx = s.seats - 3;
+    if (idx >= BAL.seatCosts.length) return false;
+    var cost = BAL.seatCosts[idx];
+    if (s.money < cost) return false;
+    s.money -= cost;
+    s.seats++;
+    return true;
+  };
+
+  E.expandCost = function (s) {
+    var idx = s.seats - 3;
+    return idx < BAL.seatCosts.length ? BAL.seatCosts[idx] : null;
+  };
+
+  E.refreshCandidates = function (s) {
+    if (s.money < BAL.refreshCost) return false;
+    s.money -= BAL.refreshCost;
+    E.rollCandidates(s);
+    return true;
+  };
+
+  E.xpNeeded = function (level) { return 80 + level * 60; };
+
+  E.gainXp = function (s, score) {
+    var gain = BAL.xpBase + score;
+    var ups = [];
+    s.staff.forEach(function (st) {
+      st.xp += gain;
+      while (st.xp >= E.xpNeeded(st.level)) {
+        st.xp -= E.xpNeeded(st.level);
+        st.level++;
+        st.stats[st.role] = Math.min(99, st.stats[st.role] + 2);
+        var others = ['code', 'script', 'art', 'audio'].filter(function (k) { return k !== st.role; });
+        others.sort(function (a, b) { return st.stats[b] - st.stats[a]; });
+        st.stats[others[0]] = Math.min(99, st.stats[others[0]] + 1);
+        ups.push({ id: st.id, level: st.level });
+      }
+    });
+    return { gain: gain, ups: ups };
   };
 
   /* ---------------- 新游戏 ---------------- */
 
   E.newGame = function () {
-    return {
+    var s = {
+      version: 1,
       round: 1,
       money: BAL.startMoney,
       fans: 0,
@@ -100,11 +196,17 @@
       sales: null,
       lastEvent: null,
       lastResult: null,
+      lastXp: null,
       history: [],
       timer: 0,
       totalEarned: 0,
-      rescued: 0
+      rescued: 0,
+      staff: GD.FOUNDERS.map(function (id) { return E.makeStaff(id); }),
+      seats: 3,
+      candidates: []
     };
+    E.rollCandidates(s);
+    return s;
   };
 
   /* ---------------- 企划 → 开发 ---------------- */
@@ -116,7 +218,7 @@
     s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader };
     s.money -= BAL.license;
     s.project = {
-      baseDuration: E.devDuration(plan.leader),
+      baseDuration: E.devDuration(s, plan.leader),
       elapsed: 0,
       progress: 0,
       mode: 'normal',
@@ -210,7 +312,7 @@
 
   function rollQuality(s) {
     var avgMode = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
-    var q = E.baseQuality(s.plan.genre, s.plan.theme, s.plan.leader);
+    var q = E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader);
     q *= 1 + ((s.project.eventQualityPct || 0) + avgMode) / 100;
     q += Math.random() * 6 - 3;
     return Math.max(5, Math.min(100, q));
@@ -402,7 +504,7 @@
       s.day += dt * BAL.daysPerSecond;
 
       /* 每过一天，工资就烧一天——这是「时间有代价」的来源 */
-      var burn = BAL.salaryPerDay * BAL.daysPerSecond * dt;
+      var burn = E.teamSalary(s) * BAL.daysPerSecond * dt;
       s.money -= burn;
       s.project.cost += burn;
 
@@ -482,10 +584,13 @@
           revenue: s.sales.revenue,
           cost: s.project.cost,
           profit: s.sales.revenue - s.project.cost,
+          date: E.dateString(s.day),
           window: s.release ? s.release.name : '普通档期',
           windowMult: s.release ? s.release.mult : 1
         };
         s.history.push(s.lastResult);
+        s.lastXp = E.gainXp(s, s.review.total);
+        E.rollCandidates(s);
         s.phase = 'done';
         out.push({ type: 'done' });
       }
@@ -525,6 +630,87 @@
     s.money += BAL.rescue;
     s.rescued++;
     return true;
+  };
+
+  /* ---------------- 存档 ---------------- */
+
+  E.SAVE_VERSION = 1;
+  E.SAVE_KEY = 'garageStudio.save.v1';
+
+  E.serialize = function (s) {
+    s.version = E.SAVE_VERSION;
+    s.savedAt = Date.now();
+    return JSON.stringify(s);
+  };
+
+  function clampNum(v, lo, hi, fallback) {
+    if (!isFinite(v)) return fallback;
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  E.deserialize = function (text) {
+    var raw = JSON.parse(text);
+    if (!raw || raw.version !== E.SAVE_VERSION) throw new Error('存档版本不兼容');
+
+    var s = E.newGame();
+    Object.keys(raw).forEach(function (k) {
+      if (k === 'staff' || k === 'candidates' || k === 'version') return;
+      s[k] = raw[k];
+    });
+
+    /* 员工 */
+    var staff = [];
+    if (Array.isArray(raw.staff)) {
+      raw.staff.forEach(function (x) {
+        if (!x || !x.id) return;
+        var known = GD.ROSTER.some(function (r) { return r.id === x.id; });
+        if (!known) return;
+        if (staff.some(function (y) { return y.id === x.id; })) return;
+        var m = E.makeStaff(x.id);
+        m.level = Math.round(clampNum(x.level, 1, 20, 1));
+        m.xp = clampNum(x.xp, 0, 999999, 0);
+        ['code', 'script', 'art', 'audio', 'speed'].forEach(function (k) {
+          if (x.stats && isFinite(x.stats[k])) {
+            m.stats[k] = Math.round(clampNum(x.stats[k], 1, 99, m.stats[k]));
+          }
+        });
+        staff.push(m);
+      });
+    }
+    if (!staff.length) staff = GD.FOUNDERS.map(function (id) { return E.makeStaff(id); });
+    s.staff = staff;
+
+    s.seats = Math.round(clampNum(raw.seats, 3, 6, 3));
+    if (s.seats < s.staff.length) s.seats = s.staff.length;
+
+    /* 候选人 */
+    var taken = s.staff.map(function (x) { return x.id; });
+    s.candidates = Array.isArray(raw.candidates) ? raw.candidates.filter(function (id) {
+      return taken.indexOf(id) === -1 && GD.ROSTER.some(function (r) { return r.id === id; });
+    }) : [];
+    if (s.candidates.length < 3) E.rollCandidates(s);
+
+    /* 企划 */
+    if (!s.plan || typeof s.plan !== 'object') s.plan = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id };
+    if (!s.staff.some(function (x) { return x.id === s.plan.leader; })) s.plan.leader = s.staff[0].id;
+    if (!GD.GENRES.some(function (g) { return g.id === s.plan.genre; })) s.plan.genre = 'rpg';
+    if (!GD.THEMES.some(function (t) { return t.id === s.plan.theme; })) s.plan.theme = 'fantasy';
+
+    /* 数字与状态 */
+    var phases = ['planning', 'developing', 'event', 'review', 'release', 'sales', 'done'];
+    if (phases.indexOf(s.phase) === -1) s.phase = 'planning';
+    if (s.phase !== 'planning' && s.phase !== 'done' && !s.project) s.phase = 'planning';
+
+    s.money = clampNum(s.money, -1e9, 1e12, BAL.startMoney);
+    s.fans = clampNum(s.fans, 0, 1e12, 0);
+    s.day = clampNum(s.day, 0, 1e7, 0);
+    s.round = Math.round(clampNum(s.round, 1, 1e6, 1));
+    s.timer = clampNum(s.timer, 0, 1e6, 0);
+    s.microUid = Math.round(clampNum(s.microUid, 0, 1e9, 0));
+    if (!Array.isArray(s.history)) s.history = [];
+    if (s.phase === 'done' && !s.lastResult) s.phase = 'planning';
+
+    return s;
   };
 
 })(window.GD = window.GD || {});

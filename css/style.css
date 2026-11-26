@@ -690,3 +690,126 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   background: var(--accent);
   transition: width .1s linear;
 }
+
+/* ============ 团队 / 作品集 ============ */
+
+.hud-actions { display: flex; align-items: center; gap: 6px; }
+.hud-btn {
+  padding: 7px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  border-color: var(--line);
+}
+.hud-btn:hover { color: var(--accent); }
+
+.panel-card {
+  width: min(680px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1d1813, #14100d);
+  padding: 20px 20px 12px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .6);
+  animation: pop .22s cubic-bezier(.2, .9, .3, 1);
+}
+.panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.panel-head h3 { margin: 0; font-size: 18px; }
+.panel-sub { font-family: var(--mono); font-size: 11px; color: var(--dim2); margin-top: 3px; }
+.panel-scroll { overflow-y: auto; padding-right: 4px; }
+
+.staff-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.staff-row, .cand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: rgba(24, 19, 15, .7);
+}
+.avatar.sm { width: 42px; height: 42px; }
+.avatar.sm svg { width: 42px; height: 42px; }
+.staff-main { flex: 1; min-width: 0; }
+.staff-name { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.lv {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 180, 84, .14);
+  color: var(--accent);
+  font-weight: 500;
+}
+.role { font-size: 10px; color: var(--dim2); font-weight: 400; }
+.staff-stats { font-family: var(--mono); font-size: 10.5px; color: var(--dim2); margin-top: 3px; }
+.xp { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .07); margin-top: 6px; overflow: hidden; }
+.xp i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.staff-salary { font-family: var(--mono); font-size: 12px; color: var(--dim); text-align: right; flex: none; }
+.staff-salary small { color: var(--dim2); font-size: 9.5px; }
+
+.panel-block { border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 4px; margin-bottom: 12px; }
+.block-title { font-size: 10px; letter-spacing: 2px; color: var(--dim2); margin-bottom: 9px; }
+.dim { color: var(--dim2); }
+.block-title .dim { letter-spacing: 0; }
+.wide { width: 100%; padding: 10px; font-size: 12.5px; }
+
+.cand { margin-bottom: 8px; }
+.cand-quote { font-size: 10.5px; color: var(--dim2); margin-top: 4px; font-style: italic; }
+.hire {
+  flex: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  border-color: rgba(111, 211, 168, .4);
+  color: var(--ok);
+  background: rgba(111, 211, 168, .08);
+  line-height: 1.25;
+}
+.hire small { display: block; font-family: var(--mono); font-size: 9.5px; opacity: .8; }
+.hire:hover:not(:disabled) { background: rgba(111, 211, 168, .16); }
+
+.arch-list { display: flex; flex-direction: column; gap: 6px; }
+.arch-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "name score sales" "meta score sales";
+  gap: 1px 12px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: rgba(24, 19, 15, .7);
+}
+.arch-name { grid-area: name; font-size: 13px; font-weight: 600; }
+.arch-meta { grid-area: meta; font-family: var(--mono); font-size: 10px; color: var(--dim2); }
+.arch-score {
+  grid-area: score;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--dim);
+  min-width: 34px;
+  text-align: center;
+}
+.arch-score.good { color: var(--ok); }
+.arch-score.bad { color: var(--bad); }
+.arch-sales {
+  grid-area: sales;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim2);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.xp-note { margin-top: 14px; font-size: 11.5px; color: var(--dim); font-family: var(--mono); }
+
+@media (max-width: 620px) {
+  .hud-btn { padding: 6px 8px; font-size: 11px; }
+  .staff-salary { font-size: 11px; }
+  .arch-row { grid-template-columns: 1fr auto; grid-template-areas: "name score" "meta sales"; }
+}

@@ -11,7 +11,7 @@
   var s = null, hooks = {}, el = {};
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
-    weekCount: 0, lines: {}, logCount: -1
+    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -79,6 +79,8 @@
     el.hint = byId('hint');
     el.review = byId('review');
     el.event = byId('event');
+    el.team = byId('team');
+    el.archive = byId('archive');
     el.sound = byId('sound');
 
     buildOffice();
@@ -88,7 +90,7 @@
 
   function buildOffice() {
     el.desks.innerHTML = '';
-    GD.STAFF.forEach(function (st) {
+    s.staff.forEach(function (st) {
       var d = document.createElement('div');
       d.className = 'desk';
       d.setAttribute('data-staff', st.id);
@@ -97,8 +99,8 @@
         '<div class="desk-body">' +
           '<div class="avatar">' + avatarSvg(st.seed) + '</div>' +
           '<div class="desk-info">' +
-            '<div class="desk-name">' + esc(st.name) + '</div>' +
-            '<div class="desk-role">' + esc(st.role) + '</div>' +
+            '<div class="desk-name">' + esc(st.name) + ' <span class="lv">Lv ' + st.level + '</span></div>' +
+            '<div class="desk-role">' + esc(GD.STAT_NAMES[st.role]) + '</div>' +
             '<div class="desk-stats">' + esc(topStats(st)) + '</div>' +
           '</div>' +
         '</div>';
@@ -110,9 +112,36 @@
 
   function bind() {
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire]');
       if (!t) return;
       GD.SFX.unlock();
+
+      var panelAct = t.getAttribute('data-act');
+      var hireId = t.getAttribute('data-hire');
+
+      if (hireId) {
+        if (E.hire(s, hireId)) { GD.SFX.coin(); renderTeam(); if (hooks.onSave) hooks.onSave(); UI.render(); }
+        else { GD.SFX.bad(); }
+        return;
+      }
+      if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
+      if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
+      if (panelAct === 'close-panel') {
+        GD.SFX.click();
+        el.team.hidden = true;
+        el.archive.hidden = true;
+        return;
+      }
+      if (panelAct === 'expand') {
+        if (E.expandOffice(s)) { GD.SFX.coin(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
+        else { GD.SFX.bad(); }
+        return;
+      }
+      if (panelAct === 'refresh') {
+        if (E.refreshCandidates(s)) { GD.SFX.click(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
+        else { GD.SFX.bad(); }
+        return;
+      }
 
       var microAttr = t.getAttribute('data-micro');
       if (microAttr != null) {
@@ -191,6 +220,8 @@
     el.round.textContent = String(s.round);
     el.platform.textContent = GD.PLATFORM.code;
     el.date.textContent = E.dateString(s.day);
+
+    if (ui.staffCount !== s.staff.length) { ui.staffCount = s.staff.length; buildOffice(); }
 
     if (ui.phase !== s.phase) {
       ui.phase = s.phase;
@@ -276,9 +307,9 @@
   /* ---------------- 企划 ---------------- */
 
   function buildPlanning() {
-    var p = E.preview(s.plan);
+    var p = E.preview(s, s.plan);
     var g = E.genre(s.plan.genre), t = E.theme(s.plan.theme);
-    var leader = E.staff(s.plan.leader);
+    var leader = E.staffById(s, s.plan.leader);
 
     var html = '<div class="plan">';
 
@@ -297,7 +328,7 @@
     html += '</div></div>';
 
     html += '<div class="plan-group"><div class="plan-label">主创</div><div class="chips">';
-    GD.STAFF.forEach(function (x) {
+    s.staff.forEach(function (x) {
       html += '<button class="chip' + (x.id === s.plan.leader ? ' on' : '') + '" data-plan="leader:' + x.id + '">' +
         '<span class="ci">' + esc(x.name.charAt(0)) + '</span>' + esc(x.name) + '</button>';
     });
@@ -368,6 +399,114 @@
     html += '</div><div class="micro-timer"><i id="micro-fill"></i></div>';
     box.innerHTML = html;
     box.hidden = false;
+  }
+
+  /* ---------------- 团队面板 ---------------- */
+
+  function statLine(stats) {
+    return ['code', 'script', 'art', 'audio', 'speed'].map(function (k) {
+      return GD.STAT_NAMES[k] + ' ' + stats[k];
+    }).join(' · ');
+  }
+
+  function xpBar(st) {
+    var need = E.xpNeeded(st.level);
+    var pct = Math.min(100, (st.xp / need) * 100);
+    return '<div class="xp"><i style="width:' + pct.toFixed(1) + '%"></i></div>';
+  }
+
+  function openTeam() { renderTeam(); el.team.hidden = false; }
+
+  function renderTeam() {
+    var cost = E.expandCost(s);
+    var html = '<div class="panel-card">' +
+      '<div class="panel-head"><div><h3>团队</h3>' +
+      '<div class="panel-sub">' + s.staff.length + ' / ' + s.seats + ' 个工位 · 日薪 ' + money(E.teamSalary(s)) + '</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="panel-scroll">';
+
+    html += '<div class="staff-list">';
+    s.staff.forEach(function (st) {
+      html += '<div class="staff-row">' +
+        '<div class="avatar sm">' + avatarSvg(st.seed) + '</div>' +
+        '<div class="staff-main">' +
+        '<div class="staff-name">' + esc(st.name) +
+        ' <span class="lv">Lv ' + st.level + '</span>' +
+        ' <span class="role">' + esc(GD.STAT_NAMES[st.role]) + '</span></div>' +
+        '<div class="staff-stats">' + esc(statLine(st.stats)) + '</div>' +
+        xpBar(st) +
+        '</div>' +
+        '<div class="staff-salary">' + money(st.salary) + '<small>/天</small></div>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    if (cost != null) {
+      html += '<div class="panel-block">' +
+        '<button class="wide" data-act="expand"' + (s.money < cost ? ' disabled' : '') + '>' +
+        '扩建到 ' + (s.seats + 1) + ' 个工位 · ' + money(cost) + '</button></div>';
+    }
+
+    html += '<div class="panel-block"><div class="block-title">候选人<span class="dim"> · 每部作品后刷新</span></div>';
+
+    if (s.staff.length >= s.seats) {
+      html += '<p class="dim">工位满了，先扩建办公室才能招聘。</p>';
+    }
+    if (!s.candidates.length) {
+      html += '<p class="dim">暂时没有合适的人。</p>';
+    } else {
+      s.candidates.forEach(function (id) {
+        var r = E.rosterById(id);
+        var fee = r.salary * GD.BAL.hireFeeDays;
+        var can = s.money >= fee && s.staff.length < s.seats;
+        html += '<div class="cand">' +
+          '<div class="avatar sm">' + avatarSvg(r.seed) + '</div>' +
+          '<div class="staff-main">' +
+          '<div class="staff-name">' + esc(r.name) + ' <span class="role">' + esc(GD.STAT_NAMES[r.role]) + '</span></div>' +
+          '<div class="staff-stats">' + esc(statLine(r.stats)) + '</div>' +
+          '<div class="cand-quote">' + esc(r.quote) + '</div>' +
+          '</div>' +
+          '<button class="hire" data-hire="' + r.id + '"' + (can ? '' : ' disabled') + '>招聘<small>' + money(fee) + '</small></button>' +
+          '</div>';
+      });
+      html += '<button class="ghost" data-act="refresh"' + (s.money < GD.BAL.refreshCost ? ' disabled' : '') + '>' +
+        '换一批 · ' + money(GD.BAL.refreshCost) + '</button>';
+    }
+    html += '</div>';
+
+    html += '</div></div>';
+    el.team.innerHTML = html;
+  }
+
+  /* ---------------- 作品集 ---------------- */
+
+  function openArchive() { renderArchive(); el.archive.hidden = false; }
+
+  function renderArchive() {
+    var html = '<div class="panel-card">' +
+      '<div class="panel-head"><div><h3>作品集</h3>' +
+      '<div class="panel-sub">已发行 ' + s.history.length + ' 部</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="panel-scroll">';
+
+    if (!s.history.length) {
+      html += '<p class="dim">还没有作品。去立项吧。</p>';
+    } else {
+      html += '<div class="arch-list">';
+      s.history.slice().reverse().forEach(function (h) {
+        var cls = h.total >= 26 ? 'good' : h.total >= 20 ? '' : 'bad';
+        html += '<div class="arch-row">' +
+          '<div class="arch-name">' + esc(E.genre(h.genre).name) + ' · ' + esc(E.theme(h.theme).name) + '</div>' +
+          '<div class="arch-meta">' + esc(h.date || '') + ' · ' + esc(h.window || '普通档期') + '</div>' +
+          '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
+          '<div class="arch-sales">' + num(h.copies) + ' 份<br>' + money(h.revenue) + '</div>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+    el.archive.innerHTML = html;
   }
 
   /* ---------------- 事件 ---------------- */
@@ -551,6 +690,9 @@
         ((r.profit || 0) >= 0 ? '+' : '−') + money(Math.abs(r.profit || 0)) + '</b></div>' +
       '<div class="done-row"><span>档期</span><b>' + esc(r.window || '普通档期') + ' ×' + (r.windowMult || 1).toFixed(2) + '</b></div>' +
       '<div class="done-row"><span>评价</span><b class="' + cls + '">' + verdict + '</b></div>' +
+      (s.lastXp ? '<div class="xp-note">全队 +' + s.lastXp.gain + ' 经验' +
+        (s.lastXp.ups.length ? ' · ' + s.lastXp.ups.map(function (x) { return E.staffById(s, x.id).name + ' 升到 Lv' + x.level; }).join('，') : '') +
+        '</div>' : '') +
       '<button class="primary big" data-act="next">再来一部</button>' +
       '</div>';
     el.hint.textContent = '换个类型或主创，结果会完全不同。';

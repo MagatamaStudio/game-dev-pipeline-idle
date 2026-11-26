@@ -98,6 +98,13 @@ function connect(wsUrl) {
   await sleep(300);
   await shot('m0-01-planning');
 
+  /* 1.5 团队面板 */
+  await evalJs(`document.querySelector('[data-act="team"]').click()`);
+  await sleep(400);
+  await shot('m0-08-team');
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(200);
+
   /* 2. 开发中（档位 + 日志） */
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
   await sleep(700);
@@ -133,6 +140,15 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="release-now"]').click()`);
   await sleep(800);
   await shot('m0-06-sales');
+
+  /* 5.5 作品集 */
+  await evalJs(`(() => { const s = GD.getState(); s.timer = 100; })()`);
+  await sleep(500);
+  await evalJs(`document.querySelector('[data-act="archive"]').click()`);
+  await sleep(400);
+  await shot('m0-09-archive');
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(200);
 
   /* 6. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

@@ -41,29 +41,30 @@ function playOne(s, plan, choice) {
   var s = E.newGame();
   ok('新游戏是企划阶段', s.phase === 'planning');
   ok('初始资金正确', s.money === BAL.startMoney);
-  ok('初始 3 名员工', GD.STAFF.length === 3);
+  ok('初始 3 名员工', s.staff.length === 3);
   ok('5 类型 × 5 题材', GD.GENRES.length === 5 && GD.THEMES.length === 5);
   ok('4 位评审', GD.CRITICS.length === 4);
 })();
 
 /* ---------- 相性与预告 ---------- */
 (function () {
+  var s = E.newGame();
   ok('RPG×幻想 相性最高', E.affinity('rpg', 'fantasy') === 1.35);
   ok('RPG×现代 相性偏低', E.affinity('rpg', 'modern') === 0.95);
 
-  var good = E.preview({ genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
-  var bad = E.preview({ genre: 'rpg', theme: 'modern', leader: 'zhou' });
+  var good = E.preview(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
+  var bad = E.preview(s, { genre: 'rpg', theme: 'modern', leader: 'zhou' });
   ok('好组合品质高于差组合', good.quality > bad.quality + 8,
     good.quality.toFixed(1) + ' vs ' + bad.quality.toFixed(1));
   ok('预告分数区间合理', good.scoreLow >= 1 && good.scoreHigh <= 40 && good.scoreLow < good.scoreHigh,
     good.scoreLow + '–' + good.scoreHigh);
 
   ok('速度影响开发时长',
-    E.devDuration('lin') < E.devDuration('ya'),
-    E.devDuration('lin') + ' vs ' + E.devDuration('ya'));
+    E.devDuration(s, 'lin') < E.devDuration(s, 'ya'),
+    E.devDuration(s, 'lin') + ' vs ' + E.devDuration(s, 'ya'));
 
-  var actLin = E.preview({ genre: 'action', theme: 'modern', leader: 'lin' });
-  var actZhou = E.preview({ genre: 'action', theme: 'modern', leader: 'zhou' });
+  var actLin = E.preview(s, { genre: 'action', theme: 'modern', leader: 'lin' });
+  var actZhou = E.preview(s, { genre: 'action', theme: 'modern', leader: 'zhou' });
   ok('同类型换主创有差别', actLin.quality > actZhou.quality + 2,
     actLin.quality.toFixed(1) + ' vs ' + actZhou.quality.toFixed(1));
 })();
@@ -76,7 +77,7 @@ function playOne(s, plan, choice) {
   ok('可以立项', E.startProject(s, plan) === true);
   ok('立项扣平台授权费', near(s.money, before - BAL.license));
   ok('进入开发阶段', s.phase === 'developing');
-  ok('开发时长按主创速度算', near(s.project.baseDuration, E.devDuration('zhou')));
+  ok('开发时长按主创速度算', near(s.project.baseDuration, E.devDuration(s, 'zhou')));
 
   ok('开发中不能重复立项', E.startProject(s, plan) === false);
 
@@ -117,7 +118,7 @@ function playOne(s, plan, choice) {
   E.tick(s, 1);
   ok('开发中按天烧工资', s.money < m0, 'Δ=' + Math.round(m0 - s.money));
   ok('烧钱速率符合配置',
-    Math.abs((m0 - s.money) - GD.BAL.salaryPerDay * GD.BAL.daysPerSecond) < 1,
+    Math.abs((m0 - s.money) - E.teamSalary(s) * GD.BAL.daysPerSecond) < 1,
     Math.round(m0 - s.money) + ' / 秒');
 
   ok('可以切换开发档位', E.setMode(s, 'crunch') === true && s.project.mode === 'crunch');
@@ -163,7 +164,7 @@ function playOne(s, plan, choice) {
   s5.project.eventsDone = BAL.eventAts.length;
   var guard = 0;
   while (s5.phase !== 'review' && guard++ < 20000) E.tick(s5, 1 / 30);
-  var expectCost = GD.BAL.license + GD.BAL.salaryPerDay * GD.BAL.daysPerSecond * s5.project.elapsed;
+  var expectCost = GD.BAL.license + E.teamSalary(s5) * GD.BAL.daysPerSecond * s5.project.elapsed;
   ok('总成本 = 授权 + 工资', Math.abs(s5.project.cost - expectCost) < 50,
     Math.round(s5.project.cost) + ' vs ' + Math.round(expectCost));
 })();
@@ -406,6 +407,96 @@ function playOne(s, plan, choice) {
 
   var avg = scores.reduce(function (a, b) { return a + b; }, 0) / scores.length;
   console.log('   5 部得分：' + scores.join(' / ') + '，平均 ' + avg.toFixed(1));
+})();
+
+/* ---------- 团队 ---------- */
+(function () {
+  var s = E.newGame();
+  ok('初始 3 人 3 工位', s.staff.length === 3 && s.seats === 3);
+  ok('初始有 3 个候选人', s.candidates.length === 3);
+  ok('候选人不在队里', s.candidates.every(function (id) {
+    return !s.staff.some(function (x) { return x.id === id; });
+  }));
+
+  var cand = s.candidates[0];
+  s.money = 1e6;
+  ok('工位满时招不了', E.hire(s, cand) === false);
+
+  var cost = E.expandCost(s);
+  ok('扩建报价存在', cost > 0, '$' + cost);
+  ok('扩建成功', E.expandOffice(s) === true && s.seats === 4);
+  ok('扩建扣钱', s.money === 1e6 - cost);
+
+  var before = s.staff.length;
+  var salaryBefore = E.teamSalary(s);
+  ok('扩建后可以招人', E.hire(s, cand) === true);
+  ok('招到人', s.staff.length === before + 1);
+  ok('团队工资变高', E.teamSalary(s) > salaryBefore);
+  ok('招完刷新候选人', s.candidates.indexOf(cand) === -1);
+
+  var m = s.money;
+  ok('换一批要扣钱', E.refreshCandidates(s) === true && s.money === m - GD.BAL.refreshCost);
+})();
+
+/* ---------- 成长 ---------- */
+(function () {
+  var s = E.newGame();
+  playOne(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
+  ok('完成作品后获得经验', s.staff[0].xp > 0, 'xp=' + Math.round(s.staff[0].xp));
+  ok('有经验结算记录', !!s.lastXp && s.lastXp.gain > 0);
+
+  var s2 = E.newGame();
+  var st = s2.staff[0];
+  var before = st.stats.script;
+  st.xp = E.xpNeeded(1) - 1;
+  var up = E.gainXp(s2, 40);
+  ok('经验够了会升级', st.level === 2, 'lv=' + st.level);
+  ok('升级涨主属性', st.stats.script > before, before + ' → ' + st.stats.script);
+  ok('升级有记录', up.ups.length >= 1);
+})();
+
+/* ---------- 团队影响 ---------- */
+(function () {
+  var s = E.newGame();
+  var d3 = E.devDuration(s, 'zhou');
+  var q3 = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
+  var salary3 = E.teamSalary(s);
+
+  s.staff.push(E.makeStaff('song'));
+  s.staff.push(E.makeStaff('man'));
+  s.staff.push(E.makeStaff('kang'));
+
+  var d6 = E.devDuration(s, 'zhou');
+  var q6 = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
+  ok('人多开发更快', d6 < d3, d3 + 's → ' + d6 + 's');
+  ok('人多品质更高', q6 > q3, q3.toFixed(1) + ' → ' + q6.toFixed(1));
+  ok('人多工资更高', E.teamSalary(s) > salary3, salary3 + ' → ' + E.teamSalary(s));
+})();
+
+/* ---------- 存档 ---------- */
+(function () {
+  var s = E.newGame();
+  s.money = 1e6;
+  E.expandOffice(s);
+  E.hire(s, s.candidates[0]);
+  s.staff[0].level = 3;
+  s.staff[0].stats.script = 50;
+  s.day = 123;
+  s.history.push({
+    name: 'x', genre: 'rpg', theme: 'fantasy', total: 28, copies: 1000,
+    revenue: 22000, window: '暑期档', windowMult: 1.25, date: '1983 年 5 月 1 日'
+  });
+
+  var back = E.deserialize(E.serialize(s));
+  ok('存档保留员工数', back.staff.length === 4, 'n=' + back.staff.length);
+  ok('存档保留等级', back.staff[0].level === 3);
+  ok('存档保留属性', back.staff[0].stats.script === 50);
+  ok('存档保留工位', back.seats === 4);
+  ok('存档保留作品集', back.history.length === 1);
+  ok('存档保留日期', back.day === 123);
+  ok('坏存档会被拒绝', (function () {
+    try { E.deserialize('{}'); return false; } catch (e) { return true; }
+  })());
 })();
 
 /* ---------- 平衡探针 ---------- */
