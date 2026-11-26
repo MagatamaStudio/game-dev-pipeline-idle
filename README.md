@@ -19,15 +19,16 @@ node tools/serve.js
 企划（选类型 × 题材 × 主创）
   → 开发 42 秒：按天烧工资，随时切「赶工 / 正常 / 打磨」
   → 评审：四位评论家逐个亮分，总分 40
+  → 发售决策：立即发售，还是压货等档期（暑期 ×1.25 / 年末 ×1.40）
   → 销售：12 周，每周结算一次，可追加一次广告
   → 结算：分数、销量、成本、利润
 ```
 
 一局约 90 秒。分数低会亏钱，分数高能回本 3–5 倍。
 
-| 企划 | 开发 | 评审 | 销售 |
+| 企划 | 开发 | 评审 | 发售 |
 |---|---|---|---|
-| ![企划](docs/m0-planning.png) | ![开发](docs/m0-developing.png) | ![评审](docs/m0-review.png) | ![销售](docs/m0-sales.png) |
+| ![企划](docs/m0-planning.png) | ![开发](docs/m0-developing.png) | ![评审](docs/m0-review.png) | ![发售](docs/m0-release.png) |
 
 ## M0 有什么
 

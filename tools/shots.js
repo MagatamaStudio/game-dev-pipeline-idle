@@ -117,16 +117,21 @@ function connect(wsUrl) {
   await sleep(500);
   await shot('m0-03-review');
 
-  /* 4. 销售 */
-  await evalJs(`(() => { const s = GD.getState(); s.timer = 12; })()`);
+  /* 4. 发售决策 */
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'review') s.timer = 8; })()`);
   await sleep(600);
-  await shot('m0-04-sales');
+  await shot('m0-04-release');
 
-  /* 5. 手机端企划 */
+  /* 5. 销售 */
+  await evalJs(`document.querySelector('[data-act="release-now"]').click()`);
+  await sleep(800);
+  await shot('m0-05-sales');
+
+  /* 6. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await evalJs(`GD.reset()`);
   await sleep(500);
-  await shot('m0-05-mobile');
+  await shot('m0-06-mobile');
 
   cdp.close();
   child.kill();

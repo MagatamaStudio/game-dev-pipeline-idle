@@ -96,6 +96,10 @@ function connect(wsUrl) {
       await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'event') GD.Engine.chooseEvent(s, 0); })()`);
     }
     if (!marks.review && phase === 'review') marks.review = now;
+    if (phase === 'release') {
+      if (!marks.release) marks.release = now;
+      await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'release') GD.Engine.confirmRelease(s, 'now'); })()`);
+    }
     if (!marks.sales && phase === 'sales') marks.sales = now;
     if (phase === 'done') { marks.done = now; return true; }
     return false;
@@ -110,6 +114,7 @@ function connect(wsUrl) {
 
   console.log('事件触发  ' + (marks.event / 1000).toFixed(1) + 's');
   console.log('评审开始  ' + (marks.review / 1000).toFixed(1) + 's');
+  console.log('发售决策  ' + ((marks.release || marks.done) / 1000).toFixed(1) + 's');
   console.log('销售开始  ' + (marks.sales / 1000).toFixed(1) + 's');
   console.log('一局结束  ' + (marks.done / 1000).toFixed(1) + 's');
   console.log('评分 ' + res.score + '/40 · 销量 ' + res.copies + ' · 收入 $' + res.revenue);

@@ -88,11 +88,13 @@
       round: 1,
       money: BAL.startMoney,
       fans: 0,
+      day: 0,
       phase: 'planning',
       plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou' },
       project: null,
       event: null,
       review: null,
+      release: null,
       sales: null,
       lastEvent: null,
       lastResult: null,
@@ -204,6 +206,95 @@
     s.timer = 0;
   };
 
+  /* ---------------- 档期 ---------------- */
+
+  E.dayOfYear = function (day) { return ((day % BAL.daysPerYear) + BAL.daysPerYear) % BAL.daysPerYear; };
+
+  E.dateString = function (day) {
+    day = Math.floor(day);
+    var year = BAL.startYear + Math.floor(day / BAL.daysPerYear);
+    var doy = E.dayOfYear(day);
+    var month = Math.floor(doy / 30) + 1;
+    var date = (doy % 30) + 1;
+    return year + ' 年 ' + month + ' 月 ' + date + ' 日';
+  };
+
+  E.windowAt = function (day) {
+    var doy = E.dayOfYear(day);
+    for (var i = 0; i < GD.WINDOWS.length; i++) {
+      var w = GD.WINDOWS[i];
+      if (doy >= w.start && doy <= w.end) return w;
+    }
+    return null;
+  };
+
+  /* 下一个档期（如果正在档期内，返回再下一个） */
+  E.nextWindow = function (day) {
+    var doy = E.dayOfYear(day);
+    var inside = !!E.windowAt(day);
+    var best = null;
+    for (var i = 0; i < GD.WINDOWS.length; i++) {
+      var w = GD.WINDOWS[i];
+      var d = w.start - doy;
+      if (d < 0) d += BAL.daysPerYear;
+      if (inside && d === 0) d = BAL.daysPerYear;
+      if (!best || d < best.days) best = { win: w, days: d };
+    }
+    return best;
+  };
+
+  E.releaseOptions = function (s) {
+    var nowW = E.windowAt(s.day);
+    var nx = E.nextWindow(s.day);
+    return {
+      day: s.day,
+      date: E.dateString(s.day),
+      now: {
+        mult: nowW ? nowW.mult : 1,
+        name: nowW ? nowW.name : '普通档期',
+        inWindow: !!nowW
+      },
+      hold: {
+        mult: nx.win.mult,
+        name: nx.win.name,
+        days: nx.days,
+        cost: Math.round(nx.days * BAL.storagePerDay)
+      }
+    };
+  };
+
+  E.confirmRelease = function (s, which) {
+    if (s.phase !== 'release') return false;
+    var opts = E.releaseOptions(s);
+    if (which === 'hold') {
+      if (s.money < opts.hold.cost) return false;
+      s.money -= opts.hold.cost;
+      s.day += opts.hold.days;
+      s.release = { mult: opts.hold.mult, name: opts.hold.name, days: opts.hold.days, cost: opts.hold.cost };
+    } else {
+      s.release = { mult: opts.now.mult, name: opts.now.name, days: 0, cost: 0 };
+    }
+    E.startSales(s);
+    return true;
+  };
+
+  /* 开发中预测发售日 */
+  E.projectedReleaseDay = function (s) {
+    if (!s.project) return s.day;
+    var mode = BAL.modes[s.project.mode] || BAL.modes.normal;
+    var remain = (1 - s.project.progress) * s.project.baseDuration * BAL.daysPerSecond / mode.rate;
+    return s.day + remain;
+  };
+
+  /* 销量预估（给发售决策用） */
+  E.estimateSales = function (s, mult) {
+    var total = s.review.total;
+    var fanF = 1 + s.fans / 25000;
+    var scoreF = Math.pow(total / 40, 2.5) * 2.2;
+    var mid = BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * mult;
+    return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
+  };
+
   /* ---------------- 销售 ---------------- */
 
   E.startSales = function (s) {
@@ -211,7 +302,8 @@
     var fanF = 1 + s.fans / 25000;
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var rnd = 0.85 + Math.random() * 0.3;
-    var copies = Math.round(BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * rnd);
+    var windowMult = s.release ? s.release.mult : 1;
+    var copies = Math.round(BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * rnd * windowMult);
 
     s.sales = {
       total: Math.max(300, copies),
@@ -240,6 +332,7 @@
     s.sales.revenue += revenue;
     s.sales.index++;
     s.sales.boost = 1;
+    s.day += 7;
     s.sales.weeks.push({ week: i + 1, copies: copies, revenue: revenue });
 
     return { week: i + 1, copies: copies, revenue: revenue };
@@ -270,6 +363,7 @@
       s.project.elapsed += dt;
       s.project.modeQSum += mode.quality * dt;
       s.project.progress += (dt * mode.rate) / s.project.baseDuration;
+      s.day += dt * BAL.daysPerSecond;
 
       /* 每过一天，工资就烧一天——这是「时间有代价」的来源 */
       var burn = BAL.salaryPerDay * BAL.daysPerSecond * dt;
@@ -309,8 +403,8 @@
         out.push({ type: 'total', total: s.review.total });
       }
       if (s.timer >= totalAt + BAL.reviewTail) {
-        E.startSales(s);
-        out.push({ type: 'salesStart' });
+        s.phase = 'release';
+        out.push({ type: 'releaseReady' });
       }
     }
 
@@ -332,7 +426,9 @@
           copies: s.sales.sold,
           revenue: s.sales.revenue,
           cost: s.project.cost,
-          profit: s.sales.revenue - s.project.cost
+          profit: s.sales.revenue - s.project.cost,
+          window: s.release ? s.release.name : '普通档期',
+          windowMult: s.release ? s.release.mult : 1
         };
         s.history.push(s.lastResult);
         s.phase = 'done';
@@ -356,6 +452,7 @@
     s.phase = 'planning';
     s.project = null;
     s.review = null;
+    s.release = null;
     s.sales = null;
     s.event = null;
     s.timer = 0;

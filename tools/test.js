@@ -31,6 +31,7 @@ function playOne(s, plan, choice) {
       for (var i = 0; i < order.length && !done; i++) done = E.chooseEvent(s, order[i]);
       if (!done) break;
     }
+    if (s.phase === 'release') E.confirmRelease(s, 'now');
   }
   return s.lastResult;
 }
@@ -185,7 +186,54 @@ function playOne(s, plan, choice) {
 
   s.timer = 10;
   E.tick(s, 1 / 30);
-  ok('评审结束进入销售', s.phase === 'sales' && !!s.sales);
+  ok('评审结束进入发售决策', s.phase === 'release');
+})();
+
+/* ---------- 档期 ---------- */
+(function () {
+  ok('暑期档识别', !!E.windowAt(160) && E.windowAt(160).id === 'summer');
+  ok('年末档识别', !!E.windowAt(320) && E.windowAt(320).id === 'winter');
+  ok('窗口外没有档期', E.windowAt(100) === null);
+
+  var nx = E.nextWindow(100);
+  ok('能找到下一个档期', nx.win.id === 'summer' && nx.days === 50, 'days=' + nx.days);
+
+  var s = E.newGame();
+  s.day = 160;
+  s.phase = 'release';
+  s.review = { total: 26, scores: [6, 6, 7, 7], revealed: 4, totalShown: true };
+  s.project = { quality: 35, cost: 130000 };
+
+  var o = E.releaseOptions(s);
+  ok('档期内立即发售有加成', o.now.mult === 1.25 && o.now.inWindow === true);
+  ok('压货目标是下一个档期', o.hold.name === '年末商战' && o.hold.mult === 1.40);
+
+  var day0 = s.day;
+  ok('可以立即发售', E.confirmRelease(s, 'now') === true && s.phase === 'sales');
+  ok('立即发售不改日历', s.day === day0);
+  ok('销售已按档期开算', s.sales.total > 0);
+
+  var s2 = E.newGame();
+  s2.day = 100;
+  s2.phase = 'release';
+  s2.review = { total: 26, scores: [], revealed: 4, totalShown: true };
+  s2.project = { quality: 35, cost: 0 };
+  s2.money = 500000;
+
+  var m0 = s2.money;
+  var o2 = E.releaseOptions(s2);
+  ok('压货要付仓储费', o2.hold.cost === Math.round(o2.hold.days * GD.BAL.storagePerDay));
+  ok('压货成功', E.confirmRelease(s2, 'hold') === true);
+  ok('压货推进了日期', s2.day === 100 + o2.hold.days, 'day=' + s2.day);
+  ok('压货扣了钱', s2.money === m0 - o2.hold.cost);
+  ok('压货后落在档期内', !!E.windowAt(s2.day), 'doy=' + E.dayOfYear(s2.day));
+
+  var s3 = E.newGame();
+  E.startProject(s3, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
+  var pd = E.projectedReleaseDay(s3);
+  ok('能预测发售日', pd > s3.day + 70 && pd < s3.day + 100, 'pd=' + Math.round(pd - s3.day) + ' 天后');
+
+  ok('日期格式正确', /^\d+ 年 \d+ 月 \d+ 日$/.test(E.dateString(0)), E.dateString(0));
 })();
 
 /* ---------- 销售 ---------- */

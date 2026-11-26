@@ -161,6 +161,13 @@ function connect(wsUrl) {
   check('显示阶段与实时品质', modes.phase.length > 0 && modes.q.indexOf('品质') === 0,
     modes.phase + ' / ' + modes.q);
 
+  var forecast = await evalJs(`({
+    date: (document.querySelector('#dev-date') || {}).textContent || '',
+    win: (document.querySelector('#dev-window') || {}).textContent || ''
+  })`);
+  check('开发期显示预计发售日', forecast.date.length > 0 && forecast.win.length > 0,
+    forecast.date + ' / ' + forecast.win);
+
   var m1 = await evalJs(`GD.getState().money`);
   await sleep(1600);
   var m2 = await evalJs(`GD.getState().money`);
@@ -222,11 +229,28 @@ function connect(wsUrl) {
   var totalShown = await evalJs(`({ text: document.querySelector('#rtotal').textContent })`);
   check('总分揭晓', /\d+ \/ 40/.test(totalShown.text), totalShown.text);
 
-  /* ---------- 7. 销售 ---------- */
+  /* ---------- 7. 发售决策 ---------- */
   await evalJs(`(() => { const s = GD.getState(); s.timer = 8; })()`);
+  await sleep(350);
+  var rel = await evalJs(`({
+    phase: GD.getState().phase,
+    cards: document.querySelectorAll('.rel-card').length,
+    now: (document.querySelector('[data-act="release-now"] .rel-win') || {}).textContent || '',
+    hold: (document.querySelector('[data-act="release-hold"] .rel-win') || {}).textContent || ''
+  })`);
+  check('评审后进入发售决策', rel.phase === 'release' && rel.cards === 2, rel.now);
+  check('两个选项都带档期信息', rel.now.indexOf('×') >= 0 && rel.hold.indexOf('×') >= 0,
+    rel.now + ' / ' + rel.hold);
+
+  await evalJs(`document.querySelector('[data-act="release-now"]').click()`);
   await sleep(300);
-  var salesStart = await evalJs(`({ phase: GD.getState().phase, hasWeeks: !!document.querySelector('#weeks') })`);
+  var salesStart = await evalJs(`({
+    phase: GD.getState().phase,
+    hasWeeks: !!document.querySelector('#weeks'),
+    badge: !!document.querySelector('.sales-window')
+  })`);
   check('进入销售期', salesStart.phase === 'sales' && salesStart.hasWeeks === true);
+  check('销售期显示档期', salesStart.badge === true);
 
   await sleep(2300);
   var salesMid = await evalJs(`({
@@ -251,7 +275,7 @@ function connect(wsUrl) {
     hasProfit: !!document.querySelector('.done-row b.good, .done-row b.bad'),
     history: GD.getState().history.length
   })`);
-  check('销售结束进入结算', done.phase === 'done' && done.rows === 5, 'rows=' + done.rows);
+  check('销售结束进入结算', done.phase === 'done' && done.rows === 6, 'rows=' + done.rows);
   check('结算显示利润', done.hasProfit === true);
 
   await evalJs(`document.querySelector('[data-act="next"]').click()`);

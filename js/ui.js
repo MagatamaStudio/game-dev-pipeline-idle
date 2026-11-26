@@ -73,6 +73,7 @@
     el.fans = byId('fans');
     el.round = byId('round');
     el.platform = byId('platform');
+    el.date = byId('date');
     el.desks = byId('desks');
     el.stage = byId('stage');
     el.hint = byId('hint');
@@ -155,9 +156,14 @@
         if (s.phase === 'review') {
           s.review.revealed = 4;
           s.review.totalShown = true;
-          E.startSales(s);
+          s.phase = 'release';
           GD.SFX.click();
         }
+      } else if (act === 'release-now') {
+        if (E.confirmRelease(s, 'now')) { GD.SFX.click(); }
+      } else if (act === 'release-hold') {
+        if (E.confirmRelease(s, 'hold')) { GD.SFX.coin(); }
+        else { GD.SFX.bad(); }
       } else if (act === 'sound') {
         var m = GD.SFX.toggle();
         el.sound.textContent = m ? '🔇' : '🔊';
@@ -176,6 +182,7 @@
     el.fans.textContent = num(s.fans);
     el.round.textContent = String(s.round);
     el.platform.textContent = GD.PLATFORM.code;
+    el.date.textContent = E.dateString(s.day);
 
     if (ui.phase !== s.phase) {
       ui.phase = s.phase;
@@ -193,6 +200,7 @@
     else if (s.phase === 'developing') buildDeveloping();
     else if (s.phase === 'event') buildEvent();
     else if (s.phase === 'review') buildReview();
+    else if (s.phase === 'release') buildRelease();
     else if (s.phase === 'sales') buildSales();
     else if (s.phase === 'done') buildDone();
   }
@@ -208,6 +216,22 @@
         byId('dev-pct').textContent = Math.round(s.project.progress * 100) + '%';
         byId('dev-phase').textContent = E.devPhase(s);
         byId('dev-q').textContent = '品质 ' + E.liveQuality(s).toFixed(1);
+
+        var pd = E.projectedReleaseDay(s);
+        var w = E.windowAt(pd);
+        var nx = E.nextWindow(pd);
+        var dateEl = byId('dev-date');
+        var winEl = byId('dev-window');
+        if (dateEl && winEl) {
+          dateEl.textContent = E.dateString(pd).replace(/^\d+ 年 /, '');
+          if (w) {
+            winEl.textContent = w.name + ' ×' + w.mult.toFixed(2);
+            winEl.className = 'tag good';
+          } else {
+            winEl.textContent = '下个档期：' + nx.win.name + '（还差 ' + Math.round(nx.days) + ' 天）';
+            winEl.className = 'tag';
+          }
+        }
 
         var btns = document.querySelectorAll('#modes [data-mode]');
         for (var i = 0; i < btns.length; i++) {
@@ -296,6 +320,10 @@
       '<span id="dev-phase">原型</span>' +
       '<span id="dev-pct">0%</span>' +
       '<span id="dev-q">品质 —</span>' +
+      '</div>' +
+      '<div class="dev-forecast">' +
+      '<span>预计发售</span><b id="dev-date">—</b>' +
+      '<span class="tag" id="dev-window">—</span>' +
       '</div>' +
       '<div class="modes" id="modes">' +
       '<button data-mode="crunch"><b>赶工</b><small>+45% 速度 · −6% 品质</small></button>' +
@@ -389,12 +417,46 @@
     }
   }
 
+  /* ---------------- 发售决策 ---------------- */
+
+  function buildRelease() {
+    var o = E.releaseOptions(s);
+    var nowEst = E.estimateSales(s, o.now.mult);
+    var holdEst = E.estimateSales(s, o.hold.mult);
+    var canHold = s.money >= o.hold.cost && o.hold.days > 0;
+
+    el.stage.innerHTML =
+      '<div class="release">' +
+      '<div class="rel-head">' +
+      '<div class="rel-title">评审结束 · 决定发售日</div>' +
+      '<div class="rel-date">今天是 ' + esc(o.date) + '</div>' +
+      '</div>' +
+      '<div class="rel-options">' +
+      '<button class="rel-card" data-act="release-now">' +
+      '<div class="rel-name">立即发售</div>' +
+      '<div class="rel-win' + (o.now.inWindow ? ' good' : '') + '">' + esc(o.now.name) + ' · ×' + o.now.mult.toFixed(2) + '</div>' +
+      '<div class="rel-est">预计 ' + num(nowEst.low) + ' – ' + num(nowEst.high) + ' 份</div>' +
+      '</button>' +
+      '<button class="rel-card" data-act="release-hold"' + (canHold ? '' : ' disabled') + '>' +
+      '<div class="rel-name">压货到 ' + esc(o.hold.name) + '</div>' +
+      '<div class="rel-win good">×' + o.hold.mult.toFixed(2) + ' · 等 ' + Math.round(o.hold.days) + ' 天</div>' +
+      '<div class="rel-cost">仓储成本 ' + money(o.hold.cost) + '</div>' +
+      '<div class="rel-est">预计 ' + num(holdEst.low) + ' – ' + num(holdEst.high) + ' 份</div>' +
+      '</button>' +
+      '</div>' +
+      '<div class="rel-hint">压货要付仓储费，还会拖慢下一部；但如果差一档，它可能值回票价。</div>' +
+      '</div>';
+    el.hint.textContent = '档期对销量影响很大：暑期 ×1.25，年末商战 ×1.40。';
+  }
+
   /* ---------------- 销售 ---------------- */
 
   function buildSales() {
     ui.weekCount = 0;
     el.stage.innerHTML =
       '<div class="sales">' +
+      '<div class="sales-window">' + esc(s.release ? s.release.name : '普通档期') +
+      ' · ×' + (s.release ? s.release.mult : 1).toFixed(2) + '</div>' +
       '<div class="sales-head">' +
       '<div class="sales-col"><div class="sales-label">累计销量</div><div class="sales-big" id="copies">0</div></div>' +
       '<div class="sales-col"><div class="sales-label">累计收入</div><div class="sales-big money" id="revenue">$0</div></div>' +
@@ -453,6 +515,7 @@
       '<div class="done-row"><span>成本</span><b>' + money(r.cost || 0) + '</b></div>' +
       '<div class="done-row"><span>利润</span><b class="' + ((r.profit || 0) >= 0 ? 'good' : 'bad') + '">' +
         ((r.profit || 0) >= 0 ? '+' : '−') + money(Math.abs(r.profit || 0)) + '</b></div>' +
+      '<div class="done-row"><span>档期</span><b>' + esc(r.window || '普通档期') + ' ×' + (r.windowMult || 1).toFixed(2) + '</b></div>' +
       '<div class="done-row"><span>评价</span><b class="' + cls + '">' + verdict + '</b></div>' +
       '<button class="primary big" data-act="next">再来一部</button>' +
       '</div>';
