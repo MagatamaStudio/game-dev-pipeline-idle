@@ -81,6 +81,7 @@
     el.event = byId('event');
     el.team = byId('team');
     el.archive = byId('archive');
+    el.offline = byId('offline');
     el.sound = byId('sound');
 
     buildOffice();
@@ -130,6 +131,7 @@
         GD.SFX.click();
         el.team.hidden = true;
         el.archive.hidden = true;
+        el.offline.hidden = true;
         return;
       }
       if (panelAct === 'expand') {
@@ -508,6 +510,37 @@
     html += '</div></div>';
     el.archive.innerHTML = html;
   }
+
+  /* ---------------- 离线报告 ---------------- */
+
+  function fmtAway(sec) {
+    sec = Math.round(sec);
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    if (h > 0) return h + ' 小时 ' + m + ' 分';
+    if (m > 0) return m + ' 分钟';
+    return sec + ' 秒';
+  }
+
+  UI.showOffline = function (rep) {
+    var sign = rep.total >= 0 ? '+' : '−';
+    var html = '<div class="panel-card" style="width:min(460px,92vw)">' +
+      '<div class="panel-head"><div><h3>你不在的时候</h3>' +
+      '<div class="panel-sub">工作室自己运转了一会儿</div></div></div>' +
+      '<div class="offline-rows">' +
+      '<div class="offline-row"><span>离开时长</span><b>' + fmtAway(rep.seconds) + '</b></div>' +
+      '<div class="offline-row"><span>日历前进</span><b>' + rep.days + ' 天</b></div>' +
+      (rep.copies > 0
+        ? '<div class="offline-row"><span>在售销量</span><b>' + num(rep.copies) + ' 份 · ' + money(rep.revenue) + '</b></div>'
+        : '') +
+      '<div class="offline-row"><span>长尾收入</span><b>' + money(rep.tail) + '</b></div>' +
+      '<div class="offline-row total"><span>合计</span><b class="' + (rep.total >= 0 ? 'good' : 'bad') + '">' + sign + money(Math.abs(rep.total)) + '</b></div>' +
+      '</div>' +
+      '<button class="primary big" style="width:100%;margin-top:16px" data-act="close-panel">继续经营</button>' +
+      '</div>';
+    el.offline.innerHTML = html;
+    el.offline.hidden = false;
+  };
 
   /* ---------------- 事件 ---------------- */
 

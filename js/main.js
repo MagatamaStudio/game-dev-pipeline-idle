@@ -40,8 +40,16 @@
 
   function boot() {
     state = load() || E.newGame();
+
+    var report = null;
+    if (state.savedAt) {
+      var away = (Date.now() - state.savedAt) / 1000;
+      if (away > GD.BAL.offlineMinSeconds) report = E.offline(state, away);
+    }
+
     lastPhase = state.phase;
     UI.mount(state, { onSave: save });
+    if (report && (report.days > 0 || Math.abs(report.total) > 1)) UI.showOffline(report);
     requestAnimationFrame(frame);
   }
 

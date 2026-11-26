@@ -201,6 +201,8 @@
       timer: 0,
       totalEarned: 0,
       rescued: 0,
+      tailMonth: 0,
+      tailTotal: 0,
       staff: GD.FOUNDERS.map(function (id) { return E.makeStaff(id); }),
       seats: 3,
       candidates: []
@@ -596,6 +598,7 @@
       }
     }
 
+    E.settleMonths(s);
     return out;
   };
 
@@ -630,6 +633,69 @@
     s.money += BAL.rescue;
     s.rescued++;
     return true;
+  };
+
+  /* ---------------- 长尾 ---------------- */
+
+  E.monthIncome = function (s) {
+    var sum = 0;
+    for (var i = 0; i < s.history.length; i++) sum += (s.history[i].revenue || 0) * BAL.tailPerMonth;
+    return sum;
+  };
+
+  E.settleMonths = function (s) {
+    var month = Math.floor(s.day / 30);
+    var last = s.tailMonth || 0;
+    if (month <= last) return 0;
+    var per = E.monthIncome(s);
+    s.tailMonth = month;
+    var gained = per * (month - last);
+    s.money += gained;
+    s.totalEarned += gained;
+    s.tailTotal = (s.tailTotal || 0) + gained;
+    return gained;
+  };
+
+  /* ---------------- 离线 ---------------- */
+
+  E.offline = function (s, realSeconds) {
+    var elapsed = Math.max(0, Math.min(realSeconds, BAL.offlineCapHours * 3600));
+    var budgetDays = Math.min((elapsed / 3600) * BAL.offlineDaysPerHour, BAL.offlineMaxDays);
+
+    var startDay = s.day;
+    var startMoney = s.money;
+    var tailStart = s.tailTotal || 0;
+    var copies = 0, revenue = 0, weeks = 0;
+
+    /* 在售作品继续卖完——这一段没有任何决策，可以全自动 */
+    if (s.phase === 'sales' && s.sales) {
+      var guard = 0;
+      while (s.phase === 'sales' && guard++ < 20000) {
+        var soldBefore = s.sales.sold;
+        var revBefore = s.sales.revenue;
+        E.tick(s, 0.5);
+        if (s.sales) {
+          copies += s.sales.sold - soldBefore;
+          revenue += s.sales.revenue - revBefore;
+          weeks = s.sales.index;
+        }
+      }
+    }
+
+    /* 日历推进 */
+    var target = startDay + budgetDays;
+    if (s.day < target) s.day = target;
+    E.settleMonths(s);
+
+    return {
+      seconds: elapsed,
+      days: Math.round(s.day - startDay),
+      copies: copies,
+      revenue: revenue,
+      weeks: weeks,
+      tail: (s.tailTotal || 0) - tailStart,
+      total: s.money - startMoney
+    };
   };
 
   /* ---------------- 存档 ---------------- */

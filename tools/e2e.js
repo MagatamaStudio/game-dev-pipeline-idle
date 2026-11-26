@@ -340,6 +340,22 @@ function connect(wsUrl) {
     afterReload.round === beforeReload.round && afterReload.history === beforeReload.history,
     JSON.stringify(afterReload) + ' vs ' + JSON.stringify(beforeReload));
 
+  /* ---------- 8.6 离线结算 ---------- */
+  await evalJs(`(() => {
+    const rep = GD.Engine.offline(GD.getState(), 3600);
+    GD.UI.showOffline(rep);
+  })()`);
+  await sleep(400);
+  var off = await evalJs(`({
+    open: !document.querySelector('#offline').hidden,
+    text: (document.querySelector('#offline') || {}).textContent || ''
+  })`);
+  check('离线后弹出结算', off.open === true && off.text.indexOf('你不在的时候') >= 0,
+    off.text.slice(0, 30));
+  await evalJs(`document.querySelector('#offline [data-act="close-panel"]').click()`);
+  await sleep(200);
+  check('可以关闭离线报告', await evalJs(`document.querySelector('#offline').hidden`) === true);
+
   /* ---------- 9. 音效开关 ---------- */
   await evalJs(`document.querySelector('#sound').click()`);
   await sleep(100);

@@ -150,6 +150,13 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(200);
 
+  /* 5.8 离线报告 */
+  await evalJs(`GD.UI.showOffline({ seconds: 6 * 3600, days: 18, copies: 0, revenue: 0, tail: 5400, total: 5400 })`);
+  await sleep(300);
+  await shot('m0-10-offline');
+  await evalJs(`document.querySelector('#offline [data-act="close-panel"]').click()`);
+  await sleep(200);
+
   /* 6. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await evalJs(`GD.reset()`);

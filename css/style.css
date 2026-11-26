@@ -813,3 +813,20 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .staff-salary { font-size: 11px; }
   .arch-row { grid-template-columns: 1fr auto; grid-template-areas: "name score" "meta sales"; }
 }
+
+/* ============ 离线报告 ============ */
+
+.offline-rows { display: flex; flex-direction: column; }
+.offline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line2);
+  font-size: 12.5px;
+}
+.offline-row span { color: var(--dim2); }
+.offline-row b { font-family: var(--mono); font-weight: 600; }
+.offline-row b.good { color: var(--ok); }
+.offline-row b.bad { color: var(--bad); }
+.offline-row.total { border-bottom: none; padding-top: 14px; font-size: 14px; }

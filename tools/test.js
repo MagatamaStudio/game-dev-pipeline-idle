@@ -499,6 +499,32 @@ function playOne(s, plan, choice) {
   })());
 })();
 
+/* ---------- 长尾与离线 ---------- */
+(function () {
+  var s = E.newGame();
+  s.history.push({ revenue: 300000 });
+  ok('长尾按月计算', Math.abs(E.monthIncome(s) - 1800) < 1, E.monthIncome(s));
+
+  s.day = 30;
+  var before = s.money;
+  var gained = E.settleMonths(s);
+  ok('跨月结算长尾', Math.abs(gained - 1800) < 1 && Math.abs(s.money - before - 1800) < 1);
+  ok('同月不重复结算', E.settleMonths(s) === 0);
+
+  var rep = E.offline(E.newGame(), 8 * 3600);
+  ok('离线推进日历', rep.days === 24, 'days=' + rep.days);
+  ok('离线最多结算 8 小时', E.offline(E.newGame(), 100 * 3600).days === 24,
+    E.offline(E.newGame(), 100 * 3600).days + ' 天');
+
+  var s3 = E.newGame();
+  s3.review = { total: 26, scores: [], revealed: 4, totalShown: true };
+  s3.project = { quality: 30, salesPct: 0 };
+  E.startSales(s3);
+  var rep3 = E.offline(s3, 600);
+  ok('离线会把在售作品卖完', s3.phase === 'done' && rep3.copies > 0, 'copies=' + rep3.copies);
+  ok('离线收益计入资金', rep3.total > 0, Math.round(rep3.total) + '');
+})();
+
 /* ---------- 平衡探针 ---------- */
 (function () {
   var runs = 24;

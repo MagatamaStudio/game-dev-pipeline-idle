@@ -343,6 +343,13 @@
     minDevSeconds: 18,
     xpBase: 15,               // 每部作品经验 = 15 + 评分
 
+    /* 长尾与离线 */
+    tailPerMonth: 0.006,      // 每月长尾 = 作品总收入 × 0.6%
+    offlineCapHours: 8,
+    offlineDaysPerHour: 3,    // 每离线 1 小时，日历走 3 天
+    offlineMaxDays: 120,      // 日历最多跳 120 天
+    offlineMinSeconds: 60,
+
     devSeconds: 54,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,
     eventAts: [0.30, 0.72],   // 每部作品两次事件
