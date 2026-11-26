@@ -157,6 +157,11 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('#offline [data-act="close-panel"]').click()`);
   await sleep(200);
 
+  /* 5.9 结局 */
+  await evalJs(`(() => { const s = GD.getState(); s.day = (2002 - 1972) * 360; s.phase = 'planning'; s.history = s.history || []; })()`);
+  await sleep(700);
+  await shot('m0-11-ending');
+
   /* 6. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await evalJs(`GD.reset()`);

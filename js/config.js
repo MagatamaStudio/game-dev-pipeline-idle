@@ -5,16 +5,33 @@
 (function (GD) {
   'use strict';
 
-  /* ---------------- 平台 ---------------- */
-  GD.PLATFORM = {
-    code: 'L-3',
-    alias: '客厅盒',
-    year: 1983,
-    cap: 58,          // 品质上限
-    price: 22,        // 单价
-    license: 15000,   // 授权费
-    install: 1.6      // 销量系数
-  };
+  /* ---------------- 平台 ----------------
+   * 11 个主线平台，1972–2002。安装量 = install × 人气系数（按上市年数递减）。
+   * cap 是品质上限，price 是单价，license 是每部作品的授权费。 */
+  GD.PLATFORMS = [
+    { id: 'arc72', code: 'ARC-72', alias: '', year: 1972, retire: 1981, install: 1.75, license: 6000, price: 22, cap: 45, fav: 'action' },
+    { id: 'l1', code: 'L-1', alias: '', year: 1978, retire: 1987, install: 1.9, license: 9000, price: 18, cap: 50, fav: null },
+    { id: 'l3', code: 'L-3', alias: '客厅盒', year: 1983, retire: 1992, install: 4.0, license: 15000, price: 22, cap: 58, fav: 'action' },
+    { id: 'bm', code: 'B-M', alias: '', year: 1987, retire: 1995, install: 2.6, license: 11000, price: 14, cap: 48, fav: 'puzzle' },
+    { id: 'i16', code: 'I-16', alias: '十六色', year: 1989, retire: 1998, install: 5.0, license: 26000, price: 30, cap: 66, fav: 'rpg' },
+    { id: 'bc', code: 'B-C', alias: '', year: 1992, retire: 2001, install: 3.6, license: 18000, price: 20, cap: 56, fav: 'sim' },
+    { id: 'icd', code: 'I-CD', alias: '', year: 1994, retire: 2003, install: 4.3, license: 40000, price: 40, cap: 74, fav: 'adv' },
+    { id: 'l64', code: 'L-64', alias: '', year: 1996, retire: 2005, install: 3.1, license: 45000, price: 46, cap: 78, fav: 'action' },
+    { id: 'ba', code: 'B-A', alias: '', year: 1998, retire: 2007, install: 4.8, license: 30000, price: 26, cap: 62, fav: 'rpg' },
+    { id: 'i2', code: 'I-2', alias: '黑盒子', year: 2000, retire: 2009, install: 6.0, license: 60000, price: 48, cap: 86, fav: 'action' },
+    { id: 'lg', code: 'L-G', alias: '', year: 2002, retire: 2011, install: 3.2, license: 35000, price: 34, cap: 70, fav: 'sim' }
+  ];
+
+  /* 人气系数：按「上市年数」查表，取第一个命中的档 */
+  GD.POP = [
+    { under: 1, mult: 0.55 },   // 首发年，装机还没铺开
+    { under: 2, mult: 0.95 },
+    { under: 4, mult: 1.15 },   // 黄金期
+    { under: 6, mult: 0.95 },
+    { under: 8, mult: 0.6 },
+    { under: 10, mult: 0.3 },
+    { under: 99, mult: 0.12 }   // 退市边缘
+  ];
 
   /* ---------------- 类型 ---------------- */
   GD.GENRES = [
@@ -326,7 +343,8 @@
   /* ---------------- 数值 ---------- */
   GD.BAL = {
     startMoney: 500000,
-    startYear: 1983,
+    startYear: 1972,
+    endYear: 2002,          // 主线结局年
     daysPerYear: 360,
 
     /* 开发成本 = 平台授权 + 每日工资 × 开发天数

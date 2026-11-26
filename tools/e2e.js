@@ -111,7 +111,11 @@ function connect(wsUrl) {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       desks: document.querySelectorAll('.desk').length,
       avatars: document.querySelectorAll('.avatar svg').length,
-      chips: document.querySelectorAll('.chip').length,
+      genres: document.querySelectorAll('[data-plan^="genre:"]').length,
+      themes: document.querySelectorAll('[data-plan^="theme:"]').length,
+      leaders: document.querySelectorAll('[data-plan^="leader:"]').length,
+      platforms: document.querySelectorAll('[data-plan^="platform:"]').length,
+      platformCode: (document.querySelector('#platform') || {}).textContent || '',
       previews: document.querySelectorAll('.pv').length,
       phase: GD.getState().phase,
       money: GD.getState().money,
@@ -121,8 +125,12 @@ function connect(wsUrl) {
 
   check('无横向溢出', first.overflow <= 0, 'overflow=' + first.overflow);
   check('办公室有 3 个人', first.desks === 3 && first.avatars === 3);
-  check('企划有 13 个选项（5+5+3）', first.chips === 13, 'chips=' + first.chips);
-  check('预告面板 6 项', first.previews === 6, 'pv=' + first.previews);
+  check('企划有 5 类型 / 5 题材 / 3 主创',
+    first.genres === 5 && first.themes === 5 && first.leaders === 3,
+    first.genres + '/' + first.themes + '/' + first.leaders);
+  check('1972 年只有街机一个平台',
+    first.platforms === 1 && first.platformCode === 'ARC-72', first.platformCode);
+  check('预告面板 7 项', first.previews === 7, 'pv=' + first.previews);
   check('初始进入企划阶段', first.phase === 'planning');
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
     'stage=' + first.stage.h + ' office=' + first.office.h);
@@ -155,7 +163,7 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);
   var afterPick = await evalJs(`({ theme: GD.getState().plan.theme, on: document.querySelectorAll('.chip.on').length })`);
-  check('点击题材会改变企划', afterPick.theme === 'modern' && afterPick.on === 3,
+  check('点击题材会改变企划', afterPick.theme === 'modern' && afterPick.on === 4,
     'theme=' + afterPick.theme + ' on=' + afterPick.on);
 
   /* ---------- 3. 立项 ---------- */
@@ -170,7 +178,7 @@ function connect(wsUrl) {
     active: document.querySelectorAll('.desk.active').length
   })`);
   check('立项后进入开发', started.phase === 'developing' && started.bar === true);
-  check('立项扣了平台授权费', moneyBefore - started.money >= 15000, '$' + (moneyBefore - started.money));
+  check('立项扣了平台授权费', moneyBefore - started.money >= 6000, 'paid ' + (moneyBefore - started.money));
   check('主创被高亮', started.active === 1, 'active=' + started.active);
   check('进度开始推进', started.progress > 0, 'p=' + started.progress.toFixed(3));
 
@@ -318,8 +326,8 @@ function connect(wsUrl) {
 
   await evalJs(`document.querySelector('[data-act="next"]').click()`);
   await sleep(300);
-  var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, chips: document.querySelectorAll('.chip').length })`);
-  check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.chips === 13);
+  var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, genres: document.querySelectorAll('[data-plan^="genre:"]').length })`);
+  check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.genres === 5);
 
   /* ---------- 8.5 作品集与存档 ---------- */
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);

@@ -75,7 +75,7 @@ function playOne(s, plan, choice) {
   var before = s.money;
   var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
   ok('可以立项', E.startProject(s, plan) === true);
-  ok('立项扣平台授权费', near(s.money, before - BAL.license));
+  ok('立项扣平台授权费', near(s.money, before - E.platform(s).license));
   ok('进入开发阶段', s.phase === 'developing');
   ok('开发时长按主创速度算', near(s.project.baseDuration, E.devDuration(s, 'zhou')));
 
@@ -164,7 +164,7 @@ function playOne(s, plan, choice) {
   s5.project.eventsDone = BAL.eventAts.length;
   var guard = 0;
   while (s5.phase !== 'review' && guard++ < 20000) E.tick(s5, 1 / 30);
-  var expectCost = GD.BAL.license + E.teamSalary(s5) * GD.BAL.daysPerSecond * s5.project.elapsed;
+  var expectCost = E.platform(s5).license + E.teamSalary(s5) * GD.BAL.daysPerSecond * s5.project.elapsed;
   ok('总成本 = 授权 + 工资', Math.abs(s5.project.cost - expectCost) < 50,
     Math.round(s5.project.cost) + ' vs ' + Math.round(expectCost));
 })();
@@ -333,7 +333,7 @@ function playOne(s, plan, choice) {
   ok('12 周全部结算', s.sales.index === BAL.salesWeeks);
   ok('周销量累计接近总量', Math.abs(sum - s.sales.total) < s.sales.total * 0.08,
     sum + ' vs ' + s.sales.total);
-  ok('收入 = 销量 × 单价', near(s.sales.revenue, s.sales.sold * GD.PLATFORM.price, 1));
+  ok('收入 = 销量 × 单价', near(s.sales.revenue, s.sales.sold * E.platform(s).price, 1));
   ok('售完不再结算', E.settleWeek(s) === null);
 })();
 
@@ -366,7 +366,7 @@ function playOne(s, plan, choice) {
   ok('粉丝增长', s.fans > 0, 'fans=' + Math.round(s.fans));
   ok('记入历史', s.history.length === 1);
 
-  var expected = before - r.cost + r.revenue;
+  var expected = before - r.cost + r.revenue + (s.tailTotal || 0);
   ok('资金账目对得上', Math.abs(s.money - expected) < 1,
     'money=' + Math.round(s.money) + ' expected=' + Math.round(expected));
 
@@ -525,6 +525,68 @@ function playOne(s, plan, choice) {
   ok('离线收益计入资金', rep3.total > 0, Math.round(rep3.total) + '');
 })();
 
+/* ---------- 时间线与平台 ---------- */
+(function () {
+  var s = E.newGame();
+  ok('1972 年只有街机', E.availablePlatforms(s).length === 1 && E.availablePlatforms(s)[0].id === 'arc72');
+  ok('默认平台是 ARC-72', E.platform(s).id === 'arc72');
+  ok('年份从 1972 开始', E.year(s) === 1972);
+
+  s.day = 11 * 360;
+  var avail = E.availablePlatforms(s);
+  ok('1983 年解锁新平台', avail.length >= 3, avail.map(function (p) { return p.code; }).join(','));
+  ok('能看到 L-3', avail.some(function (p) { return p.id === 'l3'; }));
+
+  s.plan.platform = 'l3';
+  ok('可以选 L-3', E.platform(s).id === 'l3');
+
+  var l3 = E.platformById('l3');
+  var popNew = E.popMult(l3, 1983);
+  var popPeak = E.popMult(l3, 1986);
+  var popOld = E.popMult(l3, 1992);
+  ok('平台有生命周期', popNew < popPeak && popOld < popPeak,
+    popNew + ' / ' + popPeak + ' / ' + popOld);
+})();
+
+/* ---------- 年度奖项 ---------- */
+(function () {
+  var s = E.newGame();
+  s.yearBest = 37;
+  s.day = 360;
+  var got = E.settleAwards(s);
+  ok('36 分以上拿年度游戏', got.length === 1 && got[0].title === '年度游戏', JSON.stringify(got));
+  ok('奖项进档案', s.awards.length === 1);
+  ok('同一年不重复颁奖', E.settleAwards(s).length === 0);
+
+  var s2 = E.newGame();
+  s2.yearBest = 33;
+  s2.day = 360;
+  ok('33 分以上给提名', E.settleAwards(s2)[0].title === '年度提名');
+
+  var s3 = E.newGame();
+  s3.yearBest = 20;
+  s3.day = 360;
+  ok('不够分没有奖', E.settleAwards(s3).length === 0);
+})();
+
+/* ---------- 结局 ---------- */
+(function () {
+  var s = E.newGame();
+  s.day = (GD.BAL.endYear - GD.BAL.startYear) * 360;
+  s.phase = 'planning';
+  E.tick(s, 1 / 30);
+  ok('主线年份到点进入结局', s.phase === 'ending');
+
+  var e = E.ending(s);
+  ok('结局有标题与文案', typeof e.title === 'string' && e.title.length > 0, e.title + ' · ' + e.tone);
+
+  ok('可以继续经营', E.continueEndless(s) === true && s.phase === 'planning' && s.ended === true);
+
+  var s2 = E.newGame();
+  s2.awards = [{ year: 1980, title: '年度游戏' }, { year: 1981, title: '年度游戏' }, { year: 1982, title: '年度游戏' }];
+  ok('三座奖杯是时代定义者', E.ending(s2).title === '时代定义者', E.ending(s2).title);
+})();
+
 /* ---------- 平衡探针 ---------- */
 (function () {
   var runs = 24;
@@ -542,8 +604,8 @@ function playOne(s, plan, choice) {
   var medMargin = margins[Math.floor(runs / 2)];
   console.log('   24 局 RPG×幻想：评分中位数 ' + median + '/40，回报中位数 ' + medMargin.toFixed(2) + ' 倍成本');
 
-  ok('评分中位数落在 20–32', median >= 20 && median <= 32, 'median=' + median);
-  ok('净回报中位数在 0.8–3.5 倍之间', medMargin >= 0.8 && medMargin <= 3.5, 'margin=' + medMargin.toFixed(2));
+  ok('评分中位数在合理区间（1972 年 cap 45）', median >= 18 && median <= 38, 'median=' + median);
+  ok('净回报中位数在 0.5–3.5 倍之间', medMargin >= 0.5 && medMargin <= 3.5, 'margin=' + medMargin.toFixed(2));
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

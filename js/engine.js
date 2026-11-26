@@ -27,6 +27,47 @@
     return GD.ROSTER[0];
   };
 
+  E.platformById = function (id) {
+    for (var i = 0; i < GD.PLATFORMS.length; i++) if (GD.PLATFORMS[i].id === id) return GD.PLATFORMS[i];
+    return GD.PLATFORMS[0];
+  };
+
+  E.year = function (s) {
+    return BAL.startYear + Math.floor(s.day / BAL.daysPerYear);
+  };
+
+  /* 当前选中的平台（没选就用最新上市的可用平台） */
+  E.platform = function (s) {
+    var avail = E.availablePlatforms(s);
+    var want = s.plan && s.plan.platform;
+    for (var i = 0; i < avail.length; i++) if (avail[i].id === want) return avail[i];
+    return avail[avail.length - 1];
+  };
+
+  E.availablePlatforms = function (s) {
+    var year = E.year(s);
+    var out = [];
+    for (var i = 0; i < GD.PLATFORMS.length; i++) {
+      if (GD.PLATFORMS[i].year <= year) out.push(GD.PLATFORMS[i]);
+    }
+    return out;
+  };
+
+  E.platformAge = function (p, year) { return year - p.year; };
+
+  E.popMult = function (p, year) {
+    var age = Math.max(0, year - p.year);
+    for (var i = 0; i < GD.POP.length; i++) {
+      if (age < GD.POP[i].under) return GD.POP[i].mult;
+    }
+    return 0.12;
+  };
+
+  /* 有效装机量：基础装机 × 人气系数 */
+  E.effInstall = function (s, p) {
+    return p.install * E.popMult(p, E.year(s));
+  };
+
   E.genre = function (id) {
     for (var i = 0; i < GD.GENRES.length; i++) if (GD.GENRES[i].id === id) return GD.GENRES[i];
     return GD.GENRES[0];
@@ -76,7 +117,8 @@
   /* 企划面板的预估 */
   E.preview = function (s, plan) {
     var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader);
-    var cap = GD.PLATFORM.cap;
+    var p = E.platform(s);
+    var cap = p.cap;
     var duration = E.devDuration(s, plan.leader);
     var days = duration * BAL.daysPerSecond;
     return {
@@ -84,7 +126,9 @@
       quality: q,
       duration: duration,
       days: days,
-      cost: BAL.license + E.teamSalary(s) * days,
+      cost: p.license + E.teamSalary(s) * days,
+      platform: p.id,
+      license: p.license,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
       scoreHigh: Math.min(40, Math.round(40 * q * 1.10 / cap))
     };
@@ -186,7 +230,7 @@
       fans: 0,
       day: 0,
       phase: 'planning',
-      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou' },
+      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72' },
       project: null,
       event: null,
       review: null,
@@ -203,6 +247,10 @@
       rescued: 0,
       tailMonth: 0,
       tailTotal: 0,
+      awards: [],
+      yearBest: 0,
+      awardYear: BAL.startYear,
+      ended: false,
       staff: GD.FOUNDERS.map(function (id) { return E.makeStaff(id); }),
       seats: 3,
       candidates: []
@@ -215,10 +263,11 @@
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
-    if (s.money < BAL.license) return false;
+    var plat = E.platformById(plan.platform || E.platform(s).id);
+    if (s.money < plat.license) return false;
 
-    s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader };
-    s.money -= BAL.license;
+    s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id };
+    s.money -= plat.license;
     s.project = {
       baseDuration: E.devDuration(s, plan.leader),
       elapsed: 0,
@@ -230,7 +279,7 @@
       eventsDone: 0,
       microDone: 0,
       quality: 0,
-      cost: BAL.license,
+      cost: plat.license,
       log: [],
       logAt: 0
     };
@@ -322,7 +371,7 @@
 
   function computeReview(s) {
     var q = s.project.quality;
-    var cap = GD.PLATFORM.cap;
+    var cap = E.platform(s).cap;
     var scores = [];
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
@@ -430,7 +479,7 @@
     var fanF = 1 + s.fans / 25000;
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
-    var mid = BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * mult * salesMult;
+    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult;
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
 
@@ -443,7 +492,7 @@
     var rnd = 0.85 + Math.random() * 0.3;
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
-    var copies = Math.round(BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * rnd * windowMult * salesMult);
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult);
 
     s.sales = {
       total: Math.max(300, copies),
@@ -463,7 +512,7 @@
     var i = s.sales.index;
     var frac = GD.SALES_CURVE[i] || 0.011;
     var copies = Math.round(s.sales.total * frac * s.sales.boost);
-    var revenue = copies * GD.PLATFORM.price;
+    var revenue = copies * E.platform(s).price;
 
     s.money += revenue;
     s.totalEarned += revenue;
@@ -591,6 +640,7 @@
           windowMult: s.release ? s.release.mult : 1
         };
         s.history.push(s.lastResult);
+        if (s.review.total > (s.yearBest || 0)) s.yearBest = s.review.total;
         s.lastXp = E.gainXp(s, s.review.total);
         E.rollCandidates(s);
         s.phase = 'done';
@@ -599,6 +649,12 @@
     }
 
     E.settleMonths(s);
+    var got = E.settleAwards(s);
+    for (var ai = 0; ai < got.length; ai++) out.push({ type: 'award', award: got[ai] });
+    if (s.phase === 'planning' && !s.ended && E.year(s) >= BAL.endYear) {
+      s.phase = 'ending';
+      out.push({ type: 'ending' });
+    }
     return out;
   };
 
@@ -624,8 +680,15 @@
     return true;
   };
 
+  E.continueEndless = function (s) {
+    if (s.phase !== 'ending') return false;
+    s.ended = true;
+    s.phase = 'planning';
+    return true;
+  };
+
   E.needRescue = function (s) {
-    return s.phase === 'planning' && s.money < BAL.license;
+    return s.phase === 'planning' && s.money < 20000;
   };
 
   E.rescue = function (s) {
@@ -633,6 +696,55 @@
     s.money += BAL.rescue;
     s.rescued++;
     return true;
+  };
+
+  /* ---------------- 年度奖项 ---------------- */
+
+  E.settleAwards = function (s) {
+    var yr = E.year(s);
+    var last = s.awardYear || BAL.startYear;
+    var got = [];
+    var guard = 0;
+    while (last < yr && guard++ < 50) {
+      var best = s.yearBest || 0;
+      if (best >= 36) {
+        got.push({ year: last, title: '年度游戏', score: best, money: 60000 + (last - BAL.startYear) * 30000, fans: 3000 + (last - BAL.startYear) * 600 });
+      } else if (best >= 33) {
+        got.push({ year: last, title: '年度提名', score: best, money: 20000 + (last - BAL.startYear) * 10000, fans: 800 + (last - BAL.startYear) * 200 });
+      }
+      s.yearBest = 0;
+      last++;
+    }
+    s.awardYear = yr;
+    got.forEach(function (a) {
+      s.money += a.money;
+      s.fans += a.fans;
+      s.awards.push(a);
+    });
+    return got;
+  };
+
+  /* ---------------- 结局 ---------------- */
+
+  E.ending = function (s) {
+    var awards = s.awards.length;
+    var best = 0;
+    for (var i = 0; i < s.history.length; i++) if (s.history[i].total > best) best = s.history[i].total;
+    var title, tone;
+    if (awards >= 3) { title = '时代定义者'; tone = '你定的规则，别人在遵守。'; }
+    else if (awards >= 1) { title = '一流工作室'; tone = '你活下来了，而且活得不错。'; }
+    else if (s.history.length <= 25 && best >= 30) { title = '小而美'; tone = '人不多，但每一部都拿得出手。'; }
+    else { title = '勉强维生'; tone = '还在，还没倒。'; }
+    return {
+      title: title,
+      tone: tone,
+      years: BAL.endYear - BAL.startYear,
+      releases: s.history.length,
+      best: best,
+      awards: awards,
+      fans: Math.round(s.fans),
+      earned: Math.round(s.totalEarned)
+    };
   };
 
   /* ---------------- 长尾 ---------------- */
@@ -761,6 +873,7 @@
     if (!s.staff.some(function (x) { return x.id === s.plan.leader; })) s.plan.leader = s.staff[0].id;
     if (!GD.GENRES.some(function (g) { return g.id === s.plan.genre; })) s.plan.genre = 'rpg';
     if (!GD.THEMES.some(function (t) { return t.id === s.plan.theme; })) s.plan.theme = 'fantasy';
+    if (!s.plan.platform || !GD.PLATFORMS.some(function (p) { return p.id === s.plan.platform; })) s.plan.platform = 'arc72';
 
     /* 数字与状态 */
     var phases = ['planning', 'developing', 'event', 'review', 'release', 'sales', 'done'];

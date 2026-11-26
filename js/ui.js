@@ -11,7 +11,7 @@
   var s = null, hooks = {}, el = {};
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
-    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null
+    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -125,6 +125,10 @@
         else { GD.SFX.bad(); }
         return;
       }
+      if (panelAct === 'endless') {
+        if (E.continueEndless(s)) { GD.SFX.win(); if (hooks.onSave) hooks.onSave(); }
+        return;
+      }
       if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
       if (panelAct === 'close-panel') {
@@ -220,8 +224,14 @@
     el.money.classList.toggle('negative', s.money < 0);
     el.fans.textContent = num(s.fans);
     el.round.textContent = String(s.round);
-    el.platform.textContent = GD.PLATFORM.code;
+    el.platform.textContent = E.platform(s).code;
     el.date.textContent = E.dateString(s.day);
+
+    if ((s.awards || []).length > (ui.awardCount || 0)) {
+      var latest = s.awards[s.awards.length - 1];
+      ui.awardCount = s.awards.length;
+      UI.toast('🏆 ' + latest.year + ' 年 · ' + latest.title + '（' + latest.score + ' 分） <b>+' + money(latest.money) + '</b>');
+    }
 
     if (ui.staffCount !== s.staff.length) { ui.staffCount = s.staff.length; buildOffice(); }
 
@@ -244,6 +254,7 @@
     else if (s.phase === 'release') buildRelease();
     else if (s.phase === 'sales') buildSales();
     else if (s.phase === 'done') buildDone();
+    else if (s.phase === 'ending') buildEnding();
   }
 
   function updateStage() {
@@ -329,6 +340,16 @@
     });
     html += '</div></div>';
 
+    html += '<div class="plan-group"><div class="plan-label">平台</div><div class="chips">';
+    E.availablePlatforms(s).forEach(function (x) {
+      var pop = E.popMult(x, E.year(s));
+      var mark = pop >= 1.1 ? '▲' : pop >= 0.8 ? '●' : '▼';
+      html += '<button class="chip' + (x.id === s.plan.platform ? ' on' : '') + '" data-plan="platform:' + x.id + '">' +
+        esc(x.code) + (x.alias ? '「' + esc(x.alias) + '」' : '') +
+        '<span class="ci">' + mark + '</span></button>';
+    });
+    html += '</div></div>';
+
     html += '<div class="plan-group"><div class="plan-label">主创</div><div class="chips">';
     s.staff.forEach(function (x) {
       html += '<button class="chip' + (x.id === s.plan.leader ? ' on' : '') + '" data-plan="leader:' + x.id + '">' +
@@ -342,6 +363,7 @@
       '<div class="pv"><label>预计评分</label><b>' + p.scoreLow + ' – ' + p.scoreHigh + ' / 40</b></div>' +
       '<div class="pv"><label>开发耗时</label><b>' + p.duration.toFixed(0) + ' 秒</b></div>' +
       '<div class="pv"><label>成本</label><b>' + money(p.cost) + '</b></div>' +
+      '<div class="pv"><label>平台装机</label><b>' + E.effInstall(s, E.platform(s)).toFixed(1) + '</b></div>' +
       '<div class="pv"><label>主创</label><b>' + esc(leader.name) + '</b></div>' +
       '</div>';
 
@@ -621,6 +643,27 @@
       }
       GD.SFX.total(s.review.total);
     }
+  }
+
+  /* ---------------- 结局 ---------------- */
+
+  function buildEnding() {
+    var r = E.ending(s);
+    el.stage.innerHTML =
+      '<div class="ending">' +
+      '<div class="ending-tag">' + GD.BAL.startYear + ' — ' + GD.BAL.endYear + ' · ' + r.years + ' 年</div>' +
+      '<div class="ending-title">' + esc(r.title) + '</div>' +
+      '<div class="ending-tone">' + esc(r.tone) + '</div>' +
+      '<div class="ending-stats">' +
+      '<div class="done-row"><span>发行作品</span><b>' + r.releases + ' 部</b></div>' +
+      '<div class="done-row"><span>最高评分</span><b>' + r.best + ' / 40</b></div>' +
+      '<div class="done-row"><span>年度奖项</span><b>' + r.awards + ' 次</b></div>' +
+      '<div class="done-row"><span>粉丝</span><b>' + num(r.fans) + '</b></div>' +
+      '<div class="done-row"><span>累计收入</span><b>' + money(r.earned) + '</b></div>' +
+      '</div>' +
+      '<button class="primary big" data-act="endless">继续经营</button>' +
+      '</div>';
+    el.hint.textContent = '主线结束了，但行业还在往前跑。';
   }
 
   /* ---------------- 发售决策 ---------------- */
