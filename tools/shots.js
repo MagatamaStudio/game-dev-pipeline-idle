@@ -157,6 +157,15 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('#offline [data-act="close-panel"]').click()`);
   await sleep(200);
 
+  /* 5.7 行业面板 */
+  await evalJs(`(() => { const s = GD.getState(); s.day = (1995 - 1972) * 360 + 10; })()`);
+  await sleep(500);
+  await evalJs(`document.querySelector('[data-act="industry"]').click()`);
+  await sleep(400);
+  await shot('m0-12-industry');
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(200);
+
   /* 5.9 结局 */
   await evalJs(`(() => { const s = GD.getState(); s.day = (2002 - 1972) * 360; s.phase = 'planning'; s.history = s.history || []; })()`);
   await sleep(700);

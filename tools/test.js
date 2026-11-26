@@ -118,7 +118,7 @@ function playOne(s, plan, choice) {
   E.tick(s, 1);
   ok('开发中按天烧工资', s.money < m0, 'Δ=' + Math.round(m0 - s.money));
   ok('烧钱速率符合配置',
-    Math.abs((m0 - s.money) - E.teamSalary(s) * GD.BAL.daysPerSecond) < 1,
+    Math.abs((m0 - s.money) - E.teamSalary(s) * GD.BAL.daysPerSecond * E.prodMult(s)) < 1,
     Math.round(m0 - s.money) + ' / 秒');
 
   ok('可以切换开发档位', E.setMode(s, 'crunch') === true && s.project.mode === 'crunch');
@@ -164,7 +164,7 @@ function playOne(s, plan, choice) {
   s5.project.eventsDone = BAL.eventAts.length;
   var guard = 0;
   while (s5.phase !== 'review' && guard++ < 20000) E.tick(s5, 1 / 30);
-  var expectCost = E.platform(s5).license + E.teamSalary(s5) * GD.BAL.daysPerSecond * s5.project.elapsed;
+  var expectCost = E.platform(s5).license + E.teamSalary(s5) * GD.BAL.daysPerSecond * s5.project.elapsed * E.prodMult(s5);
   ok('总成本 = 授权 + 工资', Math.abs(s5.project.cost - expectCost) < 50,
     Math.round(s5.project.cost) + ' vs ' + Math.round(expectCost));
 })();
@@ -333,7 +333,7 @@ function playOne(s, plan, choice) {
   ok('12 周全部结算', s.sales.index === BAL.salesWeeks);
   ok('周销量累计接近总量', Math.abs(sum - s.sales.total) < s.sales.total * 0.08,
     sum + ' vs ' + s.sales.total);
-  ok('收入 = 销量 × 单价', near(s.sales.revenue, s.sales.sold * E.platform(s).price, 1));
+  ok('收入 = 销量 × 单价 × 到手比例', near(s.sales.revenue, s.sales.sold * E.platform(s).price * GD.BAL.publisherCut, 1));
   ok('售完不再结算', E.settleWeek(s) === null);
 })();
 
@@ -435,7 +435,7 @@ function playOne(s, plan, choice) {
   ok('招完刷新候选人', s.candidates.indexOf(cand) === -1);
 
   var m = s.money;
-  ok('换一批要扣钱', E.refreshCandidates(s) === true && s.money === m - GD.BAL.refreshCost);
+  ok('换一批要扣钱', E.refreshCandidates(s) === true && Math.abs(s.money - (m - GD.BAL.refreshCost * E.inflation(s))) < 1);
 })();
 
 /* ---------- 成长 ---------- */
@@ -551,22 +551,25 @@ function playOne(s, plan, choice) {
 /* ---------- 年度奖项 ---------- */
 (function () {
   var s = E.newGame();
-  s.yearBest = 37;
+  s.yearBest = 33;
   s.day = 360;
   var got = E.settleAwards(s);
-  ok('36 分以上拿年度游戏', got.length === 1 && got[0].title === '年度游戏', JSON.stringify(got));
+  ok('没有对手时拿年度游戏', got.length === 1 && got[0].title === '年度游戏', JSON.stringify(got));
   ok('奖项进档案', s.awards.length === 1);
   ok('同一年不重复颁奖', E.settleAwards(s).length === 0);
 
   var s2 = E.newGame();
   s2.yearBest = 33;
+  s2.yearRivalReleases = [{ year: 1972, score: 35, name: '白噪音', title: '第七夜' }];
   s2.day = 360;
-  ok('33 分以上给提名', E.settleAwards(s2)[0].title === '年度提名');
+  var got2 = E.settleAwards(s2);
+  ok('输给对手只给提名', got2.length === 1 && got2[0].title === '年度提名', JSON.stringify(got2));
+  ok('年度结果记录了对手', s2.yearResults[0].winner === '白噪音', JSON.stringify(s2.yearResults[0]));
 
   var s3 = E.newGame();
   s3.yearBest = 20;
   s3.day = 360;
-  ok('不够分没有奖', E.settleAwards(s3).length === 0);
+  ok('分数不够没有奖', E.settleAwards(s3).length === 0);
 })();
 
 /* ---------- 结局 ---------- */
@@ -605,7 +608,7 @@ function playOne(s, plan, choice) {
   console.log('   24 局 RPG×幻想：评分中位数 ' + median + '/40，回报中位数 ' + medMargin.toFixed(2) + ' 倍成本');
 
   ok('评分中位数在合理区间（1972 年 cap 45）', median >= 18 && median <= 38, 'median=' + median);
-  ok('净回报中位数在 0.5–3.5 倍之间', medMargin >= 0.5 && medMargin <= 3.5, 'margin=' + medMargin.toFixed(2));
+  ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

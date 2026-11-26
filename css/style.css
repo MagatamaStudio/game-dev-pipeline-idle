@@ -859,3 +859,35 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ending-tone { font-size: 13px; color: var(--dim); margin-bottom: 22px; }
 .ending-stats { max-width: 320px; margin: 0 auto; }
 .ending .primary { margin-top: 22px; }
+
+/* ============ 行业 ============ */
+
+.rival {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: rgba(24, 19, 15, .7);
+  margin-bottom: 8px;
+}
+.rival.off { opacity: .45; }
+.rival-name { font-size: 13.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.rival-sub { font-size: 10.5px; color: var(--dim2); margin-top: 3px; font-family: var(--mono); }
+.rival-latest { text-align: right; font-size: 11.5px; color: var(--dim); flex: none; }
+.rival-score { font-family: var(--mono); font-weight: 700; color: var(--accent); margin-left: 6px; }
+
+.year-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 0;
+  font-size: 11.5px;
+  border-bottom: 1px dashed var(--line2);
+}
+.year-row span:first-child { font-family: var(--mono); color: var(--dim2); width: 40px; flex: none; }
+.year-row b { flex: 1; font-weight: 500; }
+.year-row b.good { color: var(--ok); }
+.year-row .mono { font-family: var(--mono); color: var(--dim); flex: none; }

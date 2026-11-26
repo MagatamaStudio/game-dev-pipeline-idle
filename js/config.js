@@ -9,7 +9,7 @@
    * 11 个主线平台，1972–2002。安装量 = install × 人气系数（按上市年数递减）。
    * cap 是品质上限，price 是单价，license 是每部作品的授权费。 */
   GD.PLATFORMS = [
-    { id: 'arc72', code: 'ARC-72', alias: '', year: 1972, retire: 1981, install: 1.75, license: 6000, price: 22, cap: 45, fav: 'action' },
+    { id: 'arc72', code: 'ARC-72', alias: '', year: 1972, retire: 1981, install: 2.4, license: 6000, price: 26, cap: 45, fav: 'action' },
     { id: 'l1', code: 'L-1', alias: '', year: 1978, retire: 1987, install: 1.9, license: 9000, price: 18, cap: 50, fav: null },
     { id: 'l3', code: 'L-3', alias: '客厅盒', year: 1983, retire: 1992, install: 4.0, license: 15000, price: 22, cap: 58, fav: 'action' },
     { id: 'bm', code: 'B-M', alias: '', year: 1987, retire: 1995, install: 2.6, license: 11000, price: 14, cap: 48, fav: 'puzzle' },
@@ -19,7 +19,23 @@
     { id: 'l64', code: 'L-64', alias: '', year: 1996, retire: 2005, install: 3.1, license: 45000, price: 46, cap: 78, fav: 'action' },
     { id: 'ba', code: 'B-A', alias: '', year: 1998, retire: 2007, install: 4.8, license: 30000, price: 26, cap: 62, fav: 'rpg' },
     { id: 'i2', code: 'I-2', alias: '黑盒子', year: 2000, retire: 2009, install: 6.0, license: 60000, price: 48, cap: 86, fav: 'action' },
-    { id: 'lg', code: 'L-G', alias: '', year: 2002, retire: 2011, install: 3.2, license: 35000, price: 34, cap: 70, fav: 'sim' }
+    { id: 'lg', code: 'L-G', alias: '', year: 2002, retire: 2011, install: 3.2, license: 35000, price: 34, cap: 70, fav: 'sim' },
+
+    /* 无尽模式：2002 之后 */
+    { id: 'ihd', code: 'I-HD', alias: '', year: 2005, retire: 2014, install: 6.5, license: 80000, price: 55, cap: 92, fav: 'shooter' },
+    { id: 'dm', code: 'D-M', alias: '', year: 2007, retire: 2016, install: 5.5, license: 55000, price: 45, cap: 88, fav: 'sim' },
+    { id: 'bd', code: 'B-D', alias: '', year: 2011, retire: 2020, install: 5.0, license: 40000, price: 32, cap: 82, fav: 'adv' },
+    { id: 'rm', code: 'R-M', alias: '', year: 2013, retire: 2022, install: 9.0, license: 10000, price: 6, cap: 76, fav: 'sim' },
+    { id: 'lh', code: 'L-H', alias: '', year: 2017, retire: 2026, install: 6.0, license: 50000, price: 60, cap: 95, fav: 'action' },
+    { id: 'oc', code: 'O-C', alias: '', year: 2021, retire: 2030, install: 7.5, license: 30000, price: 40, cap: 100, fav: 'rpg' },
+    { id: 'dv', code: 'D-V', alias: '头显', year: 2026, retire: 2036, install: 3.0, license: 45000, price: 50, cap: 108, fav: 'adv' },
+    { id: 'nl', code: 'N-L', alias: '插头', year: 2033, retire: 2043, install: 4.0, license: 60000, price: 65, cap: 118, fav: 'rpg' },
+    { id: 'op', code: 'O-P', alias: '协议', year: 2040, retire: 2050, install: 8.0, license: 0, price: 45, cap: 125, fav: 'action' },
+    { id: 'm1', code: 'M-1', alias: '', year: 2047, retire: 2057, install: 5.0, license: 35000, price: 55, cap: 130, fav: 'rpg' },
+    { id: 'q1', code: 'Q-1', alias: '舱', year: 2054, retire: 2064, install: 3.5, license: 90000, price: 120, cap: 140, fav: 'adv' },
+    { id: 's1', code: 'S-1', alias: '', year: 2061, retire: 2071, install: 7.0, license: 20000, price: 70, cap: 150, fav: 'sim' },
+    { id: 'v1', code: 'V-1', alias: '', year: 2068, retire: 2078, install: 9.5, license: 0, price: 80, cap: 160, fav: 'action' },
+    { id: 't1', code: 'T-1', alias: '方舟', year: 2075, retire: 2085, install: 4.0, license: 120000, price: 200, cap: 175, fav: 'rpg' }
   ];
 
   /* 人气系数：按「上市年数」查表，取第一个命中的档 */
@@ -82,6 +98,18 @@
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };
+
+  /* ---------------- 竞争对手 ----------------
+   * 每家每年出一部作品，分数随出道年数与实力成长。
+   * 年度奖项是「你和他们比」，不是「你跟自己比」。 */
+  GD.RIVALS = [
+    { id: 'old', name: '老街机', genre: 'action', theme: 'modern', debut: 1973, power: 1.10, titles: ['打砖块', '太空侵略', '迷宫吃豆'] },
+    { id: 'white', name: '白噪音', genre: 'adv', theme: 'modern', debut: 1981, power: 1.15, titles: ['无声回廊', '深夜电台', '第七夜'] },
+    { id: 'seven', name: '第七区', genre: 'shooter', theme: 'warring', debut: 1985, power: 1.20, titles: ['东线', '钢铁风暴', '焦土'] },
+    { id: 'tin', name: '铁皮屋', genre: 'sim', theme: 'fantasy', debut: 1988, power: 1.00, titles: ['小镇牧场', '铁皮王国', '慢生活'] },
+    { id: 'echo', name: '回声组', genre: 'rpg', theme: 'medieval', debut: 1991, power: 1.10, titles: ['回声之书', '古城', '最后的吟游诗人'] },
+    { id: 'nobody', name: '无名氏', genre: 'action', theme: 'modern', debut: 1996, power: 1.05, titles: ['又一款动作游戏', '跟风之作', '大家的老朋友'] }
+  ];
 
   /* ---------------- 评审 ---------------- */
   GD.CRITICS = [
@@ -367,6 +395,9 @@
     offlineDaysPerHour: 3,    // 每离线 1 小时，日历走 3 天
     offlineMaxDays: 120,      // 日历最多跳 120 天
     offlineMinSeconds: 60,
+    inflationPerYear: 0.0, inflationBase: 1.0,   // 每年成本上涨 6%
+    publisherCut: 0.45,        // 发行/制造/渠道抽成后到手比例
+    prodValueDivisor: 27,     // 制作成本 = 平台(装机×单价)/60 × 工资
 
     devSeconds: 54,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,

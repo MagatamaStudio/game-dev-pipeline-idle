@@ -11,7 +11,7 @@
   var s = null, hooks = {}, el = {};
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
-    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0
+    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -82,6 +82,7 @@
     el.team = byId('team');
     el.archive = byId('archive');
     el.offline = byId('offline');
+    el.industry = byId('industry');
     el.sound = byId('sound');
 
     buildOffice();
@@ -131,11 +132,13 @@
       }
       if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
+      if (panelAct === 'industry') { GD.SFX.click(); renderIndustry(); el.industry.hidden = false; return; }
       if (panelAct === 'close-panel') {
         GD.SFX.click();
         el.team.hidden = true;
         el.archive.hidden = true;
         el.offline.hidden = true;
+        el.industry.hidden = true;
         return;
       }
       if (panelAct === 'expand') {
@@ -227,10 +230,14 @@
     el.platform.textContent = E.platform(s).code;
     el.date.textContent = E.dateString(s.day);
 
-    if ((s.awards || []).length > (ui.awardCount || 0)) {
-      var latest = s.awards[s.awards.length - 1];
-      ui.awardCount = s.awards.length;
-      UI.toast('🏆 ' + latest.year + ' 年 · ' + latest.title + '（' + latest.score + ' 分） <b>+' + money(latest.money) + '</b>');
+    if ((s.yearResults || []).length > (ui.yearCount || 0)) {
+      var y = s.yearResults[s.yearResults.length - 1];
+      ui.yearCount = s.yearResults.length;
+      if (!y.winner) {
+        UI.toast('🏆 ' + y.year + ' 年度游戏：你（' + y.playerScore + ' 分）');
+      } else {
+        UI.toast(y.year + ' 年度游戏被 ' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》' + y.winnerScore + ' 分拿走（你 ' + y.playerScore + ' 分）');
+      }
     }
 
     if (ui.staffCount !== s.staff.length) { ui.staffCount = s.staff.length; buildOffice(); }
@@ -460,7 +467,7 @@
         '<div class="staff-stats">' + esc(statLine(st.stats)) + '</div>' +
         xpBar(st) +
         '</div>' +
-        '<div class="staff-salary">' + money(st.salary) + '<small>/天</small></div>' +
+        '<div class="staff-salary">' + money(E.effSalary(s, st)) + '<small>/天</small></div>' +
         '</div>';
     });
     html += '</div>';
@@ -481,7 +488,7 @@
     } else {
       s.candidates.forEach(function (id) {
         var r = E.rosterById(id);
-        var fee = r.salary * GD.BAL.hireFeeDays;
+        var fee = r.salary * GD.BAL.hireFeeDays * E.inflation(s);
         var can = s.money >= fee && s.staff.length < s.seats;
         html += '<div class="cand">' +
           '<div class="avatar sm">' + avatarSvg(r.seed) + '</div>' +
@@ -494,7 +501,7 @@
           '</div>';
       });
       html += '<button class="ghost" data-act="refresh"' + (s.money < GD.BAL.refreshCost ? ' disabled' : '') + '>' +
-        '换一批 · ' + money(GD.BAL.refreshCost) + '</button>';
+        '换一批 · ' + money(GD.BAL.refreshCost * E.inflation(s)) + '</button>';
     }
     html += '</div>';
 
@@ -531,6 +538,52 @@
 
     html += '</div></div>';
     el.archive.innerHTML = html;
+  }
+
+  /* ---------------- 行业 ---------------- */
+
+  function renderIndustry() {
+    var html = '<div class="panel-card">' +
+      '<div class="panel-head"><div><h3>行业</h3>' +
+      '<div class="panel-sub">' + E.year(s) + ' 年 · 你的年度奖 ' + s.awards.length + ' 次</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="panel-scroll">';
+
+    s.rivals.forEach(function (r) {
+      var active = E.year(s) >= r.debut;
+      var last = r.games[r.games.length - 1];
+      var wins = 0;
+      for (var i = 0; i < s.yearResults.length; i++) {
+        if (s.yearResults[i].winner === r.name) wins++;
+      }
+      html += '<div class="rival' + (active ? '' : ' off') + '">' +
+        '<div class="rival-main">' +
+        '<div class="rival-name">' + esc(r.name) + '<span class="role">' + esc(E.genre(r.genre).name) + '</span></div>' +
+        '<div class="rival-sub">出道 ' + r.debut + ' · 年度奖 ' + wins + ' 次</div>' +
+        '</div>' +
+        '<div class="rival-latest">' +
+        (last
+          ? '<b>' + (active ? last.year + ' 年' : '') + '</b>《' + esc(last.title) + '》<span class="rival-score">' + last.score + '</span>'
+          : '<span class="dim">还没出道</span>') +
+        '</div>' +
+        '</div>';
+    });
+
+    html += '<div class="panel-block"><div class="block-title">历年年度游戏</div>';
+    if (!s.yearResults.length) {
+      html += '<p class="dim">还没有评过奖。</p>';
+    } else {
+      s.yearResults.slice().reverse().slice(0, 8).forEach(function (y) {
+        html += '<div class="year-row"><span>' + y.year + '</span>' +
+          (y.winner ? '<b class="dim">' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》</b>' :
+            '<b class="good">你《' + esc(y.playerAward || '') + '》') +
+          '<span class="mono">' + y.winnerScore + '</span></div>';
+      });
+    }
+    html += '</div>';
+
+    html += '</div></div>';
+    el.industry.innerHTML = html;
   }
 
   /* ---------------- 离线报告 ---------------- */

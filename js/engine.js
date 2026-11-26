@@ -16,9 +16,21 @@
     return s.staff[0];
   };
 
+  E.inflation = function (s) {
+    return BAL.inflationBase + Math.max(0, E.year(s) - BAL.startYear) * BAL.inflationPerYear;
+  };
+
+  E.effSalary = function (s, st) { return st.salary * E.inflation(s); };
+
+  /* 制作成本倍率：平台越大、越贵，制作费越高。移动端便宜，3A 贵。 */
+  E.prodMult = function (s) {
+    var p = E.platform(s);
+    return Math.max(0.35, Math.min(24, (E.effInstall(s, p) * p.price) / BAL.prodValueDivisor));
+  };
+
   E.teamSalary = function (s) {
     var sum = 0;
-    for (var i = 0; i < s.staff.length; i++) sum += s.staff[i].salary;
+    for (var i = 0; i < s.staff.length; i++) sum += s.staff[i].salary * E.inflation(s);
     return sum;
   };
 
@@ -126,7 +138,7 @@
       quality: q,
       duration: duration,
       days: days,
-      cost: p.license + E.teamSalary(s) * days,
+      cost: p.license + E.teamSalary(s) * days * E.prodMult(s),
       platform: p.id,
       license: p.license,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
@@ -169,7 +181,7 @@
     if (s.staff.length >= s.seats) return false;
     if (s.candidates.indexOf(id) === -1) return false;
     var r = E.rosterById(id);
-    var fee = r.salary * BAL.hireFeeDays;
+    var fee = r.salary * BAL.hireFeeDays * E.inflation(s);
     if (s.money < fee) return false;
     s.money -= fee;
     s.staff.push(E.makeStaff(id));
@@ -181,7 +193,7 @@
   E.expandOffice = function (s) {
     var idx = s.seats - 3;
     if (idx >= BAL.seatCosts.length) return false;
-    var cost = BAL.seatCosts[idx];
+    var cost = BAL.seatCosts[idx] * E.inflation(s);
     if (s.money < cost) return false;
     s.money -= cost;
     s.seats++;
@@ -190,12 +202,13 @@
 
   E.expandCost = function (s) {
     var idx = s.seats - 3;
-    return idx < BAL.seatCosts.length ? BAL.seatCosts[idx] : null;
+    return idx < BAL.seatCosts.length ? BAL.seatCosts[idx] * E.inflation(s) : null;
   };
 
   E.refreshCandidates = function (s) {
-    if (s.money < BAL.refreshCost) return false;
-    s.money -= BAL.refreshCost;
+    var rc = BAL.refreshCost * E.inflation(s);
+    if (s.money < rc) return false;
+    s.money -= rc;
     E.rollCandidates(s);
     return true;
   };
@@ -248,6 +261,11 @@
       tailMonth: 0,
       tailTotal: 0,
       awards: [],
+      rivals: GD.RIVALS.map(function (d) {
+        return { id: d.id, name: d.name, genre: d.genre, theme: d.theme, power: d.power, debut: d.debut, lastYear: 0, awards: 0, games: [] };
+      }),
+      yearRivalReleases: [],
+      yearResults: [],
       yearBest: 0,
       awardYear: BAL.startYear,
       ended: false,
@@ -512,7 +530,7 @@
     var i = s.sales.index;
     var frac = GD.SALES_CURVE[i] || 0.011;
     var copies = Math.round(s.sales.total * frac * s.sales.boost);
-    var revenue = copies * E.platform(s).price;
+    var revenue = copies * E.platform(s).price * BAL.publisherCut;
 
     s.money += revenue;
     s.totalEarned += revenue;
@@ -555,7 +573,7 @@
       s.day += dt * BAL.daysPerSecond;
 
       /* 每过一天，工资就烧一天——这是「时间有代价」的来源 */
-      var burn = E.teamSalary(s) * BAL.daysPerSecond * dt;
+      var burn = E.teamSalary(s) * BAL.daysPerSecond * dt * E.prodMult(s);
       s.money -= burn;
       s.project.cost += burn;
 
@@ -640,7 +658,10 @@
           windowMult: s.release ? s.release.mult : 1
         };
         s.history.push(s.lastResult);
-        if (s.review.total > (s.yearBest || 0)) s.yearBest = s.review.total;
+        if (s.review.total > (s.yearBest || 0)) {
+          s.yearBest = s.review.total;
+          s.yearBestTitle = E.gameName(s);
+        }
         s.lastXp = E.gainXp(s, s.review.total);
         E.rollCandidates(s);
         s.phase = 'done';
@@ -649,6 +670,7 @@
     }
 
     E.settleMonths(s);
+    E.tickRivals(s);
     var got = E.settleAwards(s);
     for (var ai = 0; ai < got.length; ai++) out.push({ type: 'award', award: got[ai] });
     if (s.phase === 'planning' && !s.ended && E.year(s) >= BAL.endYear) {
@@ -693,9 +715,36 @@
 
   E.rescue = function (s) {
     if (!E.needRescue(s)) return false;
-    s.money += BAL.rescue;
+    s.money += BAL.rescue * E.inflation(s);
     s.rescued++;
     return true;
+  };
+
+  /* ---------------- 竞争对手 ---------------- */
+
+  E.rivalDef = function (id) {
+    for (var i = 0; i < GD.RIVALS.length; i++) if (GD.RIVALS[i].id === id) return GD.RIVALS[i];
+    return GD.RIVALS[0];
+  };
+
+  E.tickRivals = function (s) {
+    var yr = E.year(s);
+    for (var i = 0; i < s.rivals.length; i++) {
+      var r = s.rivals[i];
+      if (yr < r.debut || r.lastYear >= yr) continue;
+      r.lastYear = yr;
+      if (Math.random() < 0.12) continue;
+
+      var score = Math.round(28 + (yr - r.debut) * 0.25 + r.power * 2.5 + (Math.random() * 6 - 3));
+      score = Math.max(14, Math.min(40, score));
+
+      var def = E.rivalDef(r.id);
+      var title = def.titles[r.games.length % def.titles.length];
+      var game = { year: yr, title: title, score: score, rival: r.id, name: r.name };
+      r.games.push(game);
+      s.yearRivalReleases.push(game);
+      if (s.yearRivalReleases.length > 200) s.yearRivalReleases.shift();
+    }
   };
 
   /* ---------------- 年度奖项 ---------------- */
@@ -705,22 +754,59 @@
     var last = s.awardYear || BAL.startYear;
     var got = [];
     var guard = 0;
+
     while (last < yr && guard++ < 50) {
-      var best = s.yearBest || 0;
-      if (best >= 36) {
-        got.push({ year: last, title: '年度游戏', score: best, money: 60000 + (last - BAL.startYear) * 30000, fans: 3000 + (last - BAL.startYear) * 600 });
-      } else if (best >= 33) {
-        got.push({ year: last, title: '年度提名', score: best, money: 20000 + (last - BAL.startYear) * 10000, fans: 800 + (last - BAL.startYear) * 200 });
+      var mine = s.yearBest || 0;
+
+      var theirs = [];
+      for (var i = 0; i < s.yearRivalReleases.length; i++) {
+        if (s.yearRivalReleases[i].year === last) theirs.push(s.yearRivalReleases[i]);
       }
+      theirs.sort(function (a, b) { return b.score - a.score; });
+      var top = theirs[0] || null;
+
+      var topScore = top ? top.score : 0;
+      var best = Math.max(mine, topScore);
+      var playerWins = mine > 0 && mine >= best && mine >= 26;
+      var award = null;
+
+      if (playerWins) {
+        award = {
+          year: last, title: '年度游戏', score: mine,
+          money: 60000 + (last - BAL.startYear) * 30000,
+          fans: 3000 + (last - BAL.startYear) * 600
+        };
+      } else if (mine >= 24 && mine >= best - 2) {
+        award = {
+          year: last, title: '年度提名', score: mine,
+          money: 20000 + (last - BAL.startYear) * 10000,
+          fans: 800 + (last - BAL.startYear) * 200
+        };
+      }
+
+      if (award) {
+        s.money += award.money;
+        s.fans += award.fans;
+        s.awards.push(award);
+        got.push(award);
+      }
+
+      s.yearResults.push({
+        year: last,
+        winner: playerWins ? null : (top ? top.name : null),
+        winnerTitle: playerWins ? null : (top ? top.title : null),
+        winnerScore: playerWins ? mine : (top ? top.score : 0),
+        playerScore: mine,
+        playerAward: award ? award.title : null
+      });
+      if (s.yearResults.length > 100) s.yearResults.shift();
+
       s.yearBest = 0;
       last++;
     }
+
     s.awardYear = yr;
-    got.forEach(function (a) {
-      s.money += a.money;
-      s.fans += a.fans;
-      s.awards.push(a);
-    });
+    s.yearRivalReleases = s.yearRivalReleases.filter(function (g) { return g.year >= yr - 1; });
     return got;
   };
 
@@ -887,6 +973,13 @@
     s.timer = clampNum(s.timer, 0, 1e6, 0);
     s.microUid = Math.round(clampNum(s.microUid, 0, 1e9, 0));
     if (!Array.isArray(s.history)) s.history = [];
+    if (!Array.isArray(s.rivals) || !s.rivals.length) {
+      s.rivals = GD.RIVALS.map(function (d) {
+        return { id: d.id, name: d.name, genre: d.genre, theme: d.theme, power: d.power, debut: d.debut, lastYear: 0, awards: 0, games: [] };
+      });
+    }
+    if (!Array.isArray(s.yearRivalReleases)) s.yearRivalReleases = [];
+    if (!Array.isArray(s.yearResults)) s.yearResults = [];
     if (s.phase === 'done' && !s.lastResult) s.phase = 'planning';
 
     return s;

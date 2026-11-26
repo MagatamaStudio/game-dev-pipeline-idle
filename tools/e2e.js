@@ -159,6 +159,16 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 
+  await evalJs(`document.querySelector('[data-act="industry"]').click()`);
+  await sleep(200);
+  var ind = await evalJs(`({
+    open: !document.querySelector('#industry').hidden,
+    rivals: document.querySelectorAll('#industry .rival').length
+  })`);
+  check('行业面板显示竞争对手', ind.open === true && ind.rivals >= 5, 'rivals=' + ind.rivals);
+  await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
+  await sleep(150);
+
   /* ---------- 2. 选择类型/题材 ---------- */
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);
