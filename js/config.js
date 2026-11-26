@@ -210,6 +210,76 @@
     }
   ];
 
+  /* ---------------- 小决定 ----------------
+   * 开发期间随机出现，不打断流程，几秒不理会自动消失。
+   * 纯可选：不选没有任何惩罚，选了有小收益也有小代价。 */
+  GD.MICRO = [
+    {
+      id: 'polish',
+      text: '小林说战斗手感还能再调调。',
+      options: [
+        { label: '让他改', quality: 3, progress: -2, tip: '品质 +3% · 进度 −2%', result: '小林把战斗手感重做了一遍，凌晨三点发来一句「爽了」。' },
+        { label: '先这样' }
+      ]
+    },
+    {
+      id: 'art',
+      text: '阿雅想给主角加一套走路动画，需要块新绘图板。',
+      options: [
+        { label: '买', cost: 8000, quality: 2, tip: '花 $8,000 · 品质 +2%', result: '新绘图板第二天就到了。阿雅画了一整天。' },
+        { label: '以后再说' }
+      ]
+    },
+    {
+      id: 'cut',
+      text: '老周提议砍掉一条支线，说没人会走。',
+      options: [
+        { label: '砍掉', progress: 4, quality: -2, tip: '进度 +4% · 品质 −2%', result: '支线被删了。老周在文档里留了一行「已归档」。' },
+        { label: '保留' }
+      ]
+    },
+    {
+      id: 'coffee',
+      text: '连熬三天，组里的气氛不太对。',
+      options: [
+        { label: '请全组吃顿好的', cost: 4000, quality: 1, tip: '花 $4,000 · 品质 +1%', result: '一顿火锅之后，办公室又有了笑声。' },
+        { label: '继续' }
+      ]
+    },
+    {
+      id: 'music',
+      text: '音效师说主题曲还能再来一版。',
+      options: [
+        { label: '再改一版', quality: 2, progress: -3, tip: '品质 +2% · 进度 −3%', result: '第三版主题曲定稿。前两版其实也没人听过。' },
+        { label: '用现在的' }
+      ]
+    },
+    {
+      id: 'demo',
+      text: '有个朋友想先玩玩看。',
+      options: [
+        { label: '给他 demo', progress: 3, sales: 2, tip: '进度 +3% · 销量 +2%', result: '朋友玩了两小时，提了 40 条建议，其中 3 条有用。' },
+        { label: '保密' }
+      ]
+    },
+    {
+      id: 'bugs',
+      text: '顺手能修掉几个小 bug。',
+      options: [
+        { label: '修', quality: 2, progress: -2, tip: '品质 +2% · 进度 −2%', result: '修完发现又冒出两个。经典。' },
+        { label: '留着' }
+      ]
+    },
+    {
+      id: 'fishing',
+      text: '有人提议加个钓鱼系统。',
+      options: [
+        { label: '加', quality: 1, progress: -4, sales: 3, tip: '品质 +1% · 进度 −4% · 销量 +3%', result: '钓鱼系统做了三天，成了后来玩家最喜欢的功能。' },
+        { label: '算了' }
+      ]
+    }
+  ];
+
   /* ---------------- 开发日志 ---------------- */
 
   GD.DEV_LOG = {
@@ -266,6 +336,8 @@
     devSeconds: 54,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,
     eventAts: [0.30, 0.72],   // 每部作品两次事件
+    microAt: [0.15, 0.52, 0.88],   // 小决定出现的进度点
+    microTtl: 6,                   // 不选就消失
 
     /* 压货等档期：每多等一天，仓储与资金占用成本 */
     storagePerDay: 900,

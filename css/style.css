@@ -648,3 +648,45 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .rel-options { grid-template-columns: 1fr; }
   .rel-head { flex-direction: column; gap: 2px; }
 }
+
+/* ============ 小决定 ============ */
+
+.micro {
+  margin-top: 16px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 180, 84, .35);
+  border-radius: 11px;
+  background: rgba(255, 180, 84, .06);
+  animation: micro-in .25s ease both;
+}
+@keyframes micro-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.micro-text { font-size: 12.5px; color: var(--text); margin-bottom: 9px; }
+.micro-acts { display: flex; gap: 8px; }
+.micro-acts button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.micro-acts button b { font-weight: 600; }
+.micro-acts button small { font-size: 9.5px; color: var(--dim2); }
+.micro-acts button:first-child { border-color: rgba(255, 180, 84, .45); color: var(--accent); background: rgba(255, 180, 84, .1); }
+
+.micro-timer {
+  margin-top: 9px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, .07);
+  overflow: hidden;
+}
+.micro-timer i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transition: width .1s linear;
+}

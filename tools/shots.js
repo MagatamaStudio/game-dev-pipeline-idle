@@ -101,7 +101,7 @@ function connect(wsUrl) {
   /* 2. 开发中（档位 + 日志） */
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
   await sleep(700);
-  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.22; })()`);
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.16; })()`);
   await sleep(600);
   await evalJs(`document.querySelector('[data-mode="crunch"]').click()`);
   await sleep(400);

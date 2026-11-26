@@ -110,9 +110,17 @@
 
   function bind() {
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro]');
       if (!t) return;
       GD.SFX.unlock();
+
+      var microAttr = t.getAttribute('data-micro');
+      if (microAttr != null) {
+        if (E.microChoice(s, Number(microAttr))) { GD.SFX.coin(); }
+        else { GD.SFX.click(); }
+        UI.render();
+        return;
+      }
 
       var modeAttr = t.getAttribute('data-mode');
       if (modeAttr) {
@@ -247,6 +255,16 @@
             }).join('');
           }
         }
+
+        if (s.micro) {
+          if (ui.microUid !== s.micro.uid) { ui.microUid = s.micro.uid; renderMicro(); }
+          var fill = byId('micro-fill');
+          if (fill) fill.style.width = Math.max(0, (s.micro.ttl / GD.BAL.microTtl) * 100) + '%';
+        } else if (ui.microUid) {
+          ui.microUid = null;
+          var mEl = byId('micro');
+          if (mEl) mEl.hidden = true;
+        }
       }
     } else if (s.phase === 'review') {
       updateReview();
@@ -330,10 +348,26 @@
       '<button data-mode="normal" class="on"><b>正常</b><small>按时交付</small></button>' +
       '<button data-mode="polish"><b>打磨</b><small>−25% 速度 · +7% 品质</small></button>' +
       '</div>' +
+      '<div class="micro" id="micro" hidden></div>' +
       '<div class="devlog" id="devlog"></div>' +
       '</div>';
     el.hint.textContent = '每过一天都在烧工资。赶工省钱但伤品质，打磨费钱但做得更好——随时可以切。';
     ui.logCount = -1;
+    ui.microUid = null;
+  }
+
+  function renderMicro() {
+    var box = byId('micro');
+    if (!box || !s.micro) return;
+    var it = s.micro.item;
+    var html = '<div class="micro-text">' + esc(it.text) + '</div><div class="micro-acts">';
+    it.options.forEach(function (o, i) {
+      html += '<button data-micro="' + i + '"><b>' + esc(o.label) + '</b>' +
+        (o.tip ? '<small>' + esc(o.tip) + '</small>' : '') + '</button>';
+    });
+    html += '</div><div class="micro-timer"><i id="micro-fill"></i></div>';
+    box.innerHTML = html;
+    box.hidden = false;
   }
 
   /* ---------------- 事件 ---------------- */

@@ -187,6 +187,20 @@ function connect(wsUrl) {
   var logCount = await evalJs(`({ lines: document.querySelectorAll('#devlog .line').length, text: (document.querySelector('#devlog .line') || {}).textContent || '' })`);
   check('开发日志在滚动', logCount.lines > 0, logCount.text.slice(0, 20));
 
+  var micro = await evalJs(`({
+    visible: !document.querySelector('#micro').hidden,
+    text: (document.querySelector('.micro-text') || {}).textContent || '',
+    btns: document.querySelectorAll('[data-micro]').length
+  })`);
+  check('出现小决定', micro.visible === true && micro.btns >= 1, micro.text);
+
+  if (micro.visible) {
+    await evalJs(`document.querySelector('[data-micro="0"]').click()`);
+    await sleep(250);
+    var microAfter = await evalJs(`({ hidden: document.querySelector('#micro').hidden })`);
+    check('小决定可以处理', microAfter.hidden === true);
+  }
+
   /* ---------- 5. 事件 ---------- */
   await evalJs(`(() => { const s = GD.getState(); s.project.progress = 0.31; })()`);
   await sleep(250);

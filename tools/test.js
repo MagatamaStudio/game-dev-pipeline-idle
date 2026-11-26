@@ -194,6 +194,59 @@ function playOne(s, plan, choice) {
   ok('事件能影响销量预估', low < base * 0.85, low + ' vs ' + base);
 })();
 
+/* ---------- 小决定 ---------- */
+(function () {
+  var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
+  var s = E.newGame();
+  E.startProject(s, plan);
+
+  var guard = 0;
+  while (!s.micro && guard++ < 5000) E.tick(s, 1 / 30);
+  ok('开发中会出现小决定', !!s.micro, s.micro ? s.micro.item.text : '');
+  ok('小决定有选项', s.micro.item.options.length >= 1);
+
+  var ttl0 = s.micro.ttl;
+  E.tick(s, 1);
+  ok('小决定会倒计时', s.micro.ttl < ttl0);
+
+  var money0 = s.money;
+  guard = 0;
+  while (s.micro && guard++ < 3000) E.tick(s, 1 / 30);
+  ok('不理会就自动消失', s.micro === null);
+  ok('过期不扣钱', s.money === money0 || s.money < money0);
+})();
+
+(function () {
+  var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
+  var s = E.newGame();
+  E.startProject(s, plan);
+  var guard = 0;
+  while (!s.micro && guard++ < 5000) E.tick(s, 1 / 30);
+
+  var opt = s.micro.item.options[0];
+  var money0 = s.money;
+  var cost0 = s.project.cost;
+  var q0 = s.project.eventQualityPct;
+  var s0 = s.project.salesPct;
+  var log0 = s.project.log.length;
+
+  ok('可以选择小决定', E.microChoice(s, 0) === true && s.micro === null);
+  ok('小决定按选项扣钱', s.money === money0 - (opt.cost || 0));
+  ok('小决定计入成本', s.project.cost === cost0 + (opt.cost || 0));
+  ok('小决定影响品质或销量',
+    s.project.eventQualityPct !== q0 || s.project.salesPct !== s0,
+    'q ' + q0 + '→' + s.project.eventQualityPct);
+  ok('小决定写进开发日志', s.project.log.length > log0);
+
+  // 大事件会清掉小决定
+  var s2 = E.newGame();
+  E.startProject(s2, plan);
+  s2.micro = { uid: 999, item: GD.MICRO[0], ttl: 5 };
+  s2.project.progress = 0.2999;
+  E.tick(s2, 1 / 30);
+  ok('大事件会清掉小决定', s2.micro === null && s2.phase === 'event');
+})();
+
 /* ---------- 评审 ---------- */
 (function () {
   var s = E.newGame();

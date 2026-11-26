@@ -95,6 +95,8 @@
       event: null,
       review: null,
       release: null,
+      micro: null,
+      microUid: 0,
       sales: null,
       lastEvent: null,
       lastResult: null,
@@ -122,6 +124,7 @@
       eventQualityPct: 0,
       salesPct: 0,
       eventsDone: 0,
+      microDone: 0,
       quality: 0,
       cost: BAL.license,
       log: [],
@@ -175,6 +178,31 @@
     s.lastEvent = { title: s.event.title, choice: opt.label, cost: opt.cost };
     s.event = null;
     s.phase = 'developing';
+    return true;
+  };
+
+  E.microChoice = function (s, index) {
+    if (!s.micro || s.phase !== 'developing') return false;
+    var o = s.micro.item.options[index];
+    if (!o) return false;
+    var cost = o.cost || 0;
+    if (cost > s.money) return false;
+
+    s.money -= cost;
+    s.project.cost += cost;
+    s.project.eventQualityPct += (o.quality || 0);
+    s.project.salesPct = (s.project.salesPct || 0) + (o.sales || 0);
+    if (o.progress) {
+      s.project.progress = Math.max(0.02, Math.min(0.99, s.project.progress + o.progress / 100));
+    }
+    if (o.result) s.project.log.push('· ' + o.result);
+    s.micro = null;
+    return true;
+  };
+
+  E.dismissMicro = function (s) {
+    if (!s.micro) return false;
+    s.micro = null;
     return true;
   };
 
@@ -386,6 +414,22 @@
         s.project.logAt++;
       }
 
+      /* 小决定：可选、不打断、过期作废 */
+      if (!s.micro && s.project.microDone < BAL.microAt.length &&
+        s.project.progress >= BAL.microAt[s.project.microDone]) {
+        s.project.microDone++;
+        s.micro = {
+          uid: ++s.microUid,
+          item: GD.MICRO[Math.floor(Math.random() * GD.MICRO.length)],
+          ttl: BAL.microTtl
+        };
+        out.push({ type: 'micro' });
+      }
+      if (s.micro) {
+        s.micro.ttl -= dt;
+        if (s.micro.ttl <= 0) s.micro = null;
+      }
+
       if (s.project.progress >= 1) {
         s.project.progress = 1;
         E.finishDev(s);
@@ -393,6 +437,7 @@
       } else if (s.project.eventsDone < BAL.eventAts.length &&
         s.project.progress >= BAL.eventAts[s.project.eventsDone]) {
         var when = s.project.eventsDone === 0 ? 'early' : 'late';
+        s.micro = null;
         s.event = pickEvent(s, when);
         s.project.eventsDone++;
         s.phase = 'event';
@@ -463,6 +508,7 @@
     s.project = null;
     s.review = null;
     s.release = null;
+    s.micro = null;
     s.sales = null;
     s.event = null;
     s.timer = 0;
