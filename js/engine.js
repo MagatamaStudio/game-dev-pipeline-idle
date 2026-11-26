@@ -44,6 +44,10 @@
     return GD.PLATFORMS[0];
   };
 
+  E.platformLabel = function (p) {
+    return p.brand ? (p.brand + ' ' + p.name) : p.code;
+  };
+
   E.year = function (s) {
     return BAL.startYear + Math.floor(s.day / BAL.daysPerYear);
   };
@@ -468,6 +472,34 @@
     };
   };
 
+  E.weekOf = function (day) {
+    return Math.floor(((day % BAL.daysPerYear) + BAL.daysPerYear) % BAL.daysPerYear / 7) + 1;
+  };
+
+  /* 同期（±2 周）发售的对手作品 */
+  E.collisionsAt = function (s, day) {
+    var yr = E.year(s);
+    var wk = E.weekOf(day);
+    var out = [];
+    for (var i = 0; i < s.yearRivalReleases.length; i++) {
+      var g = s.yearRivalReleases[i];
+      if (g.year !== yr) continue;
+      var d = Math.abs(g.week - wk);
+      if (d <= 2 || d >= 50) out.push(g);
+    }
+    return out;
+  };
+
+  E.collisionAt = function (s, day) {
+    var list = E.collisionsAt(s, day);
+    if (!list.length) return { mult: 1, rival: null, list: [] };
+    var best = list[0];
+    for (var i = 1; i < list.length; i++) if (list[i].score > best.score) best = list[i];
+    var mine = s.review ? s.review.total : 0;
+    var mult = mine > best.score ? 1.08 : (mine < best.score ? 0.78 : 1);
+    return { mult: mult, rival: best, list: list };
+  };
+
   E.confirmRelease = function (s, which) {
     if (s.phase !== 'release') return false;
     var opts = E.releaseOptions(s);
@@ -479,6 +511,8 @@
     } else {
       s.release = { mult: opts.now.mult, name: opts.now.name, days: 0, cost: 0 };
     }
+    var col = E.collisionAt(s, s.day);
+    s.release.collision = col.rival ? col : null;
     E.startSales(s);
     return true;
   };
@@ -510,7 +544,8 @@
     var rnd = 0.85 + Math.random() * 0.3;
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult);
+    var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult);
 
     s.sales = {
       total: Math.max(300, copies),
@@ -740,7 +775,7 @@
 
       var def = E.rivalDef(r.id);
       var title = def.titles[r.games.length % def.titles.length];
-      var game = { year: yr, title: title, score: score, rival: r.id, name: r.name };
+      var game = { year: yr, week: 1 + Math.floor(Math.random() * 52), title: title, score: score, rival: r.id, name: r.name };
       r.games.push(game);
       s.yearRivalReleases.push(game);
       if (s.yearRivalReleases.length > 200) s.yearRivalReleases.shift();

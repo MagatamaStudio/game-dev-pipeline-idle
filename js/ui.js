@@ -84,11 +84,22 @@
     el.offline = byId('offline');
     el.industry = byId('industry');
     el.sound = byId('sound');
+    el.theme = byId('theme');
+
+    var savedTheme = 'light';
+    try { savedTheme = localStorage.getItem('garageStudio.theme') || 'light'; } catch (e) { }
+    applyTheme(savedTheme);
 
     buildOffice();
     bind();
     UI.render();
   };
+
+  function applyTheme(t) {
+    document.body.setAttribute('data-theme', t);
+    if (el.theme) el.theme.textContent = t === 'dark' ? '☀' : '☾';
+    try { localStorage.setItem('garageStudio.theme', t); } catch (e) { }
+  }
 
   function buildOffice() {
     el.desks.innerHTML = '';
@@ -210,6 +221,9 @@
       } else if (act === 'release-hold') {
         if (E.confirmRelease(s, 'hold')) { GD.SFX.coin(); }
         else { GD.SFX.bad(); }
+      } else if (act === 'theme') {
+        applyTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        GD.SFX.click();
       } else if (act === 'sound') {
         var m = GD.SFX.toggle();
         el.sound.textContent = m ? '🔇' : '🔊';
@@ -227,7 +241,7 @@
     el.money.classList.toggle('negative', s.money < 0);
     el.fans.textContent = num(s.fans);
     el.round.textContent = String(s.round);
-    el.platform.textContent = E.platform(s).code;
+    el.platform.textContent = E.platformLabel(E.platform(s));
     el.date.textContent = E.dateString(s.day);
 
     if ((s.yearResults || []).length > (ui.yearCount || 0)) {
@@ -352,7 +366,7 @@
       var pop = E.popMult(x, E.year(s));
       var mark = pop >= 1.1 ? '▲' : pop >= 0.8 ? '●' : '▼';
       html += '<button class="chip' + (x.id === s.plan.platform ? ' on' : '') + '" data-plan="platform:' + x.id + '">' +
-        esc(x.code) + (x.alias ? '「' + esc(x.alias) + '」' : '') +
+        esc(E.platformLabel(x)) +
         '<span class="ci">' + mark + '</span></button>';
     });
     html += '</div></div>';
@@ -723,9 +737,20 @@
 
   function buildRelease() {
     var o = E.releaseOptions(s);
-    var nowEst = E.estimateSales(s, o.now.mult);
-    var holdEst = E.estimateSales(s, o.hold.mult);
     var canHold = s.money >= o.hold.cost && o.hold.days > 0;
+
+    var nowCol = E.collisionAt(s, s.day);
+    var holdCol = E.collisionAt(s, s.day + Math.round(o.hold.days));
+    var nowEst = E.estimateSales(s, o.now.mult * nowCol.mult);
+    var holdEst = E.estimateSales(s, o.hold.mult * holdCol.mult);
+
+    function clashLine(c) {
+      if (!c.rival) return '<div class="rel-clash none">同期没有对手发售</div>';
+      var better = c.mult > 1;
+      return '<div class="rel-clash ' + (better ? 'good' : 'bad') + '">' +
+        (better ? '你压过了 ' : '撞档：') + esc(c.rival.name) + '《' + esc(c.rival.title) + '》' +
+        c.rival.score + ' 分 · 销量 ×' + c.mult.toFixed(2) + '</div>';
+    }
 
     el.stage.innerHTML =
       '<div class="release">' +
@@ -738,12 +763,14 @@
       '<div class="rel-name">立即发售</div>' +
       '<div class="rel-win' + (o.now.inWindow ? ' good' : '') + '">' + esc(o.now.name) + ' · ×' + o.now.mult.toFixed(2) + '</div>' +
       '<div class="rel-est">预计 ' + num(nowEst.low) + ' – ' + num(nowEst.high) + ' 份</div>' +
+      clashLine(nowCol) +
       '</button>' +
       '<button class="rel-card" data-act="release-hold"' + (canHold ? '' : ' disabled') + '>' +
       '<div class="rel-name">压货到 ' + esc(o.hold.name) + '</div>' +
       '<div class="rel-win good">×' + o.hold.mult.toFixed(2) + ' · 等 ' + Math.round(o.hold.days) + ' 天</div>' +
       '<div class="rel-cost">仓储成本 ' + money(o.hold.cost) + '</div>' +
       '<div class="rel-est">预计 ' + num(holdEst.low) + ' – ' + num(holdEst.high) + ' 份</div>' +
+      clashLine(holdCol) +
       '</button>' +
       '</div>' +
       '<div class="rel-hint">压货要付仓储费，还会拖慢下一部；但如果差一档，它可能值回票价。</div>' +
@@ -758,7 +785,8 @@
     el.stage.innerHTML =
       '<div class="sales">' +
       '<div class="sales-window">' + esc(s.release ? s.release.name : '普通档期') +
-      ' · ×' + (s.release ? s.release.mult : 1).toFixed(2) + '</div>' +
+      ' · ×' + (s.release ? s.release.mult : 1).toFixed(2) +
+      (s.release && s.release.collision ? ' · 撞档 ×' + s.release.collision.mult.toFixed(2) : '') + '</div>' +
       '<div class="sales-head">' +
       '<div class="sales-col"><div class="sales-label">累计销量</div><div class="sales-big" id="copies">0</div></div>' +
       '<div class="sales-col"><div class="sales-label">累计收入</div><div class="sales-big money" id="revenue">$0</div></div>' +

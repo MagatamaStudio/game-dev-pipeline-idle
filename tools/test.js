@@ -590,6 +590,36 @@ function playOne(s, plan, choice) {
   ok('三座奖杯是时代定义者', E.ending(s2).title === '时代定义者', E.ending(s2).title);
 })();
 
+/* ---------- 撞档 ---------- */
+(function () {
+  var s = E.newGame();
+  s.review = { total: 30 };
+  s.day = 100;
+  var wk = E.weekOf(100);
+  ok('周次计算正确', wk === 15, 'wk=' + wk);
+
+  var yr = E.year(s);
+  s.yearRivalReleases = [{ year: yr, week: wk, score: 35, name: '白噪音', title: '第七夜' }];
+  var c = E.collisionAt(s, s.day);
+  ok('对手更强会撞档', !!c.rival && c.mult === 0.78, c.mult + '');
+  ok('撞档信息带作品', c.rival.title === '第七夜');
+
+  s.yearRivalReleases = [{ year: yr, week: wk, score: 25, name: '白噪音', title: '第七夜' }];
+  ok('压过对手有加成', E.collisionAt(s, s.day).mult === 1.08);
+
+  s.yearRivalReleases = [{ year: yr, week: wk + 10, score: 40, name: '白噪音', title: '第七夜' }];
+  ok('错开档期不撞', E.collisionAt(s, s.day).rival === null);
+
+  var s2 = E.newGame();
+  s2.phase = 'release';
+  s2.review = { total: 30, scores: [], revealed: 4, totalShown: true };
+  s2.project = { quality: 35, cost: 100000 };
+  s2.day = 100;
+  s2.yearRivalReleases = [{ year: 1972, week: E.weekOf(100), score: 35, name: '白噪音', title: '第七夜' }];
+  E.confirmRelease(s2, 'now');
+  ok('发售时记录了撞档', !!s2.release.collision && s2.release.collision.mult === 0.78);
+})();
+
 /* ---------- 平衡探针 ---------- */
 (function () {
   var runs = 24;

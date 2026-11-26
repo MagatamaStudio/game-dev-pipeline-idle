@@ -129,7 +129,7 @@ function connect(wsUrl) {
     first.genres === 5 && first.themes === 5 && first.leaders === 3,
     first.genres + '/' + first.themes + '/' + first.leaders);
   check('1972 年只有街机一个平台',
-    first.platforms === 1 && first.platformCode === 'ARC-72', first.platformCode);
+    first.platforms === 1 && first.platformCode.indexOf('雅达瑞') === 0, first.platformCode);
   check('预告面板 7 项', first.previews === 7, 'pv=' + first.previews);
   check('初始进入企划阶段', first.phase === 'planning');
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,

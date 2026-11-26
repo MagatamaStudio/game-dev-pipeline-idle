@@ -9,33 +9,33 @@
    * 11 个主线平台，1972–2002。安装量 = install × 人气系数（按上市年数递减）。
    * cap 是品质上限，price 是单价，license 是每部作品的授权费。 */
   GD.PLATFORMS = [
-    { id: 'arc72', code: 'ARC-72', alias: '', year: 1972, retire: 1981, install: 2.4, license: 6000, price: 26, cap: 45, fav: 'action' },
-    { id: 'l1', code: 'L-1', alias: '', year: 1978, retire: 1987, install: 1.9, license: 9000, price: 18, cap: 50, fav: null },
-    { id: 'l3', code: 'L-3', alias: '客厅盒', year: 1983, retire: 1992, install: 4.0, license: 15000, price: 22, cap: 58, fav: 'action' },
-    { id: 'bm', code: 'B-M', alias: '', year: 1987, retire: 1995, install: 2.6, license: 11000, price: 14, cap: 48, fav: 'puzzle' },
-    { id: 'i16', code: 'I-16', alias: '十六色', year: 1989, retire: 1998, install: 5.0, license: 26000, price: 30, cap: 66, fav: 'rpg' },
-    { id: 'bc', code: 'B-C', alias: '', year: 1992, retire: 2001, install: 3.6, license: 18000, price: 20, cap: 56, fav: 'sim' },
-    { id: 'icd', code: 'I-CD', alias: '', year: 1994, retire: 2003, install: 4.3, license: 40000, price: 40, cap: 74, fav: 'adv' },
-    { id: 'l64', code: 'L-64', alias: '', year: 1996, retire: 2005, install: 3.1, license: 45000, price: 46, cap: 78, fav: 'action' },
-    { id: 'ba', code: 'B-A', alias: '', year: 1998, retire: 2007, install: 4.8, license: 30000, price: 26, cap: 62, fav: 'rpg' },
-    { id: 'i2', code: 'I-2', alias: '黑盒子', year: 2000, retire: 2009, install: 6.0, license: 60000, price: 48, cap: 86, fav: 'action' },
-    { id: 'lg', code: 'L-G', alias: '', year: 2002, retire: 2011, install: 3.2, license: 35000, price: 34, cap: 70, fav: 'sim' },
+    { id: 'arc72', code: 'ARC-72', brand: '雅达瑞', name: '街机板', year: 1972, retire: 1981, install: 2.4, license: 6000, price: 26, cap: 45, fav: 'action' },
+    { id: 'l1', code: 'L-1', brand: '雅达瑞', name: '2600', year: 1978, retire: 1987, install: 1.9, license: 9000, price: 18, cap: 50, fav: null },
+    { id: 'l3', code: 'L-3', brand: '天任', name: 'FC', year: 1983, retire: 1992, install: 4.0, license: 15000, price: 22, cap: 58, fav: 'action' },
+    { id: 'bm', code: 'B-M', brand: '天任', name: '掌上小子', year: 1987, retire: 1995, install: 2.6, license: 11000, price: 14, cap: 48, fav: 'sim' },
+    { id: 'i16', code: 'I-16', brand: '世加', name: 'MD', year: 1989, retire: 1998, install: 5.0, license: 26000, price: 30, cap: 66, fav: 'rpg' },
+    { id: 'bc', code: 'B-C', brand: '世加', name: '掌上彩', year: 1992, retire: 2001, install: 3.6, license: 18000, price: 20, cap: 56, fav: 'sim' },
+    { id: 'icd', code: 'I-CD', brand: '索妮', name: 'PS', year: 1994, retire: 2003, install: 4.3, license: 40000, price: 40, cap: 74, fav: 'adv' },
+    { id: 'l64', code: 'L-64', brand: '天任', name: '64', year: 1996, retire: 2005, install: 3.1, license: 45000, price: 46, cap: 78, fav: 'action' },
+    { id: 'ba', code: 'B-A', brand: '天任', name: '彩色掌机', year: 1998, retire: 2007, install: 4.8, license: 30000, price: 26, cap: 62, fav: 'rpg' },
+    { id: 'i2', code: 'I-2', brand: '索妮', name: '2', year: 2000, retire: 2009, install: 6.0, license: 60000, price: 48, cap: 86, fav: 'action' },
+    { id: 'lg', code: 'L-G', brand: '天任', name: '随身网', year: 2002, retire: 2011, install: 3.2, license: 35000, price: 34, cap: 70, fav: 'sim' },
 
     /* 无尽模式：2002 之后 */
-    { id: 'ihd', code: 'I-HD', alias: '', year: 2005, retire: 2014, install: 6.5, license: 80000, price: 55, cap: 92, fav: 'shooter' },
-    { id: 'dm', code: 'D-M', alias: '', year: 2007, retire: 2016, install: 5.5, license: 55000, price: 45, cap: 88, fav: 'sim' },
-    { id: 'bd', code: 'B-D', alias: '', year: 2011, retire: 2020, install: 5.0, license: 40000, price: 32, cap: 82, fav: 'adv' },
-    { id: 'rm', code: 'R-M', alias: '', year: 2013, retire: 2022, install: 9.0, license: 10000, price: 6, cap: 76, fav: 'sim' },
-    { id: 'lh', code: 'L-H', alias: '', year: 2017, retire: 2026, install: 6.0, license: 50000, price: 60, cap: 95, fav: 'action' },
-    { id: 'oc', code: 'O-C', alias: '', year: 2021, retire: 2030, install: 7.5, license: 30000, price: 40, cap: 100, fav: 'rpg' },
-    { id: 'dv', code: 'D-V', alias: '头显', year: 2026, retire: 2036, install: 3.0, license: 45000, price: 50, cap: 108, fav: 'adv' },
-    { id: 'nl', code: 'N-L', alias: '插头', year: 2033, retire: 2043, install: 4.0, license: 60000, price: 65, cap: 118, fav: 'rpg' },
-    { id: 'op', code: 'O-P', alias: '协议', year: 2040, retire: 2050, install: 8.0, license: 0, price: 45, cap: 125, fav: 'action' },
-    { id: 'm1', code: 'M-1', alias: '', year: 2047, retire: 2057, install: 5.0, license: 35000, price: 55, cap: 130, fav: 'rpg' },
-    { id: 'q1', code: 'Q-1', alias: '舱', year: 2054, retire: 2064, install: 3.5, license: 90000, price: 120, cap: 140, fav: 'adv' },
-    { id: 's1', code: 'S-1', alias: '', year: 2061, retire: 2071, install: 7.0, license: 20000, price: 70, cap: 150, fav: 'sim' },
-    { id: 'v1', code: 'V-1', alias: '', year: 2068, retire: 2078, install: 9.5, license: 0, price: 80, cap: 160, fav: 'action' },
-    { id: 't1', code: 'T-1', alias: '方舟', year: 2075, retire: 2085, install: 4.0, license: 120000, price: 200, cap: 175, fav: 'rpg' }
+    { id: 'ihd', code: 'I-HD', brand: '微硬', name: '360', year: 2005, retire: 2014, install: 6.5, license: 80000, price: 55, cap: 92, fav: 'shooter' },
+    { id: 'dm', code: 'D-M', brand: '天任', name: '体感', year: 2007, retire: 2016, install: 5.5, license: 55000, price: 45, cap: 88, fav: 'sim' },
+    { id: 'bd', code: 'B-D', brand: '天任', name: '双屏', year: 2011, retire: 2020, install: 5.0, license: 40000, price: 32, cap: 82, fav: 'adv' },
+    { id: 'rm', code: 'R-M', brand: '平果', name: '手机', year: 2013, retire: 2022, install: 9.0, license: 10000, price: 6, cap: 76, fav: 'sim' },
+    { id: 'lh', code: 'L-H', brand: '天任', name: '混合', year: 2017, retire: 2026, install: 6.0, license: 50000, price: 60, cap: 95, fav: 'action' },
+    { id: 'oc', code: 'O-C', brand: '云阁', name: '云', year: 2021, retire: 2030, install: 7.5, license: 30000, price: 40, cap: 100, fav: 'rpg' },
+    { id: 'dv', code: 'D-V', brand: '织梦', name: '头显', year: 2026, retire: 2036, install: 3.0, license: 45000, price: 50, cap: 108, fav: 'adv' },
+    { id: 'nl', code: 'N-L', brand: '灵境', name: '神经', year: 2033, retire: 2043, install: 4.0, license: 60000, price: 65, cap: 118, fav: 'rpg' },
+    { id: 'op', code: 'O-P', brand: '万象', name: '协议', year: 2040, retire: 2050, install: 8.0, license: 0, price: 45, cap: 125, fav: 'action' },
+    { id: 'm1', code: 'M-1', brand: '酣梦', name: '眠机', year: 2047, retire: 2057, install: 5.0, license: 35000, price: 55, cap: 130, fav: 'rpg' },
+    { id: 'q1', code: 'Q-1', brand: '全感', name: '舱', year: 2054, retire: 2064, install: 3.5, license: 90000, price: 120, cap: 140, fav: 'adv' },
+    { id: 's1', code: 'S-1', brand: '自衍', name: '种子', year: 2061, retire: 2071, install: 7.0, license: 20000, price: 70, cap: 150, fav: 'sim' },
+    { id: 'v1', code: 'V-1', brand: '现实层', name: '城市', year: 2068, retire: 2078, install: 9.5, license: 0, price: 80, cap: 160, fav: 'action' },
+    { id: 't1', code: 'T-1', brand: '群星', name: '方舟', year: 2075, retire: 2085, install: 4.0, license: 120000, price: 200, cap: 175, fav: 'rpg' }
   ];
 
   /* 人气系数：按「上市年数」查表，取第一个命中的档 */
