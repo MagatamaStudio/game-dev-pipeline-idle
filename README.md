@@ -26,9 +26,9 @@ node tools/serve.js
 
 一局约 90 秒。分数低会亏钱，分数高能回本 3–5 倍。
 
-| 企划 | 开发 | 评审 | 发售 |
-|---|---|---|---|
-| ![企划](docs/m0-planning.png) | ![开发](docs/m0-developing.png) | ![评审](docs/m0-review.png) | ![发售](docs/m0-release.png) |
+| 企划 | 开发 | 事件 | 评审 | 发售 |
+|---|---|---|---|---|
+| ![企划](docs/m0-planning.png) | ![开发](docs/m0-developing.png) | ![事件](docs/m0-event.png) | ![评审](docs/m0-review.png) | ![发售](docs/m0-release.png) |
 
 ## M0 有什么
 

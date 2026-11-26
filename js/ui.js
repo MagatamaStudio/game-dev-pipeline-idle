@@ -342,7 +342,7 @@
     if (!s.event) return;
     var ev = s.event;
     var html = '<div class="modal-card">' +
-      '<div class="modal-tag">开发事件</div>' +
+      '<div class="modal-tag">开发事件 ' + s.project.eventsDone + ' / ' + GD.BAL.eventAts.length + '</div>' +
       '<h3>' + esc(ev.title) + '</h3>' +
       '<p>' + esc(ev.body) + '</p>' +
       '<div class="choices">';

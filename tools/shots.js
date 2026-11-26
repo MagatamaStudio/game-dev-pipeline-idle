@@ -101,11 +101,18 @@ function connect(wsUrl) {
   /* 2. 开发中（档位 + 日志） */
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
   await sleep(700);
-  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.36; })()`);
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.22; })()`);
   await sleep(600);
   await evalJs(`document.querySelector('[data-mode="crunch"]').click()`);
   await sleep(400);
   await shot('m0-02-developing');
+
+  /* 2.5 开发事件 */
+  await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'developing') s.project.progress = 0.31; })()`);
+  await sleep(700);
+  await shot('m0-03-event');
+  await evalJs(`document.querySelector('#event .choice').click()`);
+  await sleep(400);
 
   /* 3. 评审（全部亮分） */
   await evalJs(`(() => {
@@ -115,23 +122,23 @@ function connect(wsUrl) {
   await sleep(400);
   await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'review') s.timer = 5.2; })()`);
   await sleep(500);
-  await shot('m0-03-review');
+  await shot('m0-04-review');
 
   /* 4. 发售决策 */
   await evalJs(`(() => { const s = GD.getState(); if (s.phase === 'review') s.timer = 8; })()`);
   await sleep(600);
-  await shot('m0-04-release');
+  await shot('m0-05-release');
 
   /* 5. 销售 */
   await evalJs(`document.querySelector('[data-act="release-now"]').click()`);
   await sleep(800);
-  await shot('m0-05-sales');
+  await shot('m0-06-sales');
 
   /* 6. 手机端企划 */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await evalJs(`GD.reset()`);
   await sleep(500);
-  await shot('m0-06-mobile');
+  await shot('m0-07-mobile');
 
   cdp.close();
   child.kill();

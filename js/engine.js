@@ -120,7 +120,8 @@
       mode: 'normal',
       modeQSum: 0,
       eventQualityPct: 0,
-      eventFired: false,
+      salesPct: 0,
+      eventsDone: 0,
       quality: 0,
       cost: BAL.license,
       log: [],
@@ -149,8 +150,12 @@
     return name;
   };
 
-  function pickEvent(s) {
-    var pool = GD.EVENTS;
+  function pickEvent(s, when) {
+    var pool = [];
+    for (var i = 0; i < GD.EVENTS.length; i++) {
+      if (!when || GD.EVENTS[i].when === when) pool.push(GD.EVENTS[i]);
+    }
+    if (!pool.length) pool = GD.EVENTS;
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -162,9 +167,10 @@
 
     s.money -= opt.cost;
     s.project.cost += opt.cost;
-    s.project.eventQualityPct += opt.quality;
-    if (opt.progress < 0) {
-      s.project.elapsed = Math.max(0.5, s.project.elapsed * (1 + opt.progress / 100));
+    s.project.eventQualityPct += (opt.quality || 0);
+    s.project.salesPct = (s.project.salesPct || 0) + (opt.sales || 0);
+    if (opt.progress) {
+      s.project.progress = Math.max(0.02, Math.min(0.99, s.project.progress + opt.progress / 100));
     }
     s.lastEvent = { title: s.event.title, choice: opt.label, cost: opt.cost };
     s.event = null;
@@ -291,7 +297,8 @@
     var total = s.review.total;
     var fanF = 1 + s.fans / 25000;
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
-    var mid = BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * mult;
+    var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
+    var mid = BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * mult * salesMult;
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
 
@@ -303,7 +310,8 @@
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var rnd = 0.85 + Math.random() * 0.3;
     var windowMult = s.release ? s.release.mult : 1;
-    var copies = Math.round(BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * rnd * windowMult);
+    var salesMult = 1 + ((s.project.salesPct || 0) / 100);
+    var copies = Math.round(BAL.salesBase * GD.PLATFORM.install * fanF * scoreF * rnd * windowMult * salesMult);
 
     s.sales = {
       total: Math.max(300, copies),
@@ -382,11 +390,13 @@
         s.project.progress = 1;
         E.finishDev(s);
         out.push({ type: 'devDone' });
-      } else if (!s.project.eventFired && s.project.progress >= BAL.eventAt) {
-        s.project.eventFired = true;
-        s.event = pickEvent(s);
+      } else if (s.project.eventsDone < BAL.eventAts.length &&
+        s.project.progress >= BAL.eventAts[s.project.eventsDone]) {
+        var when = s.project.eventsDone === 0 ? 'early' : 'late';
+        s.event = pickEvent(s, when);
+        s.project.eventsDone++;
         s.phase = 'event';
-        out.push({ type: 'event' });
+        out.push({ type: 'event', index: s.project.eventsDone });
       }
     }
 

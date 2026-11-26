@@ -89,9 +89,9 @@ function playOne(s, plan, choice) {
 (function () {
   var s = E.newGame();
   E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
-  s.project.progress = BAL.eventAt + 0.01;
+  s.project.progress = BAL.eventAts[0] + 0.01;
   E.tick(s, 1 / 30);
-  ok('45% 触发事件', s.phase === 'event' && !!s.event);
+  ok('30% 触发第一个事件', s.phase === 'event' && !!s.event);
 
   var moneyBefore = s.money;
   var okChoice = E.chooseEvent(s, 0);
@@ -101,7 +101,7 @@ function playOne(s, plan, choice) {
   var s2 = E.newGame();
   E.startProject(s2, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
   s2.phase = 'event';
-  s2.event = GD.EVENTS[1];          // 硬盘烧了，选项 0 花钱
+  s2.event = GD.EVENTS.filter(function (e) { return e.id === 'disk'; })[0];  // 硬盘烧了，选项 0 花钱
   s2.money = 100;
   ok('钱不够不能选付费选项', E.chooseEvent(s2, 0) === false);
   ok('钱不够可以选免费选项', E.chooseEvent(s2, 1) === true);
@@ -147,6 +147,7 @@ function playOne(s, plan, choice) {
   var s4 = E.newGame();
   E.startProject(s4, plan);
   E.setMode(s4, 'crunch');
+  s4.project.eventsDone = BAL.eventAts.length;   // 本测试不触发事件
   for (var i = 0; i < 10; i++) E.tick(s4, 1);
   ok('品质修正按停留时间累积', Math.abs(s4.project.modeQSum + 60) < 1.5,
     'sum=' + s4.project.modeQSum.toFixed(1));
@@ -159,12 +160,38 @@ function playOne(s, plan, choice) {
   /* 总成本 = 授权 + 工资（这次不触发事件） */
   var s5 = E.newGame();
   E.startProject(s5, plan);
-  s5.project.eventFired = true;
+  s5.project.eventsDone = BAL.eventAts.length;
   var guard = 0;
   while (s5.phase !== 'review' && guard++ < 20000) E.tick(s5, 1 / 30);
   var expectCost = GD.BAL.license + GD.BAL.salaryPerDay * GD.BAL.daysPerSecond * s5.project.elapsed;
   ok('总成本 = 授权 + 工资', Math.abs(s5.project.cost - expectCost) < 50,
     Math.round(s5.project.cost) + ' vs ' + Math.round(expectCost));
+})();
+
+/* ---------- 两次事件 ---------- */
+(function () {
+  var s = E.newGame();
+  E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
+  var seen = [], guard = 0;
+  while (s.phase !== 'review' && guard++ < 20000) {
+    E.tick(s, 1 / 30);
+    if (s.phase === 'event') {
+      seen.push(s.event.when);
+      if (!E.chooseEvent(s, 0)) E.chooseEvent(s, 1);
+    }
+  }
+  ok('一部作品触发两次事件', seen.length === 2, JSON.stringify(seen));
+  ok('第一次是早期事件', seen[0] === 'early', seen[0]);
+  ok('第二次是后期事件', seen[1] === 'late', seen[1]);
+  ok('事件计数到 2', s.project.eventsDone === 2);
+
+  var s2 = E.newGame();
+  s2.review = { total: 26, scores: [], revealed: 4, totalShown: true };
+  s2.project = { quality: 30, salesPct: -20 };
+  var low = E.estimateSales(s2, 1).mid;
+  s2.project.salesPct = 0;
+  var base = E.estimateSales(s2, 1).mid;
+  ok('事件能影响销量预估', low < base * 0.85, low + ' vs ' + base);
 })();
 
 /* ---------- 评审 ---------- */

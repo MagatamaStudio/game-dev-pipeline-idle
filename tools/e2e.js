@@ -188,7 +188,7 @@ function connect(wsUrl) {
   check('开发日志在滚动', logCount.lines > 0, logCount.text.slice(0, 20));
 
   /* ---------- 5. 事件 ---------- */
-  await evalJs(`(() => { const s = GD.getState(); s.project.progress = 0.46; })()`);
+  await evalJs(`(() => { const s = GD.getState(); s.project.progress = 0.31; })()`);
   await sleep(250);
   var eventShown = await evalJs(`({
     phase: GD.getState().phase,
@@ -196,7 +196,7 @@ function connect(wsUrl) {
     options: document.querySelectorAll('#event .choice').length,
     title: (document.querySelector('#event h3') || {}).textContent
   })`);
-  check('45% 弹出事件', eventShown.phase === 'event' && eventShown.visible === true, eventShown.title);
+  check('30% 弹出第一个事件', eventShown.phase === 'event' && eventShown.visible === true, eventShown.title);
   check('事件至少两个选项', eventShown.options >= 2, 'options=' + eventShown.options);
 
   await evalJs(`document.querySelector('#event .choice').click()`);
