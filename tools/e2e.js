@@ -135,6 +135,55 @@ function connect(wsUrl) {
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
     'stage=' + first.stage.h + ' office=' + first.office.h);
 
+  /* ---------- 1.2 像素办公室画布 ---------- */
+  var scene = await evalJs(`(() => {
+    const cv = document.getElementById('office-scene');
+    if (!cv || !cv.getContext) return { ok: false };
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let sum = 0, sum2 = 0, n = 0;
+    const colors = new Set();
+    for (let i = 0; i < d.length; i += 4 * 7) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const L = 0.299 * r + 0.587 * g + 0.114 * b;
+      sum += L; sum2 += L * L; n++;
+      colors.add((r >> 4) + ',' + (g >> 4) + ',' + (b >> 4));
+    }
+    const mean = sum / n;
+    return {
+      ok: true, w: cv.width, h: cv.height,
+      mean: Math.round(mean),
+      sd: Math.round(Math.sqrt(Math.max(0, sum2 / n - mean * mean))),
+      colors: colors.size
+    };
+  })()`);
+  check('办公室画布尺寸正常', scene.ok && scene.w > 40 && scene.h >= 30, 'w=' + scene.w + ' h=' + scene.h);
+  check('办公室画面不是空白', scene.sd > 8 && scene.colors > 8,
+    'sd=' + scene.sd + ' colors=' + scene.colors + ' mean=' + scene.mean);
+
+  /* 时代切换之后画面必须真的换掉 */
+  var eraShift = await evalJs(`(() => {
+    const cv = document.getElementById('office-scene');
+    const snap = () => {
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 4 * 11) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0;
+      return h;
+    };
+    const st = GD.getState();
+    const before = snap();
+    const fake = {
+      day: (2013 - GD.BAL.startYear) * GD.BAL.daysPerYear,
+      phase: 'developing', seats: 3, staff: st.staff,
+      plan: { leader: st.staff[0].id }
+    };
+    GD.Office.sync(fake); GD.Office.renderNow();
+    const after = snap();
+    GD.Office.sync(st); GD.Office.renderNow();
+    return { changed: before !== after, before: before, after: after };
+  })()`);
+  check('时代切换会换掉办公室画面', eraShift.changed === true,
+    eraShift.before + ' → ' + eraShift.after);
+
   /* ---------- 1.5 团队与作品集面板 ---------- */
   await evalJs(`document.querySelector('[data-act="team"]').click()`);
   await sleep(220);

@@ -32,29 +32,19 @@
   }
 
   function avatarSvg(seed) {
+    if (GD.Office && GD.Office.avatarSvg) return GD.Office.avatarSvg(seed);
+    /* 极端降级：office.js 没加载时也不能白板 */
     var h = hash(String(seed));
-    var skin = SKINS[h % 4];
-    var hair = HAIRS[(h >> 3) % 6];
-    var shirt = SHIRTS[(h >> 6) % 6];
-    var rows = [
-      '  hhhh  ',
-      ' hhhhhh ',
-      ' hffffh ',
-      ' ffffff ',
-      ' fEffEf ',
-      '  ssss  ',
-      ' ssssss ',
-      ' ss  ss '
-    ];
+    var rows = ['..hhhh..', '.hhhhhh.', '.hffffh.', '.ffffff.', '.fEffEf.', '..ssss..', '.ssssss.', '.ss..ss.'];
     var rects = '';
+    var cols = { h: HAIRS[h % 6], f: SKINS[h % 4], s: SHIRTS[(h >>> 6) % 6], E: '#20202a' };
     for (var y = 0; y < rows.length; y++) {
       for (var x = 0; x < 8; x++) {
-        var ch = rows[y][x];
-        var c = ch === 'h' ? hair : ch === 'f' ? skin : ch === 's' ? shirt : ch === 'E' ? '#20202a' : null;
+        var c = cols[rows[y][x]];
         if (c) rects += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>';
       }
     }
-    return '<svg viewBox="0 0 8 8" width="64" height="64" shape-rendering="crispEdges" aria-hidden="true">' + rects + '</svg>';
+    return '<svg viewBox="0 0 8 8" width="100%" height="100%" shape-rendering="crispEdges" aria-hidden="true">' + rects + '</svg>';
   }
 
   function topStats(st) {
@@ -75,6 +65,7 @@
     el.platform = byId('platform');
     el.date = byId('date');
     el.desks = byId('desks');
+    el.scene = byId('office-scene');
     el.stage = byId('stage');
     el.hint = byId('hint');
     el.review = byId('review');
@@ -91,6 +82,7 @@
     applyTheme(savedTheme);
 
     buildOffice();
+    if (GD.Office && el.scene) GD.Office.mount(el.scene);
     bind();
     UI.render();
   };
@@ -98,6 +90,7 @@
   function applyTheme(t) {
     document.body.setAttribute('data-theme', t);
     if (el.theme) el.theme.textContent = t === 'dark' ? '☀' : '☾';
+    if (GD.Office) GD.Office.invalidate();
     try { localStorage.setItem('garageStudio.theme', t); } catch (e) { }
   }
 
@@ -262,6 +255,7 @@
     }
     updateStage();
     updateOffice();
+    if (GD.Office) GD.Office.sync(s);
   };
 
   function buildStage() {
