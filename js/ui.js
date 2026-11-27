@@ -777,7 +777,7 @@
       E.ensurePlanPlatform(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
       var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform +
-        '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + E.year(s);
+        '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + (s.plan.coop || '') + '|' + E.year(s);
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
     } else if (s.phase === 'developing') {
       var bar = byId('dev-bar');
@@ -963,6 +963,22 @@
     });
     html += '</div></div>';
 
+    /* 联合开发：找一家对手一起做 */
+    var coopList = E.coopOptions(s);
+    if (coopList.length) {
+      html += '<div class="plan-group"><div class="plan-label">联合开发' +
+        '<span class="plan-label-hint">对方分担 40% 成本 · 分走 ' +
+        Math.round(GD.BAL.coopRevenueShare * 100) + '% 收入</span></div><div class="chips">';
+      html += '<button class="chip' + (!s.plan.coop ? ' on' : '') + '" data-plan="coop:">自己扛</button>';
+      coopList.forEach(function (r) {
+        var ci = E.coopInfo(s, r, s.plan.genre);
+        html += '<button class="chip' + (s.plan.coop === r.id ? ' on' : '') +
+          (ci.match ? ' hot' : '') + '" data-plan="coop:' + r.id + '">' + esc(r.name) +
+          '<span class="ci">' + esc(E.genre(r.genre).name) + (ci.match ? ' 对口' : '') + '</span></button>';
+      });
+      html += '</div></div>';
+    }
+
     html += '<div class="preview">' +
       '<div class="pv"><label>作品</label><b>' + esc(g.name) + ' · ' + esc(t.name) + '</b></div>' +
       (p.sequel
@@ -976,6 +992,11 @@
       '<div class="pv"><label>成本</label><b>' + money(p.cost) + '</b></div>' +
       '<div class="pv"><label>平台装机</label><b>' + E.effInstall(s, E.platform(s)).toFixed(1) + '</b></div>' +
       '<div class="pv"><label>主创</label><b>' + esc(leader.name) + '</b></div>' +
+      (p.coop
+        ? '<div class="pv"><label>联合开发</label><b class="good">' + esc(p.coop.name) +
+          '（品质 ×' + p.coop.qualityMul.toFixed(2) + ' · 销量 ×' + p.coop.salesMul.toFixed(2) +
+          ' · 分成 ' + Math.round(p.coop.share * 100) + '%）</b></div>'
+        : '') +
       '</div>';
 
     var enough = s.money >= GD.BAL.license;

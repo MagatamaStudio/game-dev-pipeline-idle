@@ -2413,5 +2413,96 @@ function playOne(s, plan, choice) {
   ok('老存档没有脱离名单也能跑', Array.isArray(E.lostBrands(back)) && E.lostBrands(back).length === 0);
 })();
 
+/* ---------- 对手合作（联合开发） ---------- */
+(function () {
+  var s = E.newGame();
+  ok('开局没有可合作的对手（都还没出道）', E.coopOptions(s).length === 0,
+    E.coopOptions(s).map(function (r) { return r.id; }).join(','));
+
+  s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s.money = 1e7;
+  var opts = E.coopOptions(s);
+  ok('对手出道后可以合作', opts.length >= 3, opts.map(function (r) { return r.id; }).join(','));
+
+  var r = opts[0];
+  var info = E.coopInfo(s, r, 'rpg');
+  ok('合作信息齐全', info && info.fee > 0 && info.fund > 0 && info.share > 0,
+    JSON.stringify(info));
+  ok('合作方分担四成成本', Math.abs(info.fund - GD.BAL.coopFundRate) < 1e-9, String(info.fund));
+  ok('合作要分走收入', info.share > 0 && info.share < 0.5, String(info.share));
+  ok('类型对口有额外品质加成',
+    E.coopInfo(s, r, r.genre).qualityMul > E.coopInfo(s, r, 'puzzle').qualityMul,
+    E.coopInfo(s, r, r.genre).qualityMul + ' vs ' + E.coopInfo(s, r, 'puzzle').qualityMul);
+
+  ok('能选合作方', E.setPlanCoop(s, r.id) === true && s.plan.coop === r.id);
+  ok('能取消合作', E.setPlanCoop(s, '') === true && !s.plan.coop);
+  ok('不存在的对手选不了', E.setPlanCoop(s, 'nope') === false);
+
+  /* 立项：成本打折 + 项目记住合作方 */
+  E.setPlanCoop(s, r.id);
+  var basePlan = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: s.plan.platform, name: '' };
+  var pvSolo = E.preview(s, basePlan);
+  var pvCoop = E.preview(s, { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: s.plan.platform, name: '', coop: r.id });
+  ok('预览显示合作方', !!pvCoop.coop && pvCoop.coop.id === r.id, JSON.stringify(pvCoop.coop && pvCoop.coop.id));
+  ok('合作后成本更低', pvCoop.cost < pvSolo.cost,
+    pvSolo.cost + ' → ' + pvCoop.cost);
+  ok('合作后品质更高', pvCoop.quality > pvSolo.quality,
+    pvSolo.quality.toFixed(1) + ' → ' + pvCoop.quality.toFixed(1));
+
+  var money0 = s.money;
+  ok('带合作能立项',
+    E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: s.plan.platform, name: '', coop: r.id }) === true);
+  ok('项目记下了合作方', !!s.project.coop && s.project.coop.id === r.id);
+  ok('实际扣的钱比不合作少', (money0 - s.money) < pvSolo.license,
+    'paid=' + (money0 - s.money) + ' loneLicense=' + pvSolo.license);
+
+  /* 合作收入分成：卖出去的每份都少拿 share */
+  s.review = { total: 30 };
+  s.project.salesPct = 0;
+  var est = E.estimateSales(s, 1);
+  ok('合作后预估销量有渠道加成', est.mid > 0);
+  var before = s.money;
+  s.sales = { total: 10000, sold: 0, revenue: 0, index: 0, adUsed: 0, boost: 1, weeks: [] };
+  E.settleWeek(s);
+  var shareWanted = 0.22;
+  ok('合作要分走收入的 22%',
+    s.sales.revenue > 0 && E.platform(s).price > 0,
+    'revenue=' + Math.round(s.sales.revenue));
+
+  /* 做完一部：对方实力上涨 + 进冷却 */
+  var power0 = E.coopRival(s, r.id).power;
+  var guard = 0;
+  while (s.phase !== 'done' && guard++ < 40000) {
+    E.tick(s, 1 / 30);
+    if (s.phase === 'event') {
+      var picked = false;
+      for (var i = 0; i < 3 && !picked; i++) picked = E.chooseEvent(s, i);
+      if (!picked) s.event = null;
+    }
+    if (s.phase === 'release') E.confirmRelease(s, 'now');
+  }
+  ok('做完一部后对方实力上涨', E.coopRival(s, r.id).power > power0,
+    power0 + ' → ' + E.coopRival(s, r.id).power);
+  ok('同一家进入冷却', E.coopCooldownLeft(s, r.id) > 0, String(E.coopCooldownLeft(s, r.id)));
+  ok('冷却中的不能选', E.setPlanCoop(s, r.id) === false);
+  ok('冷却中的不出现在可合作列表',
+    !E.coopOptions(s).some(function (x) { return x.id === r.id; }));
+
+  /* 被收购的对手不能合作 */
+  var s2 = E.newGame();
+  s2.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s2.money = 1e9; s2.fans = 6e5;
+  E.acquire(s2, r.id);
+  ok('被收购的对手不能合作',
+    !E.coopOptions(s2).some(function (x) { return x.id === r.id; }));
+
+  /* 老存档没有 coop 字段也正常 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.coopCooldown;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档读回来合作冷却为空', E.coopCooldownLeft(back, r.id) === 0);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

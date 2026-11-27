@@ -307,7 +307,8 @@
   E.preview = function (s, plan) {
     var sq = E.planSequelOf(s, plan);
     var affMul = sq ? BAL.sequelAffinity : 1;
-    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul);
+    var coop = E.planCoopInfo(s, plan);
+    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul) * (coop ? coop.qualityMul : 1);
     /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据。
      * 指定平台不合法（未上市/已退市）时退回当前可用平台。 */
     var p = E.planPlatform(s, plan);
@@ -321,9 +322,10 @@
         E.nostalgiaSalesMul(E.year(s), plan.genre),
       nostalgia: E.nostalgiaFor(E.year(s)),
       quality: q,
+      coop: coop,
       duration: duration,
       days: days,
-      cost: p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMultFor(s, p),
+      cost: Math.round((p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMultFor(s, p)) * (coop ? (1 - coop.fund) : 1)),
       platform: p.id,
       license: p.license,
       scoreLow: Math.max(1, Math.min(40, Math.round(40 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 * 0.92))),
@@ -686,6 +688,7 @@
       brands: [],
       myPlatform: null,
       rulesPaid: [],
+      coopCooldown: {},
       lostBrands: [],
       platformCrashes: 0,
       crashedPlatforms: [],
@@ -1469,7 +1472,80 @@
     return { ok: true, cost: cost, brand: brand };
   };
 
-  /* 子品牌每月的被动收入 */
+  /* ---------------- 对手合作（联合开发） ----------------
+   * 找一家还没被收购的对手一起做：对方分担 40% 开发成本、贡献品质和渠道，
+   * 代价是收入分出去 22%、自家风格被稀释（合作期间不能用自家王牌组合的加成占满），
+   * 而且对方会从合作里学到东西（实力上涨）。同一家合作完要缓几部。 */
+
+  E.coopCooldownLeft = function (s, rivalId) {
+    var cd = s.coopCooldown || {};
+    var until = cd[rivalId] || 0;
+    return Math.max(0, until - (s.round || 1));
+  };
+
+  E.coopRival = function (s, id) {
+    if (!id) return null;
+    for (var i = 0; i < s.rivals.length; i++) if (s.rivals[i].id === id) return s.rivals[i];
+    return null;
+  };
+
+  /* 能一起做游戏的对手 */
+  E.coopOptions = function (s) {
+    var out = [];
+    var yr = E.year(s);
+    for (var i = 0; i < s.rivals.length; i++) {
+      var r = s.rivals[i];
+      if (r.acquired) continue;
+      if (yr < r.debut) continue;
+      if (E.coopCooldownLeft(s, r.id) > 0) continue;
+      out.push(r);
+    }
+    return out;
+  };
+
+  E.coopFee = function (s, r) {
+    if (!r) return 0;
+    return Math.round(BAL.coopFeeBase * (0.7 + r.power) * E.inflation(s));
+  };
+
+  /* 合作能带来什么：给界面预览用 */
+  E.coopInfo = function (s, r, genreId) {
+    if (!r) return null;
+    var match = !!(genreId && r.genre === genreId);
+    var qMul = 1 + r.power * BAL.coopQuality + (match ? BAL.coopQualityMatch : 0);
+    return {
+      id: r.id, name: r.name, genre: r.genre,
+      match: match,
+      fee: E.coopFee(s, r),
+      fund: BAL.coopFundRate,
+      qualityMul: Math.round(qMul * 1000) / 1000,
+      salesMul: BAL.coopSales,
+      share: BAL.coopRevenueShare,
+      cooldown: E.coopCooldownLeft(s, r.id)
+    };
+  };
+
+  /* 企划里选合作方：'' 表示自己做 */
+  E.setPlanCoop = function (s, rivalId) {
+    if (!s.plan) return false;
+    if (!rivalId) { s.plan.coop = null; return true; }
+    var r = E.coopRival(s, rivalId);
+    if (!r) return false;
+    if (E.coopOptions(s).indexOf(r) < 0) return false;
+    s.plan.coop = rivalId;
+    return true;
+  };
+
+  E.planCoopInfo = function (s, plan) {
+    var p = plan || s.plan || {};
+    if (!p.coop) return null;
+    var r = E.coopRival(s, p.coop);
+    if (!r) return null;
+    if (E.coopOptions(s).indexOf(r) < 0) return null;
+    return E.coopInfo(s, r, p.genre);
+  };
+
+  /* 月度被动收入 */
   E.brandIncome = function (s) {
     var list = E.brands(s), sum = 0;
     for (var i = 0; i < list.length; i++) sum += list[i].power * BAL.brandPerMonth;
@@ -1684,10 +1760,15 @@
     /* 续作：继承系列编号，开发更快、相性打折 */
     var sq = E.planSequelOf(s, plan);
 
+    /* 合作方：分担开发成本、贡献品质与渠道，代价是收入分成 */
+    var coop = E.planCoopInfo(s, plan);
+
     s.plan = {
       genre: plan.genre, theme: themeId, leader: plan.leader, platform: plat.id,
-      name: plan.name || '', sequel: sq ? sq.index : null
+      name: plan.name || '', sequel: sq ? sq.index : null,
+      coop: coop ? coop.id : null
     };
+    if (coop) lic = Math.round(lic * (1 - coop.fund));
     s.money -= lic;
     s.project = {
       baseDuration: E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1),
@@ -1703,6 +1784,7 @@
       quality: 0,
       cost: lic,
       sequel: sq,
+      coop: coop,
       log: [],
       logAt: 0
     };
@@ -1790,6 +1872,8 @@
     var avgMode = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
     var q = E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader, E.planAffMul(s));
     q *= 1 + ((s.project.eventQualityPct || 0) + avgMode) / 100;
+    /* 联合开发：对方的开发实力摊进品质 */
+    if (s.project.coop) q *= s.project.coop.qualityMul;
     q += Math.random() * 6 - 3;
     return Math.max(5, Math.min(100, q));
   }
@@ -1957,7 +2041,9 @@
     /* 今年是不是怀旧潮（老类型整年好卖） */
     var trendMult = E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme);
     var nostMult = E.nostalgiaSalesMul(E.year(s), s.plan.genre);
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * nostMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
+    /* 联合开发：借用对方的渠道，销量上一个台阶 */
+    var coopSales = (s.project && s.project.coop) ? s.project.coop.salesMul : 1;
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * nostMult * coopSales * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -1977,7 +2063,8 @@
     var i = s.sales.index;
     var frac = GD.SALES_CURVE[i] || 0.011;
     var copies = Math.round(s.sales.total * frac * s.sales.boost);
-    var revenue = copies * E.platform(s).price * (BAL.publisherCut + E.ruleDelta(s, 'cut'));
+    var share = (s.project && s.project.coop) ? s.project.coop.share : 0;
+    var revenue = copies * E.platform(s).price * (BAL.publisherCut + E.ruleDelta(s, 'cut') - share);
 
     s.money += revenue;
     s.totalEarned += revenue;
@@ -2138,6 +2225,13 @@
         if (s.yearWorks.length > 60) s.yearWorks.shift();
         /* 士气 / 体力：做完一部结算一次 */
         E.settleMood(s);
+        /* 合作收尾：对方学到东西（实力小涨），同一家要缓几部才能再合作 */
+        if (s.project.coop) {
+          var cr = E.coopRival(s, s.project.coop.id);
+          if (cr) cr.power = Math.round((cr.power + 0.04) * 100) / 100;
+          if (!s.coopCooldown) s.coopCooldown = {};
+          s.coopCooldown[s.project.coop.id] = (s.round || 1) + BAL.coopCooldownRounds;
+        }
         /* 行业影响力：出片就有，分高的多给一点。2075 之后靠它选规则 */
         E.addInfluence(s, E.influenceGain(s.review.total));
         /* 做完一部：解锁 2 个新组合（NG+ 多给 1 个）；如果这次用的是传说组合，记一笔 */

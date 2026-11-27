@@ -614,6 +614,46 @@ function connect(wsUrl) {
   check('买回扣钱并弹提示',
     bbUI.spent > 0 && (bbUI.toast || '').indexOf('买回') >= 0, 'spent=' + bbUI.spent + ' / ' + bbUI.toast);
 
+  /* ---------- 1.996 对手合作（联合开发） ---------- */
+  var coopUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepMoney = s.money;
+    var out = {};
+    try {
+      s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.money = 1e7;
+      s.phase = 'planning';
+      s.plan.coop = null;
+      GD.UI.render();
+      out.chips = document.querySelectorAll('#stage [data-plan^="coop:"]').length;
+      out.selfOn = document.querySelectorAll('#stage [data-plan="coop:"].on').length;
+      out.label = [].map.call(document.querySelectorAll('#stage .plan-label-hint'),
+        function (x) { return x.textContent; }).join(' | ');
+
+      /* 选一家对手，看预览里的联合开发行 */
+      var btn = document.querySelector('#stage [data-plan^="coop:"]:not([data-plan="coop:"])');
+      out.pick = btn ? btn.getAttribute('data-plan') : '';
+      if (btn) btn.click();
+      out.planCoop = s.plan.coop;
+      out.previewText = [].map.call(document.querySelectorAll('#stage .preview .pv'),
+        function (x) { return x.textContent; }).join(' | ');
+      out.coopOn = document.querySelectorAll('#stage [data-plan^="coop:"].on').length;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay; s.money = keepMoney; s.plan.coop = null;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('企划里有联合开发选项', !coopUI.err && coopUI.chips >= 4 && coopUI.selfOn === 1,
+    coopUI.err || ('chips=' + coopUI.chips + ' selfOn=' + coopUI.selfOn));
+  check('联合开发写明分成代价', (coopUI.label || '').indexOf('分走') >= 0, coopUI.label);
+  check('能选中一家对手合作',
+    (coopUI.pick || '').indexOf('coop:') === 0 && coopUI.pick !== 'coop:' && !!coopUI.planCoop,
+    coopUI.pick + ' → ' + coopUI.planCoop);
+  check('预览里显示联合开发效果',
+    (coopUI.previewText || '').indexOf('联合开发') >= 0 &&
+    (coopUI.previewText || '').indexOf('分成') >= 0, coopUI.previewText);
+  check('选中的合作方高亮', coopUI.coopOn === 1, 'coopOn=' + coopUI.coopOn);
+
   /* ---------- 1.9 研究面板 ---------- */
   await evalJs(`document.querySelector('[data-act="research"]').click()`);
   await sleep(220);
@@ -754,9 +794,13 @@ function connect(wsUrl) {
     return { before: before, target: target };
   })()`);
   await sleep(200);
-  var afterPick = await evalJs(`({ theme: GD.getState().plan.theme, on: document.querySelectorAll('.chip.on').length })`);
-  check('点击题材会改变企划', afterPick.theme === themePick.target && afterPick.on === 4,
-    themePick.before + ' → theme=' + afterPick.theme + ' on=' + afterPick.on);
+  var afterPick = await evalJs(`({ theme: GD.getState().plan.theme, on: document.querySelectorAll('.chip.on').length,
+    platOn: document.querySelectorAll('#stage [data-plan^="platform:"].on').length,
+    coopOn: document.querySelectorAll('#stage [data-plan^="coop:"].on').length })`);
+  check('点击题材会改变企划', afterPick.theme === themePick.target && afterPick.platOn === 1 &&
+    afterPick.coopOn === 1,
+    themePick.before + ' → theme=' + afterPick.theme + ' on=' + afterPick.on +
+    ' plat=' + afterPick.platOn + ' coop=' + afterPick.coopOn);
 
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);

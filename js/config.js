@@ -1153,6 +1153,16 @@ GD.DECLARATIONS_RETRY = [
     /* 子品牌：破产脱离后可以按 0.8 折买回来 */
     buybackRate: 0.8,
 
+    /* 对手合作（联合开发）：对方分担开发成本，但分成和你的独立性要付代价。
+     * 类型对得上加成更高 —— 找对搭档是决策，不是无脑点。 */
+    coopFundRate: 0.40,      // 合作方分担 40% 开发成本
+    coopSales: 1.15,         // 对方渠道带量
+    coopRevenueShare: 0.22,  // 分给对方 22% 收入
+    coopQuality: 0.10,       // 基础品质加成（按对方实力放大）
+    coopQualityMatch: 0.06,  // 类型对得上再加
+    coopFeeBase: 90000,      // 一次性签约费
+    coopCooldownRounds: 4,   // 同一家合作后要缓几部
+
     /* 对手强度：跟着年代抬，1990 年代后期要能真的压住你 */
     rivalBase: 27,
     rivalYearSlope: 0.44,
