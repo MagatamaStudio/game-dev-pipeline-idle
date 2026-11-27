@@ -145,8 +145,8 @@ function connect(wsUrl) {
 
   check('无横向溢出', first.overflow <= 0, 'overflow=' + first.overflow);
   check('办公室有 3 个人', first.desks === 3 && first.avatars === 3);
-  check('企划有 5 类型 / 5 题材 / 3 主创',
-    first.genres === 5 && first.themes === 5 && first.leaders === 3,
+  check('企划有 10 类型 / 10 题材 / 3 主创',
+    first.genres === 10 && first.themes === 10 && first.leaders === 3,
     first.genres + '/' + first.themes + '/' + first.leaders);
   check('1972 年只有街机一个平台',
     first.platforms === 1 && first.platformCode.indexOf('雅达瑞') === 0, first.platformCode);
@@ -560,7 +560,7 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="next"]').click()`);
   await sleep(300);
   var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, genres: document.querySelectorAll('[data-plan^="genre:"]').length })`);
-  check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.genres === 5);
+  check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.genres === 10);
 
   /* ---------- 8.5 作品集与存档 ---------- */
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);

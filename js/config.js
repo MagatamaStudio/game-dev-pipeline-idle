@@ -55,7 +55,12 @@
     { id: 'action', name: '动作', icon: '✦', weights: { code: .45, script: .15, art: .25, audio: .15 } },
     { id: 'shooter', name: '射击', icon: '◎', weights: { code: .40, script: .15, art: .25, audio: .20 } },
     { id: 'adv', name: '冒险', icon: '❖', weights: { code: .20, script: .40, art: .25, audio: .15 } },
-    { id: 'sim', name: '模拟', icon: '⚙', weights: { code: .35, script: .20, art: .30, audio: .15 } }
+    { id: 'sim', name: '模拟', icon: '⚙', weights: { code: .35, script: .20, art: .30, audio: .15 } },
+    { id: 'puzzle', name: '解谜', icon: '✧', weights: { code: .35, script: .20, art: .30, audio: .15 } },
+    { id: 'sports', name: '体育', icon: '⚡', weights: { code: .35, script: .10, art: .30, audio: .25 } },
+    { id: 'strategy', name: '策略', icon: '♜', weights: { code: .40, script: .25, art: .20, audio: .15 } },
+    { id: 'horror', name: '恐怖', icon: '☠', weights: { code: .20, script: .35, art: .30, audio: .15 } },
+    { id: 'rhythm', name: '音游', icon: '♪', weights: { code: .30, script: .10, art: .25, audio: .35 } }
   ];
 
   /* ---------------- 题材 ---------------- */
@@ -64,16 +69,27 @@
     { id: 'scifi', name: '科幻', icon: '◈' },
     { id: 'medieval', name: '中世纪', icon: '⚑' },
     { id: 'modern', name: '现代', icon: '▤' },
-    { id: 'warring', name: '战国', icon: '⚔' }
+    { id: 'warring', name: '战国', icon: '⚔' },
+    { id: 'cyber', name: '赛博', icon: '⌁' },
+    { id: 'myth', name: '神话', icon: '✶' },
+    { id: 'school', name: '校园', icon: '✎' },
+    { id: 'post', name: '末世', icon: '▨' },
+    { id: 'idol', name: '偶像', icon: '♡' }
   ];
 
-  /* 相性表：行=类型，列=题材（顺序同上） */
+  /* 相性表：行=类型，列=题材，10×10 全填。
+   * ≥1.30 的算「传说组合」，一共 12 格；其余自动生成评语。 */
   GD.COMBO = {
-    rpg: { fantasy: 1.35, scifi: 1.15, medieval: 1.25, modern: 0.95, warring: 1.30 },
-    action: { fantasy: 1.05, scifi: 1.10, medieval: 1.10, modern: 1.15, warring: 1.15 },
-    shooter: { fantasy: 0.95, scifi: 1.20, medieval: 0.85, modern: 1.10, warring: 0.90 },
-    adv: { fantasy: 1.15, scifi: 1.10, medieval: 1.25, modern: 1.05, warring: 1.05 },
-    sim: { fantasy: 1.00, scifi: 1.05, medieval: 1.05, modern: 1.20, warring: 1.00 }
+    rpg: { fantasy: 1.35, scifi: 1.15, medieval: 1.25, modern: 0.95, warring: 1.30, cyber: 1.05, myth: 1.30, school: 0.90, post: 1.10, idol: 0.85 },
+    action: { fantasy: 1.05, scifi: 1.10, medieval: 1.10, modern: 1.15, warring: 1.15, cyber: 1.30, myth: 1.05, school: 0.95, post: 1.15, idol: 0.90 },
+    shooter: { fantasy: 0.95, scifi: 1.20, medieval: 0.85, modern: 1.10, warring: 0.90, cyber: 1.15, myth: 0.90, school: 0.85, post: 1.30, idol: 0.80 },
+    adv: { fantasy: 1.15, scifi: 1.10, medieval: 1.25, modern: 1.05, warring: 1.05, cyber: 1.15, myth: 1.20, school: 1.20, post: 1.15, idol: 1.00 },
+    sim: { fantasy: 1.00, scifi: 1.05, medieval: 1.05, modern: 1.20, warring: 1.00, cyber: 1.10, myth: 0.95, school: 1.30, post: 1.00, idol: 1.20 },
+    puzzle: { fantasy: 1.10, scifi: 1.10, medieval: 1.05, modern: 1.10, warring: 1.00, cyber: 1.20, myth: 1.15, school: 1.10, post: 1.05, idol: 1.00 },
+    sports: { fantasy: 1.00, scifi: 1.00, medieval: 0.95, modern: 1.20, warring: 1.00, cyber: 1.05, myth: 1.00, school: 1.30, post: 1.05, idol: 1.15 },
+    strategy: { fantasy: 1.10, scifi: 1.20, medieval: 1.30, modern: 1.00, warring: 1.35, cyber: 1.15, myth: 1.15, school: 0.90, post: 1.15, idol: 0.85 },
+    horror: { fantasy: 1.05, scifi: 1.10, medieval: 1.15, modern: 1.10, warring: 0.95, cyber: 1.20, myth: 1.30, school: 1.20, post: 1.30, idol: 0.85 },
+    rhythm: { fantasy: 1.00, scifi: 1.05, medieval: 0.90, modern: 1.15, warring: 0.90, cyber: 1.20, myth: 1.00, school: 1.25, post: 1.00, idol: 1.35 }
   };
 
   /* ---------------- 员工 ----------------

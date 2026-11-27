@@ -42,7 +42,28 @@ function playOne(s, plan, choice) {
   ok('新游戏是企划阶段', s.phase === 'planning');
   ok('初始资金正确', s.money === BAL.startMoney);
   ok('初始 3 名员工', s.staff.length === 3);
-  ok('5 类型 × 5 题材', GD.GENRES.length === 5 && GD.THEMES.length === 5);
+      ok('10 类型 × 10 题材', GD.GENRES.length === 10 && GD.THEMES.length === 10,
+      GD.GENRES.length + ' x ' + GD.THEMES.length);
+
+    var cellN = 0, missing = 0, legend = 0;
+    GD.GENRES.forEach(function (g) {
+      GD.THEMES.forEach(function (th) {
+        cellN++;
+        var v = GD.COMBO[g.id] && GD.COMBO[g.id][th.id];
+        if (v == null) missing++;
+        else if (v >= 1.30) legend++;
+      });
+    });
+    ok('相性表 100 格全填', cellN === 100 && missing === 0, '格=' + cellN + ' 缺=' + missing);
+    ok('传说组合有 12 个', legend === 12, '数量=' + legend);
+
+    var weightBad = GD.GENRES.filter(function (g) {
+      var sum = 0;
+      ['code', 'script', 'art', 'audio'].forEach(function (k) { sum += g.weights[k] || 0; });
+      return Math.abs(sum - 1) > 1e-6;
+    });
+    ok('每个类型的四项权重都等于 1', weightBad.length === 0,
+      weightBad.map(function (g) { return g.id; }).join(','));
   ok('4 位评审', GD.CRITICS.length === 4);
 })();
 
