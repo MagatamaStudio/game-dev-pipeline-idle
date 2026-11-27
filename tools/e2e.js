@@ -559,12 +559,27 @@ function connect(wsUrl) {
   await sleep(200);
   check('可以关闭离线报告', await evalJs(`document.querySelector('#offline').hidden`) === true);
 
-  /* ---------- 9. 音效开关 ---------- */
-  await evalJs(`document.querySelector('#sound').click()`);
-  await sleep(100);
-  var sound = await evalJs(`({ muted: GD.SFX.isMuted(), icon: document.querySelector('#sound').textContent })`);
-  check('音效可以静音', sound.muted === true, sound.icon);
-  await evalJs(`document.querySelector('#sound').click()`);
+  /* ---------- 9. 音量 / 音效开关 ---------- */
+  var sound = await evalJs(`(function () {
+    var el = document.querySelector('#sound');
+    var startLevel = GD.SFX.level();
+    var startIcon = el.textContent;
+    for (var i = 0; i < 4 && !GD.SFX.isMuted(); i++) el.click();
+    var muted = GD.SFX.isMuted();
+    var mutedIcon = el.textContent;
+    el.click();
+    return { startLevel: startLevel, startIcon: startIcon, muted: muted, mutedIcon: mutedIcon, after: GD.SFX.level() };
+  })()`);
+  check('音量按钮是四档循环', sound.startLevel === 0, '初始档=' + sound.startLevel);
+  check('循环到静音会显示 🔇', sound.muted === true && sound.mutedIcon === '🔇', sound.mutedIcon);
+  check('静音后再点会回到第一档', sound.after === 0, 'level=' + sound.after);
+
+  var audioApi = await evalJs(`({
+    hasBgm: typeof GD.SFX.setBgm === 'function' && typeof GD.SFX.setEra === 'function',
+    sfx: Object.keys(GD.SFX).filter(function (k) { return typeof GD.SFX[k] === 'function'; }).length
+  })`);
+  check('音频接口齐全（音效 + 循环 BGM）',
+    audioApi.hasBgm === true && audioApi.sfx >= 30, 'api=' + audioApi.sfx);
 
   /* ---------- 10. 手机尺寸 ---------- */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

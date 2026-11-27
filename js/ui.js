@@ -81,6 +81,10 @@
     el.research = byId('research');
     el.sound = byId('sound');
     el.theme = byId('theme');
+    if (el.sound && GD.SFX && GD.SFX.icon) {
+      el.sound.textContent = GD.SFX.icon();
+      el.sound.title = '音量：' + GD.SFX.label() + '（点击切换）';
+    }
 
     var savedTheme = 'light';
     try { savedTheme = localStorage.getItem('garageStudio.theme') || 'light'; } catch (e) { }
@@ -151,7 +155,7 @@
       if (acqId) {
         var ar = E.acquire(s, acqId);
         if (ar.ok) {
-          GD.SFX.win();
+          GD.SFX.award();
           UI.toast('🤝 收购了 ' + ar.brand.name + '：粉丝 +' + num(ar.fans) + '，他们以后不再参赛');
           if (hooks.onSave) hooks.onSave();
           renderIndustry();
@@ -169,11 +173,11 @@
         var parts = String(poachId).split(':');
         var pr = E.poach(s, parts[0], Number(parts[1]));
         if (pr.ok) {
-          GD.SFX.win();
+          GD.SFX.poach();
           UI.toast('📥 挖来了 ' + pr.member.name + '（' + GD.STAT_NAMES[pr.member.role] + ' ' +
             pr.member.stats[pr.member.role] + '），签字费 ' + money(pr.cost));
         } else if (pr.reason === 'refused') {
-          GD.SFX.bad();
+          GD.SFX.poachFail();
           UI.toast('被回绝了：' + pr.member.name + ' 决定留下，违约金 ' +
             money(Math.round(pr.cost * GD.POACH.failKeep)));
         } else if (pr.reason === 'no-seat') {
@@ -203,7 +207,7 @@
       }
       if (gearId) {
         if (E.buyGear(s, gearId)) {
-          GD.SFX.coin();
+          GD.SFX.gear();
           renderResearch();
           if (hooks.onSave) hooks.onSave();
           UI.render();
@@ -213,7 +217,7 @@
 
       if (researchId) {
         if (E.startResearch(s, researchId)) {
-          GD.SFX.coin();
+          GD.SFX.research();
           renderResearch();
           if (hooks.onSave) hooks.onSave();
           UI.render();
@@ -232,7 +236,7 @@
       }
 
       if (hireId) {
-        if (E.hire(s, hireId)) { GD.SFX.coin(); renderTeam(); if (hooks.onSave) hooks.onSave(); UI.render(); }
+        if (E.hire(s, hireId)) { GD.SFX.hire(); renderTeam(); if (hooks.onSave) hooks.onSave(); UI.render(); }
         else { GD.SFX.bad(); }
         return;
       }
@@ -247,7 +251,7 @@
       if (panelAct === 'launch-platform') {
         var lp = E.launchPlatform(s, ui.mpPick || { budget: 'normal', price: 'mid', cut: 'normal' });
         if (lp.ok) {
-          GD.SFX.win();
+          GD.SFX.researchDone();
           UI.toast('🛰 平台发布：' + lp.mp.name + ' · 装机 ' + lp.mp.install + ' 万，投入 ' + money(lp.cost));
           ui.planSig = '';
           if (hooks.onSave) hooks.onSave();
@@ -271,7 +275,7 @@
         return;
       }
       if (panelAct === 'expand') {
-        if (E.expandOffice(s)) { GD.SFX.coin(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
+        if (E.expandOffice(s)) { GD.SFX.expand(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
         else { GD.SFX.bad(); }
         return;
       }
@@ -283,7 +287,7 @@
 
       var microAttr = t.getAttribute('data-micro');
       if (microAttr != null) {
-        if (E.microChoice(s, Number(microAttr))) { GD.SFX.coin(); }
+        if (E.microChoice(s, Number(microAttr))) { GD.SFX.microPick(); }
         else { GD.SFX.click(); }
         UI.render();
         return;
@@ -291,7 +295,7 @@
 
       var modeAttr = t.getAttribute('data-mode');
       if (modeAttr) {
-        if (E.setMode(s, modeAttr)) { GD.SFX.click(); }
+        if (E.setMode(s, modeAttr)) { GD.SFX.mode(); }
         UI.render();
         return;
       }
@@ -308,7 +312,7 @@
       var choice = t.getAttribute('data-choice');
       if (choice != null) {
         if (E.chooseEvent(s, Number(choice))) {
-          GD.SFX.click();
+          GD.SFX.eventPick();
           el.event.hidden = true;
           ui.phase = null;
           UI.render();
@@ -318,7 +322,7 @@
 
       var act = t.getAttribute('data-act');
       if (act === 'go') {
-        if (E.startProject(s, s.plan)) { GD.SFX.click(); }
+        if (E.startProject(s, s.plan)) { GD.SFX.startProject(); }
         else { GD.SFX.bad(); el.hint.textContent = '资金不足，先找发行商预支一笔。'; }
       } else if (act === 'next') {
         if (E.nextRound(s)) { GD.SFX.click(); }
@@ -343,8 +347,10 @@
         applyTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
         GD.SFX.click();
       } else if (act === 'sound') {
-        var m = GD.SFX.toggle();
-        el.sound.textContent = m ? '🔇' : '🔊';
+        var st = GD.SFX.cycle();
+        el.sound.textContent = st.icon;
+        el.sound.title = '音量：' + st.label + '（点击切换）';
+        if (!st.muted) GD.SFX.click();
       }
       UI.render();
     });
@@ -372,8 +378,10 @@
         } else {
           UI.toast('🏆 ' + y.year + ' 年度游戏：你（' + y.playerScore + ' 分）');
         }
+        GD.SFX.award();
       } else {
         UI.toast(y.year + ' 年度游戏被 ' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》' + y.winnerScore + ' 分拿走（你 ' + y.playerScore + ' 分）');
+        GD.SFX.awardLose();
       }
     }
 
@@ -391,7 +399,10 @@
     if (rdone > (ui.researchCount || 0)) {
       ui.researchCount = rdone;
       var lastIt = E.researchById(s.research.done[rdone - 1]);
-      if (lastIt) UI.toast('🔬 研究完成：' + lastIt.name + ' · ' + lastIt.desc);
+      if (lastIt) {
+        UI.toast('🔬 研究完成：' + lastIt.name + ' · ' + lastIt.desc);
+        GD.SFX.researchDone();
+      }
     } else if (rdone < (ui.researchCount || 0)) {
       ui.researchCount = rdone;
     }
@@ -401,6 +412,7 @@
       if (ui.researchSig !== sig) { ui.researchSig = sig; renderResearch(); }
     }
 
+    if (GD.SFX && GD.SFX.setEra) GD.SFX.setEra(E.year(s));
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -455,7 +467,7 @@
     else if (s.phase === 'release') buildRelease();
     else if (s.phase === 'sales') buildSales();
     else if (s.phase === 'done') buildDone();
-    else if (s.phase === 'ending') buildEnding();
+    else if (s.phase === 'ending') { GD.SFX.ending(); buildEnding(); }
   }
 
   function updateStage() {
@@ -638,6 +650,7 @@
   function renderMicro() {
     var box = byId('micro');
     if (!box || !s.micro) return;
+    GD.SFX.microAppear();
     var it = s.micro.item;
     var html = '<div class="micro-text">' + esc(it.text) + '</div><div class="micro-acts">';
     it.options.forEach(function (o, i) {
@@ -1026,6 +1039,7 @@
 
   function buildEvent() {
     if (!s.event) return;
+    GD.SFX.eventAppear();
     var ev = s.event;
     var html = '<div class="modal-card">' +
       '<div class="modal-tag">开发事件 ' + s.project.eventsDone + ' / ' + GD.BAL.eventAts.length + '</div>' +
