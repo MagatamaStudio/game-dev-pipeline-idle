@@ -108,7 +108,33 @@
     { id: 'qi', name: '小七', seed: 95, role: 'art', salary: 640, quote: '配色不对，我睡不着。', stats: { code: 18, script: 18, art: 40, audio: 24, speed: 32 } },
     { id: 'li', name: '老李', seed: 102, role: 'code', salary: 500, quote: '做了十年，什么坑没见过。', stats: { code: 34, script: 26, art: 20, audio: 18, speed: 20 } },
     { id: 'may', name: '阿May', seed: 111, role: 'audio', salary: 580, quote: '音乐一响，玩家就知道该紧张了。', stats: { code: 12, script: 20, art: 26, audio: 34, speed: 28 } },
-    { id: 'zhao', name: '小赵', seed: 118, role: 'script', salary: 520, quote: '我什么都干一点，什么都还行。', stats: { code: 24, script: 26, art: 24, audio: 24, speed: 30 } }
+    { id: 'zhao', name: '小赵', seed: 118, role: 'script', salary: 520, quote: '我什么都干一点，什么都还行。', stats: { code: 24, script: 26, art: 24, audio: 24, speed: 30 } },
+
+    /* ---- 程序 ---- */
+    { id: 'qiang', name: '阿强', seed: 126, role: 'code', salary: 420, quote: '能跑就行，先能跑。', stats: { code: 32, script: 16, art: 16, audio: 14, speed: 34 } },
+    { id: 'deep', name: '老深', seed: 133, role: 'code', salary: 760, quote: '我不赶工。赶工的东西我不签名。', stats: { code: 48, script: 22, art: 16, audio: 14, speed: 18 } },
+    { id: 'mo', name: '阿墨', seed: 140, role: 'code', salary: 470, quote: '架构做对了，后面都是填格子。', stats: { code: 30, script: 24, art: 20, audio: 16, speed: 28 } },
+    { id: 'tang', name: '小唐', seed: 147, role: 'code', salary: 610, quote: '真机跑过才算数。', stats: { code: 40, script: 18, art: 22, audio: 18, speed: 31 } },
+    { id: 'nine', name: '阿九', seed: 154, role: 'code', salary: 380, quote: '我便宜，但我学得快。', stats: { code: 26, script: 14, art: 18, audio: 16, speed: 36 } },
+
+    /* ---- 剧本 ---- */
+    { id: 'wen', name: '阿文', seed: 161, role: 'script', salary: 500, quote: '先把人写活，玩家才在乎他死不死。', stats: { code: 18, script: 34, art: 20, audio: 18, speed: 27 } },
+    { id: 'lu', name: '陆姐', seed: 168, role: 'script', salary: 720, quote: '我写过三十个结局，只有两个是真的。', stats: { code: 16, script: 46, art: 22, audio: 20, speed: 19 } },
+    { id: 'bei', name: '小北', seed: 175, role: 'script', salary: 430, quote: '节奏，节奏比文笔重要。', stats: { code: 22, script: 28, art: 18, audio: 20, speed: 33 } },
+    { id: 'shen', name: '老沈', seed: 182, role: 'script', salary: 560, quote: '世界观不是设定集，是规矩。', stats: { code: 26, script: 36, art: 16, audio: 14, speed: 22 } },
+    { id: 'yao', name: '幺妹', seed: 189, role: 'script', salary: 400, quote: '我写的台词，我自己先哭一遍。', stats: { code: 16, script: 24, art: 26, audio: 22, speed: 30 } },
+
+    /* ---- 美术 ---- */
+    { id: 'da', name: '阿大', seed: 196, role: 'art', salary: 660, quote: '角色站不住，场景再美也没用。', stats: { code: 16, script: 18, art: 46, audio: 22, speed: 24 } },
+    { id: 'miao', name: '喵喵', seed: 203, role: 'art', salary: 450, quote: '给我两小时，我给你三版。', stats: { code: 14, script: 22, art: 30, audio: 24, speed: 34 } },
+    { id: 'jiu', name: '老酒', seed: 210, role: 'art', salary: 590, quote: '颜色要有味道。', stats: { code: 20, script: 26, art: 38, audio: 18, speed: 20 } },
+    { id: 'ling', name: '小铃', seed: 217, role: 'art', salary: 410, quote: '我不太会画人，但我会画气氛。', stats: { code: 18, script: 20, art: 26, audio: 28, speed: 31 } },
+
+    /* ---- 音效 ---- */
+    { id: 'tone', name: '老音', seed: 224, role: 'audio', salary: 700, quote: '十几秒的循环，我能做一个月。', stats: { code: 18, script: 16, art: 20, audio: 44, speed: 21 } },
+    { id: 'beibei', name: '贝贝', seed: 231, role: 'audio', salary: 440, quote: '这段旋律你听三遍就会哼了。', stats: { code: 14, script: 18, art: 24, audio: 30, speed: 32 } },
+    { id: 'wa', name: '瓦片', seed: 238, role: 'audio', salary: 380, quote: '音效嘛，对就行。', stats: { code: 20, script: 16, art: 18, audio: 24, speed: 35 } },
+    { id: 'mumu', name: '木木', seed: 245, role: 'audio', salary: 540, quote: '安静也是声音的一部分。', stats: { code: 16, script: 22, art: 20, audio: 36, speed: 26 } }
   ];
 
   /* 员工特质：由 seed 确定性派生，每人 2 个，不占存档字段。

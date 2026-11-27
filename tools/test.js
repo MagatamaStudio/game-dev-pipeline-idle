@@ -810,6 +810,27 @@ function playOne(s, plan, choice) {
   ok('存档往返保留子品牌', back.brands.length === 1 && E.isAcquired(back, 'white'));
 })();
 
+/* ---------------- 员工名册 ---------------- */
+(function () {
+  ok('名册一共 30 人', GD.ROSTER.length === 30, String(GD.ROSTER.length));
+
+  var ids = {}, seeds = {}, dup = [];
+  GD.ROSTER.forEach(function (r) {
+    if (ids[r.id]) dup.push('id:' + r.id); ids[r.id] = 1;
+    if (seeds[r.seed]) dup.push('seed:' + r.seed); seeds[r.seed] = 1;
+  });
+  ok('名册的 id 与 seed 都不重复', dup.length === 0, dup.join(','));
+
+  var roles = {};
+  GD.ROSTER.forEach(function (r) { roles[r.role] = (roles[r.role] || 0) + 1; });
+  ok('四个角色都有人',
+    roles.code > 0 && roles.script > 0 && roles.art > 0 && roles.audio > 0,
+    JSON.stringify(roles));
+
+  ok('创始人都在名册里',
+    GD.FOUNDERS.every(function (id) { return !!ids[id]; }), GD.FOUNDERS.join(','));
+})();
+
 /* ---------------- 作品名 ---------------- */
 (function () {
   var s = E.newGame();
