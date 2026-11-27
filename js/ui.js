@@ -339,7 +339,12 @@
       var y = s.yearResults[s.yearResults.length - 1];
       ui.yearCount = s.yearResults.length;
       if (!y.winner) {
-        UI.toast('🏆 ' + y.year + ' 年度游戏：你（' + y.playerScore + ' 分）');
+        if (y.playerBrand) {
+          UI.toast('🏆 ' + y.year + ' 年度游戏：《' + esc(y.playerBrandTitle) + '》—— 你的子品牌 ' +
+            esc(y.playerBrand) + '（' + y.playerScore + ' 分）');
+        } else {
+          UI.toast('🏆 ' + y.year + ' 年度游戏：你（' + y.playerScore + ' 分）');
+        }
       } else {
         UI.toast(y.year + ' 年度游戏被 ' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》' + y.winnerScore + ' 分拿走（你 ' + y.playerScore + ' 分）');
       }
@@ -829,14 +834,23 @@
       if (owned) {
         var brand = null;
         E.brands(s).forEach(function (b) { if (b.id === r.id) brand = b; });
+        var lastOut = null;
+        (Array.isArray(s.yearBrand) ? s.yearBrand : []).forEach(function (g) {
+          if (g.brand === r.id) lastOut = g;
+        });
+        var totalWorks = brand ? (brand.titles || 0) + (brand.output || 0) : 0;
         html += '<div class="rival owned">' +
           '<div class="rival-main">' +
           '<div class="rival-name">' + esc(r.name) + '<span class="role">子品牌</span></div>' +
           '<div class="rival-sub">' + (brand ? brand.since + ' 年收购' : '已收购') +
-          ' · 累计 ' + (brand ? brand.titles : 0) + ' 部 · 月度分成 ' +
+          ' · 累计 ' + totalWorks + ' 部 · 月度分成 ' +
           money((brand ? brand.power : r.power) * GD.BAL.brandPerMonth * E.inflation(s)) + '</div>' +
           '</div>' +
-          '<div class="rival-latest"><span class="good">已归入旗下</span></div>' +
+          '<div class="rival-latest">' +
+          (lastOut
+            ? '<b>' + lastOut.year + ' 年</b>《' + esc(lastOut.title) + '》<span class="rival-score">' + lastOut.score + '</span>'
+            : '<span class="good">已归入旗下</span>') +
+          '</div>' +
           '</div>';
         return;
       }

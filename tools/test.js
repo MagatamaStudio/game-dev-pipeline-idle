@@ -641,6 +641,56 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 子品牌产出线 ---------------- */
+(function () {
+  var s = E.newGame();
+  s.day = (1990 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s.fans = GD.BAL.acquireFansMin;
+  s.money = 20000000;
+  E.acquire(s, 'white');
+  var b = E.brands(s)[0];
+
+  ok('子品牌刚收购时还没出过作品', (b.output || 0) === 0 && (s.yearBrand || []).length === 0);
+
+  E.tickBrands(s);
+  ok('收购当年就出一部', s.yearBrand.length === 1 && s.yearBrand[0].brand === 'white',
+    (s.yearBrand[0] || {}).title);
+  ok('子品牌作品成绩在合理区间',
+    s.yearBrand[0].score >= 14 && s.yearBrand[0].score <= 40, String(s.yearBrand[0].score));
+
+  var n1 = s.yearBrand.length;
+  E.tickBrands(s);
+  ok('同一年不会出第二部', s.yearBrand.length === n1, String(s.yearBrand.length));
+
+  s.day += GD.BAL.daysPerYear;
+  E.tickBrands(s);
+  ok('第二年再出一部', s.yearBrand.length === n1 + 1, String(s.yearBrand.length));
+  ok('子品牌作品数递增', E.brands(s)[0].output === 2, String(E.brands(s)[0].output));
+
+  s.money = 20000000;
+  E.acquire(s, 'seven');
+  s.day += GD.BAL.daysPerYear;
+  E.tickBrands(s);
+  ok('每家子品牌每年各出一部',
+    E.brands(s).length === 2 && E.brands(s)[1].output === 1,
+    'brands=' + E.brands(s).length);
+
+  /* 子品牌成绩算你的 */
+  var s2 = E.newGame();
+  s2.awardYear = 1972;
+  s2.day = (1973 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s2.yearBest = 0;
+  s2.yearRivalReleases = [];
+  s2.yearBrand = [{ year: 1972, title: '测试作', score: 33, brand: 'white', brandName: '白噪音' }];
+  var got = E.settleAwards(s2);
+  ok('子品牌高分计入你的年度成绩',
+    s2.yearResults.length === 1 && s2.yearResults[0].playerScore === 33,
+    'playerScore=' + (s2.yearResults[0] || {}).playerScore);
+  ok('子品牌拿奖会标出品牌名',
+    s2.yearResults[0].playerBrand === '白噪音' && got.length === 1,
+    String(s2.yearResults[0].playerBrand));
+})();
+
 /* ---------------- 收购 / 子品牌 ---------------- */
 (function () {
   var s = E.newGame();

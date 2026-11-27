@@ -613,7 +613,8 @@
     s.fans += fans;
     var brand = {
       id: r.id, name: r.name, genre: r.genre, theme: r.theme,
-      since: E.year(s), power: r.power, titles: r.games.length
+      since: E.year(s), power: r.power, titles: r.games.length,
+      output: 0, lastYear: 0
     };
     E.brands(s).push(brand);
     return { ok: true, cost: cost, fans: fans, brand: brand };
@@ -624,6 +625,27 @@
     var list = E.brands(s), sum = 0;
     for (var i = 0; i < list.length; i++) sum += list[i].power * BAL.brandPerMonth;
     return sum * E.inflation(s);
+  };
+
+  /* 子品牌每年自己出一部作品（保留原来的类型与题材，成绩随年头缓慢变好） */
+  E.tickBrands = function (s) {
+    var yr = E.year(s);
+    var list = E.brands(s);
+    if (!Array.isArray(s.yearBrand)) s.yearBrand = [];
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      if (b.lastYear >= yr) continue;
+      b.lastYear = yr;
+      var def = E.rivalDef(b.id);
+      var titlesArr = (def && def.titles && def.titles.length) ? def.titles : ['新作'];
+      var out = b.output || 0;
+      var title = titlesArr[out % titlesArr.length];
+      var score = Math.round(26 + (yr - b.since) * 0.35 + b.power * 3 + (Math.random() * 4 - 2));
+      score = Math.max(14, Math.min(40, score));
+      b.output = out + 1;
+      s.yearBrand.push({ year: yr, title: title, score: score, brand: b.id, brandName: b.name });
+    }
+    if (s.yearBrand.length > 200) s.yearBrand.shift();
   };
 
   /* ---------------- 企划 → 开发 ---------------- */
@@ -1064,6 +1086,7 @@
 
     E.settleMonths(s);
     E.tickRivals(s);
+    E.tickBrands(s);
     var got = E.settleAwards(s);
     for (var ai = 0; ai < got.length; ai++) out.push({ type: 'award', award: got[ai] });
     if (s.phase === 'planning' && !s.ended && E.year(s) >= BAL.endYear) {
@@ -1152,6 +1175,16 @@
     while (last < yr && guard++ < 50) {
       var mine = s.yearBest || 0;
 
+      /* 子品牌的作品算你的成绩：取当年子品牌里最好的一部 */
+      var brandBest = null;
+      var brandList = Array.isArray(s.yearBrand) ? s.yearBrand : [];
+      for (var bi = 0; bi < brandList.length; bi++) {
+        if (brandList[bi].year !== last) continue;
+        if (!brandBest || brandList[bi].score > brandBest.score) brandBest = brandList[bi];
+      }
+      if (brandBest && brandBest.score > mine) mine = brandBest.score;
+      var byBrand = !!(brandBest && brandBest.score === mine && brandBest.score > (s.yearBest || 0));
+
       var theirs = [];
       for (var i = 0; i < s.yearRivalReleases.length; i++) {
         if (s.yearRivalReleases[i].year === last) theirs.push(s.yearRivalReleases[i]);
@@ -1191,7 +1224,9 @@
         winnerTitle: playerWins ? null : (top ? top.title : null),
         winnerScore: playerWins ? mine : (top ? top.score : 0),
         playerScore: mine,
-        playerAward: award ? award.title : null
+        playerAward: award ? award.title : null,
+        playerBrand: byBrand ? brandBest.brandName : null,
+        playerBrandTitle: byBrand ? brandBest.title : null
       });
       if (s.yearResults.length > 100) s.yearResults.shift();
 
@@ -1201,6 +1236,7 @@
 
     s.awardYear = yr;
     s.yearRivalReleases = s.yearRivalReleases.filter(function (g) { return g.year >= yr - 1; });
+    s.yearBrand = (Array.isArray(s.yearBrand) ? s.yearBrand : []).filter(function (g) { return g.year >= yr - 1; });
     return got;
   };
 
