@@ -60,6 +60,8 @@
 
   UI.mount = function (state, h) {
     s = state; hooks = h || {};
+    /* 读档进来时已经有年度结果，别在首屏补弹一堆过期提示 */
+    ui.yearCount = (s.yearResults || []).length;
     el.money = byId('money');
     el.fans = byId('fans');
     el.round = byId('round');
@@ -290,6 +292,26 @@
   UI.showError = function (text) {
     ui.lastError = text || '';
     applyError();
+  };
+
+  /* ---------------- 浮层提示 ----------------
+   * 年度奖项、研发完成这类「不需要打断操作」的消息走这里。
+   * 之前 UI.toast 被调用但根本没实现，一结算年度奖项就抛异常把主循环打死。 */
+
+  UI.toast = function (text) {
+    var box = byId('toasts');
+    if (!box || !text) return;
+    var node = document.createElement('div');
+    node.className = 'toast';
+    node.textContent = String(text);
+    box.appendChild(node);
+    while (box.children.length > 4) box.removeChild(box.firstChild);
+    window.setTimeout(function () {
+      node.classList.add('out');
+      window.setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 400);
+    }, 4200);
   };
 
   function buildStage() {

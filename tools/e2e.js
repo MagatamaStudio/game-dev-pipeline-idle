@@ -473,6 +473,22 @@ function connect(wsUrl) {
 
   await cdp.send('Emulation.clearDeviceMetricsOverride');
 
+  /* ---------- 年度奖项提示 ----------
+   * 这条曾经是致命 bug：UI.toast 被调用但没实现，
+   * 一结算年度奖项就抛异常，主循环冻死，刷新后 #stage 建不起来。 */
+  var toastRes = await evalJs(`(function () {
+    var s = GD.getState();
+    var before = document.querySelectorAll('#toasts .toast').length;
+    var err = null;
+    s.yearResults.push({ year: 1972, playerScore: 33, winner: null });
+    try { GD.UI.render(); } catch (e) { err = String((e && e.message) || e); }
+    var after = document.querySelectorAll('#toasts .toast').length;
+    s.yearResults.pop();
+    return { before: before, after: after, err: err };
+  })()`);
+  check('年度结果会弹提示而不是抛异常', !toastRes.err && toastRes.after > toastRes.before,
+    'toast ' + toastRes.before + '→' + toastRes.after + ' err=' + toastRes.err);
+
   /* ---------- 11. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 
