@@ -11,7 +11,8 @@
   var s = null, hooks = {}, el = {};
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
-    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0
+    weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
+    bound: false, lastError: ''
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -117,6 +118,8 @@
   /* ---------------- 事件绑定 ---------------- */
 
   function bind() {
+    if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
+    ui.bound = true;
     document.addEventListener('click', function (ev) {
       var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire]');
       if (!t) return;
@@ -255,7 +258,27 @@
     }
     updateStage();
     updateOffice();
+    applyError();
     if (GD.Office) GD.Office.sync(s);
+  };
+
+  /* ---------------- 错误显示 ----------------
+   * 主循环出异常时把原因固定显示在底部提示条上，
+   * 否则下一次 buildStage 会把它覆盖掉，用户什么也看不到。 */
+
+  function applyError() {
+    if (!el.hint) return;
+    if (ui.lastError) {
+      el.hint.classList.add('err');
+      el.hint.textContent = '⚠ ' + ui.lastError;
+    } else if (el.hint.classList.contains('err')) {
+      el.hint.classList.remove('err');
+    }
+  }
+
+  UI.showError = function (text) {
+    ui.lastError = text || '';
+    applyError();
   };
 
   function buildStage() {
@@ -397,11 +420,15 @@
 
   function buildDeveloping() {
     var g = E.genre(s.plan.genre), t = E.theme(s.plan.theme);
+    /* 每秒烧掉的钱 = 日薪总和 × 每秒天数 × 制作倍率
+     * （老代码用的是 GD.BAL.salaryPerDay，这个字段根本不存在，所以一直显示 -$NaN） */
+    var burn = E.teamSalary(s) * GD.BAL.daysPerSecond * E.prodMult(s);
+    if (!isFinite(burn)) burn = 0;
     el.stage.innerHTML =
       '<div class="dev">' +
       '<div class="dev-head">' +
       '<span class="dev-name">《' + esc(g.name) + ' · ' + esc(t.name) + '》</span>' +
-      '<span class="dev-cost">-$' + Math.round(GD.BAL.salaryPerDay * GD.BAL.daysPerSecond).toLocaleString('en-US') + ' / 天</span>' +
+      '<span class="dev-cost">-$' + Math.round(burn).toLocaleString('en-US') + ' / 秒</span>' +
       '</div>' +
       '<div class="bar"><i id="dev-bar" style="width:0%"></i></div>' +
       '<div class="dev-meta">' +

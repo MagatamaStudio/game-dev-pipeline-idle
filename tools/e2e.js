@@ -234,9 +234,11 @@ function connect(wsUrl) {
     money: GD.getState().money,
     progress: GD.getState().project.progress,
     bar: !!document.querySelector('#dev-bar'),
+    cost: (document.querySelector('.dev-cost') || {}).textContent || '',
     active: document.querySelectorAll('.desk.active').length
   })`);
   check('立项后进入开发', started.phase === 'developing' && started.bar === true);
+  check('每日成本显示的是数字不是 NaN', started.cost.indexOf('NaN') < 0 && /\d/.test(started.cost), started.cost);
   check('立项扣了平台授权费', moneyBefore - started.money >= 6000, 'paid ' + (moneyBefore - started.money));
   check('主创被高亮', started.active === 1, 'active=' + started.active);
   check('进度开始推进', started.progress > 0, 'p=' + started.progress.toFixed(3));
@@ -451,6 +453,36 @@ function connect(wsUrl) {
 
   /* ---------- 11. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  /* ---------- 12. 抗异常：一次推进异常不能冻死主循环 ---------- */
+  var beforeRenders = await evalJs(`(function () {
+    window.__renders = 0;
+    var origRender = GD.UI.render;
+    GD.UI.render = function () { window.__renders++; return origRender.apply(this, arguments); };
+    window.__origTick = GD.Engine.tick;
+    GD.Engine.tick = function () { throw new Error('注入的测试异常'); };
+    return window.__renders;
+  })()`);
+  await sleep(800);
+  var afterErr = await evalJs(`(function () {
+    var el = document.getElementById('hint');
+    return {
+      renders: window.__renders,
+      err: el.classList.contains('err'),
+      text: (el.textContent || '').slice(0, 60)
+    };
+  })()`);
+  check('注入异常后主循环仍在跑', afterErr.renders > beforeRenders + 2,
+    beforeRenders + ' → ' + afterErr.renders);
+  check('异常原因显示在底部提示条', afterErr.err && afterErr.text.indexOf('运行出错') >= 0, afterErr.text);
+
+  /* 恢复引擎，确认能立刻接着跑 */
+  var restored = await evalJs(`(function () {
+    GD.Engine.tick = window.__origTick;
+    try { GD.Engine.tick(GD.getState(), 0.01); return 'ok'; }
+    catch (e) { return 'throw: ' + e.message; }
+  })()`);
+  check('恢复后引擎可正常推进', restored === 'ok', restored);
 
   cdp.close();
   child.kill();

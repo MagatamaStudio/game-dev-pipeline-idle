@@ -55,6 +55,7 @@
   /* 当前选中的平台（没选就用最新上市的可用平台） */
   E.platform = function (s) {
     var avail = E.availablePlatforms(s);
+    if (!avail.length) return GD.PLATFORMS[0];
     var want = s.plan && s.plan.platform;
     for (var i = 0; i < avail.length; i++) if (avail[i].id === want) return avail[i];
     return avail[avail.length - 1];
