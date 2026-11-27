@@ -810,6 +810,20 @@ function playOne(s, plan, choice) {
   ok('存档往返保留子品牌', back.brands.length === 1 && E.isAcquired(back, 'white'));
 })();
 
+/* ---------------- 评审台词 ---------------- */
+(function () {
+  var total = 0, bad = [];
+  GD.CRITICS.forEach(function (c) {
+    ['low', 'mid', 'high'].forEach(function (k) {
+      var arr = c.lines && c.lines[k];
+      if (!Array.isArray(arr) || !arr.length) bad.push(c.name + ' 缺 ' + k);
+      else total += arr.length;
+    });
+  });
+  ok('评审台词一共 80 句', total === 80, String(total));
+  ok('每位评审低中高三档都有台词', bad.length === 0, bad.join(','));
+})();
+
 /* ---------------- 员工名册 ---------------- */
 (function () {
   ok('名册一共 30 人', GD.ROSTER.length === 30, String(GD.ROSTER.length));
