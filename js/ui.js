@@ -469,6 +469,14 @@
 
   /* ---------------- 团队面板 ---------------- */
 
+  function traitChips(st) {
+    var list = E.traitList(st);
+    if (!list || !list.length) return '';
+    return '<div class="traits">' + list.map(function (t) {
+      return '<span class="trait" title="' + esc(t.desc) + '">' + esc(t.name) + '</span>';
+    }).join('') + '</div>';
+  }
+
   function statLine(stats) {
     return ['code', 'script', 'art', 'audio', 'speed'].map(function (k) {
       return GD.STAT_NAMES[k] + ' ' + stats[k];
@@ -500,6 +508,7 @@
         ' <span class="lv">Lv ' + st.level + '</span>' +
         ' <span class="role">' + esc(GD.STAT_NAMES[st.role]) + '</span></div>' +
         '<div class="staff-stats">' + esc(statLine(st.stats)) + '</div>' +
+        traitChips(st) +
         xpBar(st) +
         '</div>' +
         '<div class="staff-salary">' + money(E.effSalary(s, st)) + '<small>/天</small></div>' +
@@ -530,6 +539,7 @@
           '<div class="staff-main">' +
           '<div class="staff-name">' + esc(r.name) + ' <span class="role">' + esc(GD.STAT_NAMES[r.role]) + '</span></div>' +
           '<div class="staff-stats">' + esc(statLine(r.stats)) + '</div>' +
+          traitChips(r) +
           '<div class="cand-quote">' + esc(r.quote) + '</div>' +
           '</div>' +
           '<button class="hire" data-hire="' + r.id + '"' + (can ? '' : ' disabled') + '>招聘<small>' + money(fee) + '</small></button>' +

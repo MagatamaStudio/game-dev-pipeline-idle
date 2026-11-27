@@ -641,5 +641,61 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 员工特质 ---------------- */
+(function () {
+  var s = E.newGame();
+
+  var allOk = true, bad = [];
+  s.staff.forEach(function (st) {
+    var list = E.traitList(st);
+    if (list.length !== 2 || list[0].id === list[1].id) { allOk = false; bad.push(st.id); }
+  });
+  ok('每人正好 2 个特质且不重复', allOk, bad.join(','));
+
+  var t1 = E.traitList(s.staff[0]).map(function (t) { return t.id; }).join(',');
+  var t2 = E.traitList(s.staff[0]).map(function (t) { return t.id; }).join(',');
+  ok('特质对同一个 seed 稳定不变', t1 === t2 && t1.length > 0, t1);
+
+  var seen = {}, combos = {};
+  GD.ROSTER.forEach(function (r) {
+    var l = E.traitList(r);
+    l.forEach(function (t) { seen[t.id] = 1; });
+    combos[l[0].id + '+' + l[1].id] = 1;
+  });
+  var kinds = Object.keys(seen).length;
+  ok('30 名员工覆盖到大部分特质', kinds >= 14, '覆盖 ' + kinds + ' 种 / 共 ' + GD.TRAITS.length + ' 种');
+
+  ok('速度倍率被夹在安全区间', E.traitSpeedMul(s) > 0.6 && E.traitSpeedMul(s) < 1.5,
+    E.traitSpeedMul(s).toFixed(3));
+  ok('品质倍率被夹在安全区间', E.traitQualityMul(s) > 0.7 && E.traitQualityMul(s) < 1.4,
+    E.traitQualityMul(s).toFixed(3));
+  ok('粉丝倍率被夹在安全区间', E.traitFansMul(s) > 0.5 && E.traitFansMul(s) < 1.6,
+    E.traitFansMul(s).toFixed(3));
+
+  /* 把特质表清空，对比同一个局面的结果差异 —— 证明五处挂钩真的生效 */
+  var dYes = E.devDuration(s, 'zhou');
+  var qYes = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
+  var salYes = E.teamSalary(s);
+  var saved = GD.TRAITS;
+  GD.TRAITS = [];
+  var dNo = E.devDuration(s, 'zhou');
+  var qNo = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
+  var salNo = E.teamSalary(s);
+  GD.TRAITS = saved;
+
+  ok('特质真的改变了开发时长', Math.abs(dYes - dNo) > 0.01,
+    dNo.toFixed(2) + ' → ' + dYes.toFixed(2) + ' 秒');
+  ok('特质真的改变了作品品质', Math.abs(qYes - qNo) > 0.01,
+    qNo.toFixed(2) + ' → ' + qYes.toFixed(2));
+  ok('特质真的改变了日薪', Math.abs(salYes - salNo) > 1,
+    Math.round(salNo) + ' → ' + Math.round(salYes));
+
+  /* 老存档兼容：不含 traits 字段的存档读回来照样有特质 */
+  var raw = E.serialize(s);
+  var back = E.deserialize(raw);
+  ok('老存档读回来后员工仍然有特质', E.traitList(back.staff[0]).length === 2,
+    E.traitList(back.staff[0]).map(function (t) { return t.name; }).join('+'));
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

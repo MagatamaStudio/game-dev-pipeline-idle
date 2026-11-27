@@ -30,9 +30,51 @@
 
   E.teamSalary = function (s) {
     var sum = 0;
-    for (var i = 0; i < s.staff.length; i++) sum += s.staff[i].salary * E.inflation(s);
+    for (var i = 0; i < s.staff.length; i++) {
+      sum += s.staff[i].salary * E.inflation(s) * (1 + E.traitSum(s.staff[i], 'salaryPct'));
+    }
     return sum;
   };
+
+  /* ---------------- 员工特质 ----------------
+   * 每人固定 2 个特质，由 seed 派生 —— 不写进存档，老档也能直接获得。
+   * 全队类效果取平均而不是求和，否则人越多叠得越狠会爆表。 */
+
+  function traitHash(st) {
+    var seed = (st && st.seed != null) ? String(st.seed) : String((st && st.id) || '');
+    var h = 2166136261;
+    for (var i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  E.traitList = function (st) {
+    var n = (GD.TRAITS && GD.TRAITS.length) || 0;
+    if (!st || n < 2) return [];
+    var h = traitHash(st);
+    var a = h % n;
+    var b = (h >>> 7) % (n - 1);
+    if (b >= a) b += 1;
+    return [GD.TRAITS[a], GD.TRAITS[b]];
+  };
+
+  E.traitSum = function (st, key) {
+    var list = E.traitList(st), sum = 0;
+    for (var i = 0; i < list.length; i++) sum += (list[i].eff[key] || 0);
+    return sum;
+  };
+
+  E.teamTrait = function (s, key) {
+    if (!s.staff || !s.staff.length) return 0;
+    var sum = 0;
+    for (var i = 0; i < s.staff.length; i++) sum += E.traitSum(s.staff[i], key);
+    return sum / s.staff.length;
+  };
+
+  function traitClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  E.traitSpeedMul = function (s) { return 1 - traitClamp(E.teamTrait(s, 'speedPct'), -0.25, 0.30); };
+  E.traitQualityMul = function (s) { return 1 + traitClamp(E.teamTrait(s, 'qualityPct'), -0.25, 0.30); };
+  E.traitFansMul = function (s) { return 1 + traitClamp(E.teamTrait(s, 'fansPct'), -0.40, 0.40); };
 
   E.rosterById = function (id) {
     for (var i = 0; i < GD.ROSTER.length; i++) if (GD.ROSTER[i].id === id) return GD.ROSTER[i];
@@ -121,14 +163,14 @@
       teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s);
+    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s);
   };
 
   E.devDuration = function (s, leaderId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
-    return Math.max(BAL.minDevSeconds, d);
+    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s));
   };
 
   /* 企划面板的预估 */
@@ -224,7 +266,7 @@
     var gain = BAL.xpBase + score;
     var ups = [];
     s.staff.forEach(function (st) {
-      st.xp += gain;
+      st.xp += gain * (1 + E.traitSum(st, 'xpPct'));
       while (st.xp >= E.xpNeeded(st.level)) {
         st.xp -= E.xpNeeded(st.level);
         st.level++;
@@ -570,7 +612,7 @@
 
     s.money += revenue;
     s.totalEarned += revenue;
-    s.fans += copies * BAL.fanPerCopy;
+    s.fans += copies * BAL.fanPerCopy * E.traitFansMul(s);
     s.sales.sold += copies;
     s.sales.revenue += revenue;
     s.sales.index++;

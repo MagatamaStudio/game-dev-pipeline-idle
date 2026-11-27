@@ -191,9 +191,11 @@ function connect(wsUrl) {
     open: !document.querySelector('#team').hidden,
     rows: document.querySelectorAll('#team .staff-row').length,
     cands: document.querySelectorAll('#team .cand').length,
+    traits: document.querySelectorAll('#team .staff-row .trait').length,
     salary: (document.querySelector('#team .panel-sub') || {}).textContent || ''
   })`);
   check('团队面板显示 3 人', team.open === true && team.rows === 3, 'rows=' + team.rows);
+  check('团队面板每人显示 2 个特质', team.traits === team.rows * 2, 'traits=' + team.traits);
   check('团队面板显示候选人', team.cands >= 1, 'cands=' + team.cands);
   check('团队面板显示日薪', team.salary.indexOf('日薪') > 0, team.salary);
 

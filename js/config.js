@@ -95,6 +95,36 @@
     { id: 'zhao', name: '小赵', seed: 118, role: 'script', salary: 520, quote: '我什么都干一点，什么都还行。', stats: { code: 24, script: 26, art: 24, audio: 24, speed: 30 } }
   ];
 
+  /* 员工特质：由 seed 确定性派生，每人 2 个，不占存档字段。
+   * 效果全是百分比，挂在已有的团队聚合函数上：
+   *   speedPct   开发速度（全队取平均）
+   *   qualityPct 作品品质（全队取平均）
+   *   salaryPct  个人日薪
+   *   xpPct      个人经验
+   *   fansPct    粉丝转化（全队取平均） */
+  GD.TRAITS = [
+    { id: 'nightowl', name: '夜猫子', desc: '开发速度 +8%，日薪 +10%', eff: { speedPct: 0.08, salaryPct: 0.10 } },
+    { id: 'perfection', name: '完美主义', desc: '品质 +6%，开发速度 −6%', eff: { qualityPct: 0.06, speedPct: -0.06 } },
+    { id: 'fasthand', name: '手速惊人', desc: '开发速度 +12%', eff: { speedPct: 0.12 } },
+    { id: 'detail', name: '细节狂', desc: '品质 +8%，经验 −10%', eff: { qualityPct: 0.08, xpPct: -0.10 } },
+    { id: 'niceguy', name: '老好人', desc: '全队品质 +3%', eff: { qualityPct: 0.03 } },
+    { id: 'shy', name: '社恐', desc: '品质 +5%，粉丝转化 −12%', eff: { qualityPct: 0.05, fansPct: -0.12 } },
+    { id: 'bigmouth', name: '嘴强王者', desc: '粉丝转化 +15%，品质 −4%', eff: { fansPct: 0.15, qualityPct: -0.04 } },
+    { id: 'overtime', name: '加班战士', desc: '开发速度 +10%，日薪 +15%', eff: { speedPct: 0.10, salaryPct: 0.15 } },
+    { id: 'ontime', name: '按时下班', desc: '日薪 −8%，开发速度 −5%', eff: { salaryPct: -0.08, speedPct: -0.05 } },
+    { id: 'apprentice', name: '学徒', desc: '经验 +25%', eff: { xpPct: 0.25 } },
+    { id: 'veteran', name: '老油条', desc: '品质 +7%，经验 −15%', eff: { qualityPct: 0.07, xpPct: -0.15 } },
+    { id: 'genius', name: '天才', desc: '品质 +10%，日薪 +20%', eff: { qualityPct: 0.10, salaryPct: 0.20 } },
+    { id: 'slacker', name: '混子', desc: '日薪 −15%，品质 −6%', eff: { salaryPct: -0.15, qualityPct: -0.06 } },
+    { id: 'keyboard', name: '键盘侠', desc: '开发速度 +7%，粉丝转化 +8%', eff: { speedPct: 0.07, fansPct: 0.08 } },
+    { id: 'ocd', name: '强迫症', desc: '品质 +5%，开发速度 −4%', eff: { qualityPct: 0.05, speedPct: -0.04 } },
+    { id: 'nightshift', name: '夜班司机', desc: '开发速度 +9%，经验 −5%', eff: { speedPct: 0.09, xpPct: -0.05 } },
+    { id: 'inspired', name: '灵感型', desc: '品质 +9%，经验 −8%', eff: { qualityPct: 0.09, xpPct: -0.08 } },
+    { id: 'steady', name: '稳如老狗', desc: '品质 +4%，日薪 −4%', eff: { qualityPct: 0.04, salaryPct: -0.04 } },
+    { id: 'joker', name: '段子手', desc: '粉丝转化 +20%', eff: { fansPct: 0.20 } },
+    { id: 'techhead', name: '技术宅', desc: '开发速度 +6%，品质 +3%，粉丝转化 −8%', eff: { speedPct: 0.06, qualityPct: 0.03, fansPct: -0.08 } }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };
