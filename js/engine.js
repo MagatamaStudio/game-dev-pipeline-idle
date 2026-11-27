@@ -33,7 +33,7 @@
     for (var i = 0; i < s.staff.length; i++) {
       sum += s.staff[i].salary * E.inflation(s) * (1 + E.traitSum(s.staff[i], 'salaryPct'));
     }
-    return sum;
+    return sum * E.researchMul(s, 'salary');
   };
 
   /* ---------------- 员工特质 ----------------
@@ -163,14 +163,14 @@
       teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s);
+    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.researchMul(s, 'quality');
   };
 
   E.devDuration = function (s, leaderId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
-    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s));
+    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.researchMul(s, 'speed'));
   };
 
   /* 企划面板的预估 */
@@ -185,7 +185,7 @@
       quality: q,
       duration: duration,
       days: days,
-      cost: p.license + E.teamSalary(s) * days * E.prodMult(s),
+      cost: p.license * E.researchMul(s, 'license') + E.teamSalary(s) * days * E.prodMult(s),
       platform: p.id,
       license: p.license,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
@@ -266,7 +266,7 @@
     var gain = BAL.xpBase + score;
     var ups = [];
     s.staff.forEach(function (st) {
-      st.xp += gain * (1 + E.traitSum(st, 'xpPct'));
+      st.xp += gain * (1 + E.traitSum(st, 'xpPct')) * E.researchMul(s, 'xp');
       while (st.xp >= E.xpNeeded(st.level)) {
         st.xp -= E.xpNeeded(st.level);
         st.level++;
@@ -319,6 +319,7 @@
       staff: GD.FOUNDERS.map(function (id) { return E.makeStaff(id); }),
       seats: 3,
       declaration: null,
+      research: { done: [], active: null },
       candidates: []
     };
     E.rollCandidates(s);
@@ -358,15 +359,75 @@
     return true;
   };
 
+  /* ---------------- 研究 ----------------
+   * 一次只做一个项目，按日历推进：不开发游戏时间就不走。
+   * 完成后给公司永久加成，走乘数（quality/speed/salary/xp/fans/sales/license）
+   * 和加数（review）两套语义。 */
+
+  E.researchById = function (id) {
+    for (var i = 0; i < GD.RESEARCH.length; i++) if (GD.RESEARCH[i].id === id) return GD.RESEARCH[i];
+    return null;
+  };
+
+  function researchState(s) {
+    if (!s.research || typeof s.research !== 'object') s.research = { done: [], active: null };
+    if (!Array.isArray(s.research.done)) s.research.done = [];
+    return s.research;
+  }
+
+  E.researchDone = function (s, id) { return researchState(s).done.indexOf(id) >= 0; };
+  E.researchActive = function (s) { return researchState(s).active; };
+  E.researchCost = function (s, item) { return Math.round(item.cost * E.inflation(s)); };
+
+  E.researchProgress = function (s) {
+    var a = researchState(s).active;
+    if (!a) return 0;
+    var it = E.researchById(a.id);
+    if (!it || !(it.days > 0)) return 1;
+    return Math.max(0, Math.min(1, (s.day - a.start) / it.days));
+  };
+
+  E.researchMul = function (s, key) {
+    var st = researchState(s), m = 1;
+    for (var i = 0; i < st.done.length; i++) {
+      var it = E.researchById(st.done[i]);
+      if (it && it.eff && it.eff[key]) m *= it.eff[key];
+    }
+    return m;
+  };
+
+  E.researchAdd = function (s, key) {
+    var st = researchState(s), sum = 0;
+    for (var i = 0; i < st.done.length; i++) {
+      var it = E.researchById(st.done[i]);
+      if (it && it.eff && it.eff[key]) sum += it.eff[key];
+    }
+    return sum;
+  };
+
+  E.startResearch = function (s, id) {
+    var st = researchState(s);
+    if (st.active) return false;
+    if (st.done.indexOf(id) >= 0) return false;
+    var it = E.researchById(id);
+    if (!it) return false;
+    var cost = E.researchCost(s, it);
+    if (s.money < cost) return false;
+    s.money -= cost;
+    st.active = { id: it.id, start: s.day };
+    return true;
+  };
+
   /* ---------------- 企划 → 开发 ---------------- */
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
     var plat = E.platformById(plan.platform || E.platform(s).id);
-    if (s.money < plat.license) return false;
+    var lic = plat.license * E.researchMul(s, 'license');
+    if (s.money < lic) return false;
 
     s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id };
-    s.money -= plat.license;
+    s.money -= lic;
     s.project = {
       baseDuration: E.devDuration(s, plan.leader),
       elapsed: 0,
@@ -378,7 +439,7 @@
       eventsDone: 0,
       microDone: 0,
       quality: 0,
-      cost: plat.license,
+      cost: lic,
       log: [],
       logAt: 0
     };
@@ -474,7 +535,7 @@
     var scores = [];
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
-      var v = 10 * q / cap * 0.85;
+      var v = 10 * q / cap * 0.85 + E.researchAdd(s, 'review');
       if (c.fav === s.plan.genre) v += c.bias;
       if (c.hate === s.plan.genre) v -= 1.0;
       v += Math.random() * 2 - 1;
@@ -608,7 +669,8 @@
     var fanF = 1 + s.fans / 25000;
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
-    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult;
+    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult *
+      E.researchMul(s, 'sales') * E.traitFansMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
 
@@ -622,7 +684,7 @@
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult);
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.researchMul(s, 'sales'));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -646,7 +708,7 @@
 
     s.money += revenue;
     s.totalEarned += revenue;
-    s.fans += copies * BAL.fanPerCopy * E.traitFansMul(s);
+    s.fans += copies * BAL.fanPerCopy * E.traitFansMul(s) * E.researchMul(s, 'fans');
     s.sales.sold += copies;
     s.sales.revenue += revenue;
     s.sales.index++;
@@ -675,6 +737,17 @@
   E.tick = function (s, dt) {
     var out = [];
     if (!(dt > 0)) return out;
+
+    /* 研发按日历推进：跨过目标天数就算完成，跟当前处在哪个阶段无关 */
+    var rs = researchState(s);
+    if (rs.active) {
+      var ra = E.researchById(rs.active.id);
+      if (ra && s.day - rs.active.start >= ra.days) {
+        rs.done.push(ra.id);
+        rs.active = null;
+        out.push({ type: 'research', item: ra });
+      }
+    }
 
     if (s.phase === 'developing') {
       var mode = BAL.modes[s.project.mode] || BAL.modes.normal;

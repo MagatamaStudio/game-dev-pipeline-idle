@@ -133,6 +133,52 @@
     { id: 'thrift', name: '能省则省', desc: '开局就有 4 个工位', tip: '白拿一个工位，早招人早开发。' }
   ];
 
+  /* 研究项：24 项，四条支线各 6 项。完成后给公司永久加成。
+   * eff 里两套语义：
+   *   乘数键 quality / speed / salary / xp / fans / sales / license（默认 1）
+   *   加数键 review（每位评审加多少分，默认 0）
+   * 研发只按日历推进 —— 不开发游戏时间就不走。 */
+  GD.RESEARCH_BRANCHES = [
+    { id: 'tech', name: '技术', icon: '⚙', color: '#7fb2ff' },
+    { id: 'content', name: '内容', icon: '✦', color: '#d98bd8' },
+    { id: 'biz', name: '商业', icon: '◎', color: '#e8b04b' },
+    { id: 'team', name: '团队', icon: '☰', color: '#4fc3a1' }
+  ];
+
+  GD.RESEARCH = [
+    /* ---- 技术 ---- */
+    { id: 'toolchain', branch: 'tech', name: '版本管理', desc: '品质 +3%', cost: 40000, days: 60, eff: { quality: 1.03 } },
+    { id: 'autotest', branch: 'tech', name: '自动化测试', desc: '品质 +4%', cost: 60000, days: 90, eff: { quality: 1.04 } },
+    { id: 'intools', branch: 'tech', name: '内部工具链', desc: '开发速度 +6%', cost: 80000, days: 110, eff: { speed: 0.94 } },
+    { id: 'engine', branch: 'tech', name: '自研引擎', desc: '品质 +6%，开发速度 +3%', cost: 120000, days: 150, eff: { quality: 1.06, speed: 0.97 } },
+    { id: 'perf', branch: 'tech', name: '性能优化', desc: '品质 +3%，开发速度 +3%', cost: 90000, days: 120, eff: { quality: 1.03, speed: 0.97 } },
+    { id: 'aifirst', branch: 'tech', name: 'AI 辅助开发', desc: '开发速度 +10%，品质 +2%', cost: 200000, days: 180, eff: { speed: 0.90, quality: 1.02 } },
+
+    /* ---- 内容 ---- */
+    { id: 'narrative', branch: 'content', name: '叙事工作坊', desc: '品质 +4%', cost: 50000, days: 70, eff: { quality: 1.04 } },
+    { id: 'playtest', branch: 'content', name: '玩家测试组', desc: '每位评审 +0.4 分', cost: 70000, days: 100, eff: { review: 0.4 } },
+    { id: 'artdir', branch: 'content', name: '美术总监制', desc: '品质 +5%', cost: 100000, days: 130, eff: { quality: 1.05 } },
+    { id: 'audiolab', branch: 'content', name: '音频实验室', desc: '品质 +3%', cost: 60000, days: 90, eff: { quality: 1.03 } },
+    { id: 'worldbook', branch: 'content', name: '世界观库', desc: '品质 +5%，粉丝 +5%', cost: 140000, days: 160, eff: { quality: 1.05, fans: 1.05 } },
+    { id: 'media', branch: 'content', name: '媒体关系', desc: '每位评审 +0.5 分', cost: 80000, days: 110, eff: { review: 0.5 } },
+
+    /* ---- 商业 ---- */
+    { id: 'marketing', branch: 'biz', name: '营销部门', desc: '销量 +6%', cost: 90000, days: 120, eff: { sales: 1.06 } },
+    { id: 'community', branch: 'biz', name: '社区运营', desc: '粉丝 +10%', cost: 70000, days: 100, eff: { fans: 1.10 } },
+    { id: 'publish', branch: 'biz', name: '发行谈判', desc: '平台授权费 −15%', cost: 110000, days: 130, eff: { license: 0.85 } },
+    { id: 'retail', branch: 'biz', name: '渠道合作', desc: '销量 +8%', cost: 130000, days: 150, eff: { sales: 1.08 } },
+    { id: 'brand', branch: 'biz', name: '品牌授权', desc: '粉丝 +8%，销量 +4%', cost: 150000, days: 170, eff: { fans: 1.08, sales: 1.04 } },
+    { id: 'global', branch: 'biz', name: '海外发行', desc: '销量 +10%', cost: 180000, days: 190, eff: { sales: 1.10 } },
+
+    /* ---- 团队 ---- */
+    { id: 'officere', branch: 'team', name: '办公室改造', desc: '日薪 −6%', cost: 60000, days: 90, eff: { salary: 0.94 } },
+    { id: 'training', branch: 'team', name: '内训体系', desc: '经验 +20%', cost: 80000, days: 120, eff: { xp: 1.20 } },
+    { id: 'benefits', branch: 'team', name: '福利制度', desc: '日薪 −8%', cost: 100000, days: 140, eff: { salary: 0.92 } },
+    { id: 'mentor', branch: 'team', name: '导师制', desc: '经验 +15%，品质 +2%', cost: 90000, days: 130, eff: { xp: 1.15, quality: 1.02 } },
+    { id: 'remote', branch: 'team', name: '远程协作', desc: '开发速度 +5%，日薪 −5%', cost: 120000, days: 150, eff: { speed: 0.95, salary: 0.95 } },
+    { id: 'headhunt', branch: 'team', name: '猎头网络', desc: '经验 +10%，品质 +2%', cost: 70000, days: 100, eff: { xp: 1.10, quality: 1.02 } }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };

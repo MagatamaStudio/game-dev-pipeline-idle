@@ -240,6 +240,36 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 
+  /* ---------- 1.9 研究面板 ---------- */
+  await evalJs(`document.querySelector('[data-act="research"]').click()`);
+  await sleep(220);
+  var resPanel = await evalJs(`({
+    open: !document.querySelector('#research').hidden,
+    items: document.querySelectorAll('#research [data-research]').length,
+    branches: document.querySelectorAll('#research .res-branch').length,
+    done: document.querySelectorAll('#research .res-item.done').length
+  })`);
+  check('研究面板有 4 条支线 24 项',
+    resPanel.open === true && resPanel.items === 24 && resPanel.branches === 4,
+    'items=' + resPanel.items + ' branches=' + resPanel.branches);
+
+  var moneyBeforeRes = await evalJs(`GD.getState().money`);
+  await evalJs(`document.querySelector('#research [data-research]:not([disabled])').click()`);
+  await sleep(250);
+  var resRun = await evalJs(`(function () {
+    var s = GD.getState();
+    return {
+      active: s.research.active ? s.research.active.id : null,
+      running: document.querySelectorAll('#research .res-item.running').length,
+      money: s.money
+    };
+  })()`);
+  check('可以开始一项研究并扣钱',
+    !!resRun.active && resRun.running === 1 && moneyBeforeRes - resRun.money > 0,
+    'active=' + resRun.active + ' paid=' + (moneyBeforeRes - resRun.money));
+  await evalJs(`document.querySelector('#research [data-act="close-panel"]').click()`);
+  await sleep(150);
+
   /* ---------- 2. 选择类型/题材 ---------- */
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);

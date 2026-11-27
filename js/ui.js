@@ -12,7 +12,7 @@
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
     weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
-    bound: false, lastError: ''
+    researchCount: 0, bound: false, lastError: ''
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -62,6 +62,7 @@
     s = state; hooks = h || {};
     /* 读档进来时已经有年度结果，别在首屏补弹一堆过期提示 */
     ui.yearCount = (s.yearResults || []).length;
+    ui.researchCount = (s.research && s.research.done) ? s.research.done.length : 0;
     el.money = byId('money');
     el.fans = byId('fans');
     el.round = byId('round');
@@ -77,6 +78,7 @@
     el.archive = byId('archive');
     el.offline = byId('offline');
     el.industry = byId('industry');
+    el.research = byId('research');
     el.sound = byId('sound');
     el.theme = byId('theme');
 
@@ -123,13 +125,24 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research]');
       if (!t) return;
       GD.SFX.unlock();
 
       var panelAct = t.getAttribute('data-act');
       var hireId = t.getAttribute('data-hire');
       var decId = t.getAttribute('data-dec');
+      var researchId = t.getAttribute('data-research');
+
+      if (researchId) {
+        if (E.startResearch(s, researchId)) {
+          GD.SFX.coin();
+          renderResearch();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
 
       if (decId) {
         if (E.chooseDeclaration(s, decId)) {
@@ -153,12 +166,14 @@
       if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
       if (panelAct === 'industry') { GD.SFX.click(); renderIndustry(); el.industry.hidden = false; return; }
+      if (panelAct === 'research') { GD.SFX.click(); renderResearch(); el.research.hidden = false; return; }
       if (panelAct === 'close-panel') {
         GD.SFX.click();
         el.team.hidden = true;
         el.archive.hidden = true;
         el.offline.hidden = true;
         el.industry.hidden = true;
+        el.research.hidden = true;
         return;
       }
       if (panelAct === 'expand') {
@@ -271,6 +286,22 @@
     }
     updateStage();
     updateOffice();
+
+    /* 研发完成提示 + 面板进度自刷新 */
+    var rdone = (s.research && s.research.done) ? s.research.done.length : 0;
+    if (rdone > (ui.researchCount || 0)) {
+      ui.researchCount = rdone;
+      var lastIt = E.researchById(s.research.done[rdone - 1]);
+      if (lastIt) UI.toast('🔬 研究完成：' + lastIt.name + ' · ' + lastIt.desc);
+    } else if (rdone < (ui.researchCount || 0)) {
+      ui.researchCount = rdone;
+    }
+    if (el.research && !el.research.hidden) {
+      var act = E.researchActive(s);
+      var sig = (act ? act.id : '') + '|' + Math.floor(E.researchProgress(s) * 20);
+      if (ui.researchSig !== sig) { ui.researchSig = sig; renderResearch(); }
+    }
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -638,6 +669,47 @@
   }
 
   /* ---------------- 行业 ---------------- */
+
+  /* ---------------- 研究 ---------------- */
+
+  function renderResearch() {
+    var active = E.researchActive(s);
+    var prog = E.researchProgress(s);
+    var doneN = (s.research && s.research.done) ? s.research.done.length : 0;
+
+    var html = '<div class="panel-card">' +
+      '<div class="panel-head"><div><h3>研究</h3>' +
+      '<div class="panel-sub">已完成 ' + doneN + ' / ' + GD.RESEARCH.length + ' · ' +
+      (active ? '进行中：' + esc(E.researchById(active.id).name) + ' ' + Math.round(prog * 100) + '%' : '当前空闲') +
+      '</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="panel-scroll">';
+
+    GD.RESEARCH_BRANCHES.forEach(function (b) {
+      html += '<div class="res-branch">' +
+        '<div class="res-branch-head"><span class="res-icon" style="color:' + b.color + '">' + b.icon + '</span>' +
+        esc(b.name) + '</div><div class="res-list">';
+      GD.RESEARCH.forEach(function (it) {
+        if (it.branch !== b.id) return;
+        var done = E.researchDone(s, it.id);
+        var running = !!active && active.id === it.id;
+        var cost = E.researchCost(s, it);
+        var busy = done || running || !!active || s.money < cost;
+        html += '<button class="res-item' + (done ? ' done' : '') + (running ? ' running' : '') + '"' +
+          ' data-research="' + it.id + '"' + (busy ? ' disabled' : '') + '>' +
+          '<span class="res-name">' + esc(it.name) + (done ? ' ✓' : '') + '</span>' +
+          '<span class="res-desc">' + esc(it.desc) + '</span>' +
+          '<span class="res-meta">' + money(cost) + ' · ' + it.days + ' 天' +
+          (running ? ' · ' + Math.round(prog * 100) + '%' : '') + '</span>' +
+          '</button>';
+      });
+      html += '</div></div>';
+    });
+
+    html += '<div class="panel-foot">研发按游戏内日历推进 —— 不开发、不发售，时间就不走。</div>';
+    html += '</div></div>';
+    el.research.innerHTML = html;
+  }
 
   function renderIndustry() {
     var html = '<div class="panel-card">' +

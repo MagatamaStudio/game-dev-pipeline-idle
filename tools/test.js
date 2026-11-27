@@ -641,6 +641,78 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 研究 ---------------- */
+(function () {
+  ok('研究项一共 24 个', GD.RESEARCH.length === 24, String(GD.RESEARCH.length));
+  ok('研究分 4 条支线', GD.RESEARCH_BRANCHES.length === 4);
+
+  var s = E.newGame();
+  ok('新开局研究树是空的', s.research.done.length === 0 && s.research.active === null);
+
+  var item = GD.RESEARCH[0];
+  var money0 = s.money, cost = E.researchCost(s, item);
+  ok('开始研究扣钱并占用队列',
+    E.startResearch(s, item.id) === true && s.money === money0 - cost,
+    'cost=' + cost);
+  ok('同一时间只能研究一项', E.startResearch(s, GD.RESEARCH[1].id) === false);
+  ok('不能重复研究同一项', E.startResearch(s, item.id) === false);
+
+  var out = E.tick(s, 1 / 30);
+  ok('日历没走够时不会提前完成', E.researchActive(s) !== null);
+
+  s.day += item.days + 1;
+  E.tick(s, 1 / 30);
+  ok('日历走够天数后研究完成',
+    E.researchDone(s, item.id) === true && s.research.active === null);
+
+  ok('品质研究按乘法生效', Math.abs(E.researchMul(s, 'quality') - 1.03) < 1e-9,
+    String(E.researchMul(s, 'quality')));
+
+  E.startResearch(s, 'autotest');
+  s.day += 200;
+  E.tick(s, 1 / 30);
+  ok('同类研究加成相乘',
+    Math.abs(E.researchMul(s, 'quality') - 1.03 * 1.04) < 1e-9,
+    String(E.researchMul(s, 'quality')));
+
+  /* 授权费折扣 */
+  var s2 = E.newGame();
+  var p0 = E.preview(s2, s2.plan).cost;
+  s2.research.done.push('publish');
+  var p1 = E.preview(s2, s2.plan).cost;
+  ok('发行谈判降低授权费', p1 < p0 && Math.abs((p0 - p1) - 6000 * 0.15) < 2,
+    p0.toFixed(0) + ' → ' + p1.toFixed(0));
+
+  /* 开发速度 */
+  var s3 = E.newGame();
+  var d0 = E.devDuration(s3, 'zhou');
+  s3.research.done.push('aifirst');
+  var d1 = E.devDuration(s3, 'zhou');
+  ok('AI 辅助开发缩短开发时长', d1 < d0, d0.toFixed(2) + ' → ' + d1.toFixed(2) + ' 秒');
+
+  /* 日薪 */
+  var s4 = E.newGame();
+  var sal0 = E.teamSalary(s4);
+  s4.research.done.push('benefits');
+  ok('福利制度降低日薪', Math.abs(E.teamSalary(s4) - sal0 * 0.92) < 1,
+    Math.round(sal0) + ' → ' + Math.round(E.teamSalary(s4)));
+
+  /* 钱不够不能开 */
+  var s5 = E.newGame();
+  s5.money = 100;
+  ok('钱不够开不了研究', E.startResearch(s5, 'engine') === false);
+
+  /* 老存档 / 空对象兜底 */
+  var bare = {};
+  ok('对象里没有 research 字段也不会崩',
+    E.researchDone(bare, 'engine') === false && E.researchMul(bare, 'quality') === 1 &&
+    E.researchProgress(bare) === 0);
+
+  var reloaded = E.deserialize(E.serialize(E.newGame()));
+  ok('存档往返保留研究进度',
+    reloaded.research && Array.isArray(reloaded.research.done) && reloaded.research.active === null);
+})();
+
 /* ---------------- 创业宣言 ---------------- */
 (function () {
   function fresh() { return E.newGame(); }
