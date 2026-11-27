@@ -1331,7 +1331,8 @@ GD.DECLARATIONS_RETRY = [
     reviewPerCritic: 1.1,
     reviewTail: 1.4,
     salesWeeks: 12,
-    salesEventWeeks: [3, 6, 9],   // 第 3/6/9 周各弹一次发售期决策
+    salesEventWeeks: [3, 6, 9],
+    salesEventTimeout: 10,           // 待决策超过这么多秒就自动处理，防死锁   // 第 3/6/9 周各弹一次发售期决策
     salesWeekSeconds: 2.0,
     salesBase: 12000,
     adCost: 50000,

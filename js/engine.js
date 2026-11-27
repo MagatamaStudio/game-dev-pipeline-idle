@@ -2114,6 +2114,8 @@
       index: 0,
       adUsed: 0,
       eventsDone: 0,
+      eventWeeks: [],
+      pendingWait: 0,
       pending: null,
       log: [],
       boost: 1,
@@ -2154,13 +2156,29 @@
     var weeks = BAL.salesEventWeeks || [3, 6, 9];
     var next = s.sales.index + 1;              // 下一周（1-based）
     if (weeks.indexOf(next) < 0) return null;
-    if ((s.sales.eventsDone || 0) >= weeks.length) return null;
+    if (!Array.isArray(s.sales.eventWeeks)) s.sales.eventWeeks = [];
+    if (s.sales.eventWeeks.indexOf(next) >= 0) return null;
     if (s.sales.index >= BAL.salesWeeks) return null;
     var pool = GD.SALES_EVENTS || [];
     if (!pool.length) return null;
     var pick = pool[Math.floor(Math.random() * pool.length)];
+    s.sales.eventWeeks.push(next);
     s.sales.pending = { id: pick.id, week: next, name: pick.name, desc: pick.desc, options: pick.options };
     return s.sales.pending;
+  };
+
+  /* 兜底：挑最便宜的买得起的选项，实在都选不了就白给（清空待选） */
+  E.autoResolveSalesEvent = function (s) {
+    if (!s.sales || !s.sales.pending) return false;
+    var opts = s.sales.pending.options || [];
+    var order = opts.map(function (o, i) { return { i: i, c: o.cost || 0 }; })
+      .sort(function (a, b) { return a.c - b.c; });
+    for (var k = 0; k < order.length; k++) {
+      if (E.chooseSalesEvent(s, order[k].i)) return true;
+    }
+    /* 一个都选不了：直接丢掉这个事件，别再卡着 */
+    if (s.sales) { s.sales.pending = null; s.sales.pendingWait = 0; }
+    return false;
   };
 
   E.chooseSalesEvent = function (s, idx) {
@@ -2175,6 +2193,7 @@
     if (opt.rep) E.addRep(s, opt.rep);
     if (opt.fans) s.fans += opt.fans;
     s.sales.eventsDone = (s.sales.eventsDone || 0) + 1;
+    s.sales.pendingWait = 0;
     s.sales.eventCost = (s.sales.eventCost || 0) + (opt.cost || 0);
     s.sales.log = s.sales.log || [];
     s.sales.log.push({ week: ev.week, name: ev.name, choice: opt.label });
@@ -2285,8 +2304,15 @@
     }
 
     else if (s.phase === 'sales') {
-      /* 有待决策就先别推进，等玩家选完 */
-      if (E.salesEventDue(s)) return out;
+      /* 有待决策就先别推进，等玩家选完；但要有兜底，
+       * 万一界面没把卡片渲染出来（旧缓存 / 容器缺失），不能永久卡死。 */
+      var dueEv = E.salesEventDue(s);
+      if (dueEv) {
+        s.sales.pendingWait = (s.sales.pendingWait || 0) + dt;
+        if (s.sales.pendingWait < (BAL.salesEventTimeout || 10)) return out;
+        E.autoResolveSalesEvent(s);
+        s.sales.pendingWait = 0;
+      }
       s.timer += dt;
       var target = Math.floor(s.timer / BAL.salesWeekSeconds);
       var guard = 0;

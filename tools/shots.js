@@ -5,6 +5,7 @@
 'use strict';
 
 var { spawn } = require('child_process');
+var os = require('os');
 var path = require('path');
 var fs = require('fs');
 
@@ -55,7 +56,8 @@ function connect(wsUrl) {
 
 (async function main() {
   fs.mkdirSync(OUT, { recursive: true });
-  var userDir = path.join(OUT, 'shot-m0');
+  /* Edge profile 放系统临时目录，别污染仓库 */
+  var userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gws-shot-'));
   fs.rmSync(userDir, { recursive: true, force: true });
 
   var child = spawn(EDGE, [

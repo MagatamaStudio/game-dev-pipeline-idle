@@ -5,6 +5,7 @@
 'use strict';
 
 var { spawn } = require('child_process');
+var os = require('os');
 var path = require('path');
 var fs = require('fs');
 
@@ -61,7 +62,8 @@ function connect(wsUrl) {
 }
 
 (async function main() {
-  var userDir = path.join(ROOT, 'shots', 'e2e-m0');
+  /* Edge profile 放系统临时目录：以前放 shots/ 里，跑几次就堆几百 MB */
+  var userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gws-e2e-'));
   fs.rmSync(userDir, { recursive: true, force: true });
 
   var child = spawn(EDGE, [
@@ -910,7 +912,7 @@ function connect(wsUrl) {
   var a11y = await evalJs(`(function () {
     var out = {};
     try {
-      out.iconLabels = ['theme', 'sound', 'help'].filter(function (id) {
+      out.iconLabels = ['theme', 'sound', 'helpbtn'].filter(function (id) {
         var b = document.getElementById(id);
         return b && b.getAttribute('aria-label');
       }).length;
@@ -967,6 +969,53 @@ function connect(wsUrl) {
   check('决策卡能选择并记账',
     seUI.picked === true && seUI.logged === 1 && seUI.stillThere === 0,
     'picked=' + seUI.picked + ' log=' + seUI.logged + ' spent=' + seUI.spent);
+
+  /* ---------- 2.7 帮助浮层不能再被压在底层 / 销售期不能死锁 ---------- */
+  var helpLayer = await evalJs(`(function () {
+    var out = {};
+    try {
+      document.querySelector('[data-act="help"]').click();
+      var el = document.getElementById('help');
+      var cs = getComputedStyle(el);
+      out.position = cs.position;
+      out.zIndex = cs.zIndex;
+      out.shown = !el.hidden;
+      out.fillsViewport = el.getBoundingClientRect().width > window.innerWidth * 0.9;
+      document.querySelector('#help [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+  check('帮助浮层是独立的全屏浮层', !helpLayer.err && helpLayer.shown === true &&
+    helpLayer.position === 'fixed' && helpLayer.fillsViewport === true,
+    helpLayer.err || ('position=' + helpLayer.position + ' z=' + helpLayer.zIndex +
+      ' fills=' + helpLayer.fillsViewport));
+  check('帮助浮层层级够高', Number(helpLayer.zIndex) >= 50, 'z=' + helpLayer.zIndex);
+
+  var noLock = await evalJs(`(function () {
+    var out = {};
+    try {
+      /* 在克隆状态上测：别把当前存档推进坏了 */
+      var clone = JSON.parse(JSON.stringify(GD.getState()));
+      clone.phase = 'sales';
+      clone.sales = { index: 2, total: 100000, sold: 0, revenue: 0, adUsed: 0, eventsDone: 0,
+        eventWeeks: [], pendingWait: 0, log: [], boost: 1, weeks: [], eventCost: 0,
+        pending: { week: 3, name: '卡死测试', desc: '', options: [
+          { label: '贵', cost: 9999999, boost: 1.5 },
+          { label: '便宜', cost: 0, boost: 1.1 }
+        ] } };
+      clone.money = 1000;
+      clone.project = { coop: null, cost: 1 };
+      var ticks = 0;
+      while (clone.sales && clone.sales.pending && ticks++ < 4000) GD.Engine.tick(clone, 1 / 30);
+      out.resolved = !clone.sales.pending;
+      out.picked = (clone.sales.log || []).map(function (x) { return x.choice; }).join(',');
+      out.ticks = ticks;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+
+  check('待选事件不会永久卡死', !noLock.err && noLock.resolved === true,
+    noLock.err || ('picked=' + noLock.picked));
 
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
