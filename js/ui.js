@@ -65,7 +65,7 @@
     ui.researchCount = (s.research && s.research.done) ? s.research.done.length : 0;
     el.money = byId('money');
     el.fans = byId('fans');
-    el.round = byId('round');
+    el.rep = byId('rep');
     el.platform = byId('platform');
     el.date = byId('date');
     el.desks = byId('desks');
@@ -378,7 +378,7 @@
     el.money.textContent = money(s.money);
     el.money.classList.toggle('negative', s.money < 0);
     el.fans.textContent = num(s.fans);
-    el.round.textContent = String(s.round);
+    el.rep.textContent = String(Math.round(s.rep || 0));
     el.platform.textContent = E.platformLabel(E.platform(s));
     el.date.textContent = E.dateString(s.day);
 
@@ -712,7 +712,7 @@
     var cost = E.expandCost(s);
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>团队</h3>' +
-      '<div class="panel-sub">' + s.staff.length + ' / ' + s.seats + ' 个工位 · 日薪 ' + money(E.teamSalary(s)) + '</div></div>' +
+      '<div class="panel-sub">' + s.staff.length + ' / ' + s.seats + ' 个工位 · 日薪 ' + money(E.teamSalary(s)) + ' · 声望 ' + Math.round(s.rep || 0) + '</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
 
@@ -749,7 +749,7 @@
     } else {
       s.candidates.forEach(function (id) {
         var r = E.rosterById(id);
-        var fee = r.salary * GD.BAL.hireFeeDays * E.inflation(s);
+        var fee = E.hireFee(s, r);
         var can = s.money >= fee && s.staff.length < s.seats;
         html += '<div class="cand">' +
           '<div class="avatar sm">' + avatarSvg(r.seed) + '</div>' +
@@ -1158,6 +1158,7 @@
       '<div class="done-row"><span>发行作品</span><b>' + r.releases + ' 部</b></div>' +
       '<div class="done-row"><span>最高评分</span><b>' + r.best + ' / 40</b></div>' +
       '<div class="done-row"><span>年度奖项</span><b>' + r.awards + ' 次</b></div>' +
+      '<div class="done-row"><span>声望</span><b>' + (r.rep || 0) + ' / 100</b></div>' +
       '<div class="done-row"><span>粉丝</span><b>' + num(r.fans) + '</b></div>' +
       '<div class="done-row"><span>累计收入</span><b>' + money(r.earned) + '</b></div>' +
       '</div>' +

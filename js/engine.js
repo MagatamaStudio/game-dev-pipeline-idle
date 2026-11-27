@@ -234,11 +234,36 @@
     return out;
   };
 
+  /* ---------------- 声望 ----------------
+   * 0~100。拿奖加（年度游戏 +10 / 提名 +5），影响签约金、评审分、结局判定。 */
+  E.REP_MAX = 100;
+
+  E.addRep = function (s, n) {
+    s.rep = Math.max(0, Math.min(E.REP_MAX, (s.rep || 0) + n));
+    return s.rep;
+  };
+
+  /* 办公室等级：目前用工位数当等级（3~6 级） */
+  E.officeLevel = function (s) { return s.seats || 3; };
+
+  /* 拿过几次年度游戏（提名不算） */
+  E.awardWins = function (s) {
+    var n = 0;
+    (s.yearResults || []).forEach(function (y) { if (!y.winner) n++; });
+    return n;
+  };
+
+  /* 签约金：声望越高越便宜，最多打六折 */
+  E.hireFee = function (s, r) {
+    var disc = Math.max(0.6, 1 - (s.rep || 0) / 250);
+    return Math.round(r.salary * BAL.hireFeeDays * E.inflation(s) * disc);
+  };
+
   E.hire = function (s, id) {
     if (s.staff.length >= s.seats) return false;
     if (s.candidates.indexOf(id) === -1) return false;
     var r = E.rosterById(id);
-    var fee = r.salary * BAL.hireFeeDays * E.inflation(s);
+    var fee = E.hireFee(s, r);
     if (s.money < fee) return false;
     s.money -= fee;
     s.staff.push(E.makeStaff(id));
@@ -298,6 +323,7 @@
       round: 1,
       money: BAL.startMoney,
       fans: 0,
+      rep: 0,
       day: 0,
       phase: 'planning',
       plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '' },
@@ -546,7 +572,7 @@
     if (!m) return null;
     var P = GD.POACH;
     var cost = Math.round(m.salary * BAL.hireFeeDays * P.feeDays * (1 + r.power * 0.5) * E.inflation(s));
-    var chance = P.chanceBase + s.fans / P.fanDiv - (r.power - 1.0) * P.powerPenalty;
+    var chance = P.chanceBase + s.fans / P.fanDiv + (s.rep || 0) / 400 - (r.power - 1.0) * P.powerPenalty;
     chance = Math.max(0.2, Math.min(0.9, chance));
     return { cost: cost, chance: chance, member: m };
   };
@@ -881,7 +907,7 @@
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
       /* 次线性：品质超出 cap 越多，边际收益越小，避免「品质一高必打满分」 */
-      var v = 10 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 + E.bonusAdd(s, 'review');
+      var v = 10 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 + E.bonusAdd(s, 'review') + (s.rep || 0) / 100 * 0.8;
       if (c.fav === s.plan.genre) v += c.bias;
       if (c.hate === s.plan.genre) v -= 1.0;
       v += Math.random() * 2 - 1;
@@ -1303,6 +1329,9 @@
     while (last < yr && guard++ < 50) {
       var mine = s.yearBest || 0;
 
+      /* 每年粉丝衰减，防止「粉丝越多卖越多」的无限滚雪球 */
+      s.fans = Math.max(0, s.fans * (1 - BAL.fanDecayPerYear));
+
       /* 子品牌的作品算你的成绩：取当年子品牌里最好的一部 */
       var brandBest = null;
       var brandList = Array.isArray(s.yearBrand) ? s.yearBrand : [];
@@ -1341,6 +1370,7 @@
       }
 
       if (award) {
+        E.addRep(s, award.title === '年度游戏' ? 10 : 5);
         s.money += award.money;
         s.fans += award.fans;
         s.awards.push(award);
@@ -1372,13 +1402,16 @@
   /* ---------------- 结局 ---------------- */
 
   E.ending = function (s) {
-    var awards = s.awards.length;
+    var rep = Math.round(s.rep || 0);
+    var wins = E.awardWins(s);
+    var awards = (s.awards || []).length;
     var best = 0;
     for (var i = 0; i < s.history.length; i++) if (s.history[i].total > best) best = s.history[i].total;
     var title, tone;
-    if (awards >= 3) { title = '时代定义者'; tone = '你定的规则，别人在遵守。'; }
-    else if (awards >= 1) { title = '一流工作室'; tone = '你活下来了，而且活得不错。'; }
-    else if (s.history.length <= 25 && best >= 30) { title = '小而美'; tone = '人不多，但每一部都拿得出手。'; }
+    /* 判定顺序按文档 4.5：先看「年度游戏次数 + 声望」，再看声望，再看「小而美」 */
+    if (wins >= 3 && rep >= 80) { title = '时代定义者'; tone = '你定的规则，别人在遵守。'; }
+    else if (rep >= 50) { title = '一流工作室'; tone = '你活下来了，而且活得不错。'; }
+    else if (s.fans >= 500000 && E.officeLevel(s) <= 3) { title = '小而美'; tone = '人不多，但每一部都拿得出手。'; }
     else { title = '勉强维生'; tone = '还在，还没倒。'; }
     return {
       title: title,
@@ -1387,6 +1420,8 @@
       releases: s.history.length,
       best: best,
       awards: awards,
+      wins: wins,
+      rep: rep,
       fans: Math.round(s.fans),
       earned: Math.round(s.totalEarned)
     };

@@ -607,8 +607,59 @@ function playOne(s, plan, choice) {
   ok('可以继续经营', E.continueEndless(s) === true && s.phase === 'planning' && s.ended === true);
 
   var s2 = E.newGame();
-  s2.awards = [{ year: 1980, title: '年度游戏' }, { year: 1981, title: '年度游戏' }, { year: 1982, title: '年度游戏' }];
-  ok('三座奖杯是时代定义者', E.ending(s2).title === '时代定义者', E.ending(s2).title);
+  s2.rep = 80;
+  s2.yearResults = [{ winner: null }, { winner: null }, { winner: null }];
+  ok('三座年度游戏 + 声望 80 是时代定义者', E.ending(s2).title === '时代定义者', E.ending(s2).title);
+})();
+
+/* ---------- 声望与粉丝衰减 ---------- */
+(function () {
+  var s = E.newGame();
+  ok('新开局声望为 0', (s.rep || 0) === 0);
+
+  E.addRep(s, 30);
+  ok('加声望生效', s.rep === 30, String(s.rep));
+  E.addRep(s, 500);
+  ok('声望上限 100', s.rep === 100, String(s.rep));
+  E.addRep(s, -500);
+  ok('声望下限 0', s.rep === 0, String(s.rep));
+
+  var r = E.rosterById('lin');
+  var full = E.hireFee(E.newGame(), r);
+  var rich = E.newGame(); rich.rep = 100;
+  var cheap = E.hireFee(rich, r);
+  ok('声望越高签约金越便宜（最多六折）',
+    cheap < full && Math.abs(cheap / full - 0.6) < 0.02,
+    full + ' → ' + cheap);
+
+  /* 拿年度游戏：+10 声望，粉丝先衰减 5% 再加奖项粉丝 */
+  var s3 = E.newGame();
+  s3.awardYear = 1972;
+  s3.day = (1973 - GD.BAL.startYear) * 360;
+  s3.yearBest = 38;
+  s3.yearRivalReleases = [];
+  s3.fans = 100000;
+  E.settleAwards(s3);
+  ok('拿下年度游戏加 10 点声望', s3.rep === 10, String(s3.rep));
+  ok('粉丝每年衰减 5%（再叠加奖项粉丝）',
+    Math.abs(s3.fans - 98000) < 1, '100000 → ' + Math.round(s3.fans));
+
+  /* 只拿提名：+5 */
+  var s4 = E.newGame();
+  s4.awardYear = 1972;
+  s4.day = (1973 - GD.BAL.startYear) * 360;
+  s4.yearBest = 37;
+  s4.yearRivalReleases = [{ year: 1972, title: '对手作', score: 39, rival: 'old', name: '老街机' }];
+  E.settleAwards(s4);
+  ok('只拿提名加 5 点声望', s4.rep === 5, String(s4.rep));
+
+  /* 结局四档 */
+  var e1 = E.newGame(); e1.rep = 50;
+  ok('声望 50 是一流工作室', E.ending(e1).title === '一流工作室', E.ending(e1).title);
+  var e2 = E.newGame(); e2.rep = 10; e2.fans = 600000;
+  ok('粉丝 60 万且办公室 3 级是小而美', E.ending(e2).title === '小而美', E.ending(e2).title);
+  var e3 = E.newGame(); e3.rep = 0; e3.fans = 0;
+  ok('什么都没有是勉强维生', E.ending(e3).title === '勉强维生', E.ending(e3).title);
 })();
 
 /* ---------- 撞档 ---------- */

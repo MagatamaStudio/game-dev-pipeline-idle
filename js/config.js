@@ -913,6 +913,7 @@
     adCost: 50000,
     adBoost: 1.4,
     fanPerCopy: 1 / 500,
+    fanDecayPerYear: 0.05,   // 粉丝每年衰减 5%，防止无限滚雪球
     rescue: 200000,
 
     /* 收购对手当子品牌：粉丝门槛 + 基础价 */

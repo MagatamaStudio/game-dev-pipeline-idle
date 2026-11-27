@@ -139,11 +139,13 @@ function connect(wsUrl) {
       previews: document.querySelectorAll('.pv').length,
       phase: GD.getState().phase,
       money: GD.getState().money,
+      rep: (document.querySelector('#rep') || {}).textContent || '',
       stage: r(q('#stage')), office: r(q('.office'))
     };
   })()`);
 
   check('无横向溢出', first.overflow <= 0, 'overflow=' + first.overflow);
+  check('顶栏显示声望', first.rep === '0', first.rep);
   check('办公室有 3 个人', first.desks === 3 && first.avatars === 3);
   check('企划有 10 类型 / 10 题材 / 3 主创',
     first.genres === 10 && first.themes === 10 && first.leaders === 3,
