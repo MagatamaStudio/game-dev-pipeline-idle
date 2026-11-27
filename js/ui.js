@@ -86,16 +86,8 @@
     el.industry = byId('industry');
     el.research = byId('research');
     el.help = byId('help');
-    el.sound = byId('sound');
-    el.theme = byId('theme');
-    if (el.sound && GD.SFX && GD.SFX.icon) {
-      el.sound.textContent = GD.SFX.icon();
-      el.sound.title = '音量：' + GD.SFX.label() + '（点击切换）';
-    }
-
-    var savedTheme = 'light';
-    try { savedTheme = localStorage.getItem('garageStudio.theme') || 'light'; } catch (e) { }
-    applyTheme(savedTheme);
+    el.settings = byId('settings');
+      applyTheme();
 
     buildOffice();
     if (GD.Office && el.scene) GD.Office.mount(el.scene);
@@ -103,11 +95,10 @@
     UI.render();
   };
 
-  function applyTheme(t) {
-    document.body.setAttribute('data-theme', t);
-    if (el.theme) el.theme.textContent = t === 'dark' ? '☀' : '☾';
+  /* 只保留浅色主题：不再提供深色切换 */
+  function applyTheme() {
+    document.body.setAttribute('data-theme', 'light');
     if (GD.Office) GD.Office.invalidate();
-    try { localStorage.setItem('garageStudio.theme', t); } catch (e) { }
   }
 
   function buildOffice() {
@@ -136,7 +127,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train],[data-atab],[data-se]');
+      var t = ev.target.closest('[data-slot-rename],[data-slot-save],[data-slot-load],[data-slot-del],[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train],[data-atab],[data-mkt]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -384,13 +375,135 @@
         UI.toast(ui.slowToast ? '已切成慢速（停 8 秒）' : '已切回常规速度');
         return;
       }
-      var seIdx = t.getAttribute('data-se');
-      if (seIdx != null) {
-        if (E.chooseSalesEvent(s, Number(seIdx))) {
+      var mktId = t.getAttribute('data-mkt');
+      if (mktId) {
+        var mr = E.doMarketing(s, mktId);
+        if (mr.ok) {
           GD.SFX.coin();
-          renderSalesEvent();
+          UI.toast('宣发：' + mr.act.name + '（花 ' + money(mr.act.cost) +
+            '，余下每周销量 ×' + s.sales.marketMul.toFixed(2) + '）');
+          renderInlineMarketing();
+          if (hooks.onSave) hooks.onSave();
+        } else {
+          GD.SFX.bad();
+          el.hint.textContent = mr.reason === 'poor' ? '钱不够，要 ' + money(mr.cost) + '。'
+            : mr.reason === 'used' ? '这个宣发已经用完了。'
+              : '现在不能宣发。';
+        }
+        return;
+      }
+      if (panelAct === 'settings') {
+        GD.SFX.click();
+        renderSettings();
+        el.settings.hidden = false;
+        return;
+      }
+      if (panelAct === 'set-vol') {
+        var st = GD.SFX.cycle();
+        GD.SFX.click();
+        renderSettings();
+        UI.toast('音量：' + st.label);
+        return;
+      }
+      if (panelAct === 'set-bgm') {
+        GD.SFX.setBgm(!GD.SFX.bgmEnabled());
+        GD.SFX.click();
+        renderSettings();
+        UI.toast(GD.SFX.bgmEnabled() ? '背景音乐：开' : '背景音乐：关');
+        return;
+      }
+      /* ---- 多存档槽 ---- */
+      var slotRenameIdx = t.getAttribute('data-slot-rename');
+      if (slotRenameIdx != null) {
+        if (slotRename(Number(slotRenameIdx))) renderSettings();
+        return;
+      }
+      var slotSaveIdx = t.getAttribute('data-slot-save');
+      if (slotSaveIdx != null) {
+        if (slotSave(Number(slotSaveIdx))) {
+          GD.SFX.coin();
+          UI.toast('已存到槽 ' + (Number(slotSaveIdx) + 1));
+          renderSettings();
           if (hooks.onSave) hooks.onSave();
         } else { GD.SFX.bad(); }
+        return;
+      }
+      var slotLoadIdx = t.getAttribute('data-slot-load');
+      if (slotLoadIdx != null) {
+        if (slotLoad(Number(slotLoadIdx))) {
+          GD.SFX.coin();
+          UI.toast('已读取槽 ' + (Number(slotLoadIdx) + 1));
+        } else { GD.SFX.bad(); UI.toast('这个槽读不出来'); }
+        return;
+      }
+      var slotDelIdx = t.getAttribute('data-slot-del');
+      if (slotDelIdx != null) {
+        slotDelete(Number(slotDelIdx));
+        GD.SFX.back();
+        renderSettings();
+        return;
+      }
+      if (panelAct === 'slot-import') {
+        var impText = null;
+        try { impText = window.prompt('粘贴存档文本：'); } catch (e) { impText = null; }
+        if (impText) {
+          var impRes = slotImport(impText.trim());
+          if (impRes.ok) {
+            GD.SFX.coin();
+            UI.toast('已导入到一个空槽');
+            renderSettings();
+          } else {
+            GD.SFX.bad();
+            UI.toast(impRes.reason === 'full' ? '槽位满了，先删一个' : '这段文本不是有效存档');
+          }
+        }
+        return;
+      }
+      if (panelAct === 'save-export') {
+        var text = E.serialize(s);
+        /* 优先写剪贴板，失败就把存档挂到全局方便手动复制 */
+        var copied = false;
+        /* writeText 在无焦点/无权限时会抛 NotAllowedError，必须当成失败而不是崩 */
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            var pr = navigator.clipboard.writeText(text);
+            if (pr && pr.then) pr.then(null, function () { });
+            copied = true;
+          }
+        } catch (e) { copied = false; }
+        if (!copied) {
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            copied = document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch (e) { }
+        }
+        window.GD_SAVE_TEXT = text;   // 兜底：控制台 GD_SAVE_TEXT 可取
+        GD.SFX.coin();
+        UI.toast(copied ? '存档已复制到剪贴板（也存进了 GD_SAVE_TEXT）'
+          : '存档已存进 GD_SAVE_TEXT，控制台复制即可');
+        renderSettings();
+        return;
+      }
+      if (panelAct === 'save-reset') {
+        if (!ui.confirmReset) {
+          ui.confirmReset = true;
+          GD.SFX.bad();
+          renderSettings();
+          UI.toast('再点一次「确认重开」就会清空存档，从 1972 重来。');
+          return;
+        }
+        ui.confirmReset = false;
+        try {
+          localStorage.removeItem(E.SAVE_KEY);
+          localStorage.removeItem(E.SAVE_KEY_LEGACY);
+        } catch (e) { }
+        location.reload();
         return;
       }
       if (panelAct === 'help') { GD.SFX.click(); renderHelp(); el.help.hidden = false; return; }
@@ -437,6 +550,8 @@
         el.industry.hidden = true;
         el.research.hidden = true;
         el.help.hidden = true;
+        el.settings.hidden = true;
+        ui.confirmReset = false;
         return;
       }
       if (panelAct === 'expand') {
@@ -583,7 +698,6 @@
           GD.SFX.click();
         }
       } else if (act === 'theme') {
-        applyTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
         GD.SFX.click();
       } else if (act === 'sound') {
         var st = GD.SFX.cycle();
@@ -768,6 +882,31 @@
    * 主循环出异常时把原因固定显示在底部提示条上，
    * 否则下一次 buildStage 会把它覆盖掉，用户什么也看不到。 */
 
+  /* ---------------- 多存档槽 ----------------
+   * 槽位存在 localStorage 的 gameWorkshop.slots（数组，最多 6 个）。
+   * 每个槽是快照文本 + 时间 + 概要，不影响主存档。
+   */
+  var SLOT_KEY = 'gameWorkshop.slots';
+  var SLOT_MAX = 6;
+
+  function readSlots() {
+    try {
+      var raw = localStorage.getItem(SLOT_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  function writeSlots(list) {
+    try { localStorage.setItem(SLOT_KEY, JSON.stringify(list)); } catch (e) { }
+  }
+
+  function slotSummary(st) {
+    if (!st) return '';
+    var yr = 1972 + Math.floor((st.day || 0) / 360);
+    var works = (st.history || []).length;
+    return yr + ' 年 · 作品 ' + works + ' · $' + Math.round(st.money || 0).toLocaleString('en-US');
+  }
   function readSlowToast() {
     try { return localStorage.getItem('garageStudio.slowToast') === '1'; } catch (e) { return false; }
   }
@@ -1295,6 +1434,77 @@
   }
 
   /* 怎么玩：一页说清整个循环 */
+  /* 设置页：主页面单独一个 ⚙ 入口 */
+  /* 槽位列表：每行显示概要 + 保存/读取/删除 */
+  function slotRowsHtml() {
+    var list = readSlots();
+    var html = '<div class="panel-block"><div class="block-title">存档槽' +
+      '<span class="dim"> · ' + list.length + ' / ' + SLOT_MAX + '</span></div>';
+    for (var i = 0; i < SLOT_MAX; i++) {
+      var it = list[i];
+      html += '<div class="set-row slot-row"><b>槽 ' + (i + 1) + '</b><span>' +
+        (it ? (it.name ? '<b>' + esc(it.name) + '</b> · ' : '') + esc(it.label) : '<i class="dim">空</i>') +
+        '</span>';
+      html += '<button class="ghost tiny" data-slot-save="' + i + '">保存</button>';
+      if (it) {
+        html += '<button class="ghost tiny" data-slot-rename="' + i + '">改名</button>' +
+          '<button class="ghost tiny" data-slot-load="' + i + '">读取</button>' +
+          '<button class="ghost tiny danger" data-slot-del="' + i + '">删</button>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderSettings() {
+    var vol = (GD.SFX && GD.SFX.label) ? GD.SFX.label() : '—';
+    var bgm = GD.SFX && GD.SFX.bgmEnabled && GD.SFX.bgmEnabled();
+    var html = '<div class="panel-card"><div class="panel-head"><div><h3>设置</h3>' +
+      '<div class="panel-sub">显示、声音、存档与规则说明</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="panel-scroll">' +
+
+      '<div class="panel-block"><div class="block-title">显示与声音</div>' +
+      '<div class="set-row"><b>音量</b><span>' + esc(vol) + '</span>' +
+      '<button class="ghost tiny" data-act="set-vol">切换</button></div>' +
+      '<div class="set-row"><b>背景音乐</b><span>' + (bgm ? '开' : '关') + '</span>' +
+      '<button class="ghost tiny" data-act="set-bgm">切换</button></div>' +
+      '<div class="set-row"><b>提示停留</b><span>' + (ui.slowToast ? '慢速（8 秒）' : '常规（4 秒）') + '</span>' +
+      '<button class="ghost tiny" data-act="slow-toast">切换</button></div>' +
+      '</div>' +
+
+      '<div class="panel-block"><div class="block-title">存档</div>' +
+      '<div class="set-row"><b>导出当前进度</b><span>把现在的进度复制成文本，可以发给别人</span>' +
+      '<button class="ghost tiny" data-act="save-export">导出</button></div>' +
+      '<div class="set-row"><b>导入存档</b><span>粘贴一段存档文本，放进空闲槽位</span>' +
+      '<button class="ghost tiny" data-act="slot-import">导入</button></div>' +
+      '<div class="set-row"><b>重新开局</b><span>清空主存档，从 1972 重新开始（槽位不受影响）</span>' +
+      '<button class="ghost tiny danger" data-act="save-reset">' + (ui.confirmReset ? '确认重开' : '重开') + '</button></div>' +
+      '</div>' +
+      slotRowsHtml() +
+
+      '<div class="panel-block"><div class="block-title">发售与宣发</div>' +
+      '<div class="help-row"><b>销售期</b><span>发售后共 ' + GD.BAL.salesWeeks + ' 周，销量按周结算，曲线先高后低；之后还有长尾收入。</span></div>' +
+      '<div class="help-row"><b>宣发</b><span>销售页下方直接点，每个动作有次数上限，效果作用在剩余的每一周。</span></div>' +
+      '<div class="help-row"><b>越早越值</b><span>宣发放大的是「剩余周的销量」，前几周投入回报最高；叠加上限 ×' +
+      (GD.BAL.marketMulCap || 1.35).toFixed(2) + '。</span></div>';
+    var pool = GD.MARKETING || [];
+    pool.forEach(function (a) {
+      var eff = '余下每周 ×' + a.mul.toFixed(2) +
+        (a.priceMul && a.priceMul !== 1 ? ' · 单价 ×' + a.priceMul.toFixed(2) : '') +
+        (a.fans ? ' · 粉丝 +' + num(a.fans) : '') +
+        (a.rep ? ' · 声望 +' + a.rep : '') +
+        ' · 最多 ' + a.max + ' 次 · ' + (a.cost ? money(a.cost) : '免费');
+      html += '<div class="help-row"><b>' + esc(a.name) + '</b><span>' + esc(a.desc) +
+        '<br><i class="dim">' + esc(eff) + '</i></span></div>';
+    });
+    html += '</div>';
+
+      html += '</div></div>';
+    el.settings.innerHTML = html;
+  }
+
   function renderHelp() {
     var rows = [
       ['1、企划', '选类型、题材、规模、平台、主创。相性越高品质越高，预告里能直接看到预计评分与成本。'],
@@ -2016,27 +2226,35 @@
 
   /* ---------------- 销售 ---------------- */
 
-  /* 发售期决策：有待选就把卡片插到销量下面 */
-  function renderSalesEvent() {
-    var box = byId('sales-event');
-    if (!box) return;
-    var ev = s.sales && s.sales.pending;
-    if (!ev) { box.innerHTML = ''; return; }
-    var html = '<div class="se-card"><div class="se-week">第 ' + ev.week + ' 周</div>' +
-      '<div class="se-name">' + esc(ev.name) + '</div>' +
-      '<div class="se-desc">' + esc(ev.desc) + '</div><div class="se-opts">';
-    ev.options.forEach(function (o, i) {
-      var poor = o.cost > 0 && s.money < o.cost;
-      html += '<button class="se-opt" data-se="' + i + '"' + (poor ? ' disabled' : '') + '>' +
-        '<b>' + esc(o.label) + '</b>' +
-        '<span>' + esc(o.tip) + (o.cost ? ' · ' + money(o.cost) : '') + '</span></button>';
+  /* 宣发窗口：销售期随时可以打开，不打断时间 */
+  /* 销售页底部内嵌的宣发策略 */
+  function renderInlineMarketing() {
+    var box = byId('mkt-inline');
+    if (!box || !s.sales) return;
+    var list = E.marketingList(s);
+    /* 状态没变就别重建 DOM，否则按钮会在点击途中被换掉 */
+    var sig = s.sales.index + "|" + s.sales.marketMul.toFixed(3) + "|" +
+      list.map(function (a) { return a.id + a.left + (a.can ? 1 : 0); }).join(",");
+    if (sig === ui.mktSig) return;
+    ui.mktSig = sig;
+    var html = '<div class="mkt-head">宣发<span class="dim"> · 作用在剩余每一周</span></div>' +
+      '<div class="mkt-row">';
+    list.forEach(function (a) {
+      html += '<button class="mkt-chip" data-mkt="' + a.id + '"' +
+        (a.can ? '' : ' disabled') +
+        ' title="' + esc(a.desc + ' · 余下每周 ×' + a.mul.toFixed(2)) + '">' +
+        '<b>' + esc(a.name) + '</b>' +
+        '<span class="mkt-chip-eff">×' + a.mul.toFixed(2) + '</span>' +
+        '<span class="mkt-chip-cost">' + (a.cost ? money(a.cost) : '免费') + '</span>' +
+        '<em>' + a.left + '/' + a.max + '</em></button>';
     });
-    html += '</div></div>';
+    html += '</div>';
     box.innerHTML = html;
   }
 
   function buildSales() {
     ui.weekCount = 0;
+    ui.mktSig = null;
     el.stage.innerHTML =
       '<div class="sales">' +
       '<div class="sales-window">' + esc(s.release ? s.release.name : '普通档期') +
@@ -2047,15 +2265,18 @@
       '<div class="sales-col"><div class="sales-label">累计收入</div><div class="sales-big money" id="revenue">$0</div></div>' +
       '</div>' +
       '<div class="weeks" id="weeks"></div>' +
-      '<div id="sales-event"></div>' +
-    '<div class="sales-acts"><button class="ad" id="adbtn" data-act="ad">追加广告 ' + money(GD.BAL.adCost) + ' · 下周 +' + Math.round((GD.BAL.adBoost - 1) * 100) + '%</button></div>' +
+      '<div class="sales-acts">' +
+      '<button class="ad" id="adbtn" data-act="ad">追加广告 ' + money(GD.BAL.adCost) +
+      ' · 下周 +' + Math.round((GD.BAL.adBoost - 1) * 100) + '%</button></div>' +
+      '<div class="mkt-inline" id="mkt-inline"></div>' +
       '</div>';
-    el.hint.textContent = '销量按周结算。前 6 周内可以追加一次广告。';
+    el.hint.textContent = '销量按周结算。宣发在下方，效果作用在剩余的每一周。';
   }
 
   function updateSales() {
     if (!s.sales) return;
-    renderSalesEvent();
+    /* 宣发按钮不能每帧重绘：innerHTML 一换，按下的按钮就被替换，click 永远不触发 */
+    renderInlineMarketing();
 
     var copiesEl = byId('copies');
     if (copiesEl) copiesEl.textContent = num(s.sales.sold);
@@ -2135,5 +2356,60 @@
   }
 
   UI.phaseReset = function () { ui.phase = null; };
+
+
+  /* 给槽位起个名字，便于区分（存在 slot.name） */
+  function slotRename(idx) {
+    var list = readSlots();
+    var slot = list[idx];
+    if (!slot) return false;
+    var name = null;
+    try { name = window.prompt('给这个存档起个名字（留空则清除）：', slot.name || ''); } catch (e) { return false; }
+    if (name === null) return false;
+    name = String(name).trim().slice(0, 24);
+    if (name) slot.name = name; else delete slot.name;
+    writeSlots(list);
+    return true;
+  }
+
+  function slotSave(idx) {
+    var list = readSlots();
+    if (idx < 0 || idx >= SLOT_MAX) return false;
+    list[idx] = {
+      at: Date.now(),
+      label: slotSummary(s),
+      text: E.serialize(s)
+    };
+    writeSlots(list);
+    return true;
+  }
+  function slotLoad(idx) {
+    var list = readSlots();
+    var slot = list[idx];
+    if (!slot || !slot.text) return false;
+    try {
+      var st = E.deserialize(slot.text);
+      if (!st) return false;
+      hooks.onLoad ? hooks.onLoad(st) : location.reload();
+      return true;
+    } catch (e) { return false; }
+  }
+  function slotDelete(idx) {
+    var list = readSlots();
+    if (!list[idx]) return false;
+    list.splice(idx, 1);
+    writeSlots(list);
+    return true;
+  }
+  function slotImport(text) {
+    var st = null;
+    try { st = E.deserialize(text); } catch (e) { return { ok: false, reason: 'bad' }; }
+    if (!st) return { ok: false, reason: 'bad' };
+    var list = readSlots();
+    if (list.length >= SLOT_MAX) return { ok: false, reason: 'full' };
+    list.push({ at: Date.now(), label: slotSummary(st), text: text });
+    writeSlots(list);
+    return { ok: true };
+  }
 
 })(window.GD = window.GD || {});

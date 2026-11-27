@@ -27,7 +27,16 @@
     }
   }
 
-  function save() {
+  function loadState(next) {
+  if (!next) return false;
+  state = next;
+  lastPhase = state.phase;
+  save();
+  UI.mount(state, { onSave: save, onLoad: loadState });
+  return true;
+}
+
+function save() {
     if (!state) return;
     try {
       localStorage.setItem(E.SAVE_KEY, E.serialize(state));
@@ -60,7 +69,7 @@
 
     lastPhase = state.phase;
     try {
-      UI.mount(state, { onSave: save });
+      UI.mount(state, { onSave: save, onLoad: loadState });
     } catch (err) {
       /* 某个存档把界面弄崩了：隔离备份、重开一局，别让用户对着白屏 */
       console.error('界面初始化失败，隔离存档并重开', err);
@@ -70,7 +79,7 @@
       lastPhase = state.phase;
       save();
       try {
-        UI.mount(state, { onSave: save });
+        UI.mount(state, { onSave: save, onLoad: loadState });
         if (UI.showError) UI.showError('原存档无法载入，已备份为 garageStudio.save.v2.broken 并重开');
       } catch (err2) {
         console.error('重开也失败', err2);

@@ -2113,10 +2113,11 @@
       revenue: 0,
       index: 0,
       adUsed: 0,
-      eventsDone: 0,
-      eventWeeks: [],
-      pendingWait: 0,
-      pending: null,
+      marketMul: 1,
+      priceMul: 1,
+      marketSpend: 0,
+      marketUsed: {},
+      mktLog: [],
       log: [],
       boost: 1,
       weeks: []
@@ -2129,9 +2130,11 @@
     if (!s.sales || s.sales.index >= BAL.salesWeeks) return null;
     var i = s.sales.index;
     var frac = GD.SALES_CURVE[i] || 0.011;
-    var copies = Math.round(s.sales.total * frac * s.sales.boost);
+    var mkt = s.sales.marketMul || 1;
+    var copies = Math.round(s.sales.total * frac * s.sales.boost * mkt);
     var share = (s.project && s.project.coop) ? s.project.coop.share : 0;
-    var revenue = copies * E.platform(s).price * (BAL.publisherCut + E.ruleDelta(s, 'cut') - share);
+    var priceMul = s.sales.priceMul || 1;
+    var revenue = copies * E.platform(s).price * priceMul * (BAL.publisherCut + E.ruleDelta(s, 'cut') - share);
 
     s.money += revenue;
     s.totalEarned += revenue;
@@ -2146,59 +2149,66 @@
     return { week: i + 1, copies: copies, revenue: revenue };
   };
 
-  /* ---------------- 发售期决策 ----------------
-   * 销售 12 周，在第 BAL.salesEventWeeks 指定的周次各弹一次（默认 3 次）。
-   * 弹的时候暂停周推进，等玩家选完再继续。 */
+  /* ---------------- 宣发 ----------------
+   * 销售期随时可以打开「宣发」窗口花钱，效果作用在剩余的每一周。
+   * 每个动作有次数上限，所以是「什么时候花」的取舍，不是点满就行。 */
 
-  E.salesEventDue = function (s) {
-    if (!s.sales || s.phase !== 'sales') return null;
-    if (s.sales.pending) return s.sales.pending;
-    var weeks = BAL.salesEventWeeks || [3, 6, 9];
-    var next = s.sales.index + 1;              // 下一周（1-based）
-    if (weeks.indexOf(next) < 0) return null;
-    if (!Array.isArray(s.sales.eventWeeks)) s.sales.eventWeeks = [];
-    if (s.sales.eventWeeks.indexOf(next) >= 0) return null;
-    if (s.sales.index >= BAL.salesWeeks) return null;
-    var pool = GD.SALES_EVENTS || [];
-    if (!pool.length) return null;
-    var pick = pool[Math.floor(Math.random() * pool.length)];
-    s.sales.eventWeeks.push(next);
-    s.sales.pending = { id: pick.id, week: next, name: pick.name, desc: pick.desc, options: pick.options };
-    return s.sales.pending;
+  E.marketUsed = function (s, id) {
+    var u = (s.sales && s.sales.marketUsed) || {};
+    return u[id] || 0;
   };
 
-  /* 兜底：挑最便宜的买得起的选项，实在都选不了就白给（清空待选） */
-  E.autoResolveSalesEvent = function (s) {
-    if (!s.sales || !s.sales.pending) return false;
-    var opts = s.sales.pending.options || [];
-    var order = opts.map(function (o, i) { return { i: i, c: o.cost || 0 }; })
-      .sort(function (a, b) { return a.c - b.c; });
-    for (var k = 0; k < order.length; k++) {
-      if (E.chooseSalesEvent(s, order[k].i)) return true;
+  /* 列出所有宣发动作及其状态（给界面用） */
+  E.marketingList = function (s) {
+    var out = [];
+    var pool = GD.MARKETING || [];
+    for (var i = 0; i < pool.length; i++) {
+      var a = pool[i];
+      var used = E.marketUsed(s, a.id);
+      var left = Math.max(0, (a.max || 1) - used);
+      out.push({
+        id: a.id, name: a.name, desc: a.desc, cost: a.cost || 0,
+        mul: a.mul || 1, priceMul: a.priceMul || 1,
+        fans: a.fans || 0, rep: a.rep || 0,
+        max: a.max || 1, used: used, left: left,
+        affordable: s.money >= (a.cost || 0),
+        can: left > 0 && s.money >= (a.cost || 0)
+      });
     }
-    /* 一个都选不了：直接丢掉这个事件，别再卡着 */
-    if (s.sales) { s.sales.pending = null; s.sales.pendingWait = 0; }
-    return false;
+    return out;
   };
 
-  E.chooseSalesEvent = function (s, idx) {
-    if (!s.sales || !s.sales.pending) return false;
-    var ev = s.sales.pending;
-    var opt = ev.options[idx];
-    if (!opt) return false;
-    if (opt.cost > 0 && s.money < opt.cost) return false;
-    s.money -= opt.cost || 0;
-    /* 当周倍率直接叠进 boost（settleWeek 之后会重置 boost） */
-    s.sales.boost = (s.sales.boost || 1) * (opt.boost || 1);
-    if (opt.rep) E.addRep(s, opt.rep);
-    if (opt.fans) s.fans += opt.fans;
-    s.sales.eventsDone = (s.sales.eventsDone || 0) + 1;
-    s.sales.pendingWait = 0;
-    s.sales.eventCost = (s.sales.eventCost || 0) + (opt.cost || 0);
-    s.sales.log = s.sales.log || [];
-    s.sales.log.push({ week: ev.week, name: ev.name, choice: opt.label });
-    s.sales.pending = null;
-    return true;
+  /* 做一次宣发 */
+  E.doMarketing = function (s, id) {
+    if (!s.sales || s.phase !== 'sales') return { ok: false, reason: 'phase' };
+    var list = E.marketingList(s);
+    var act = null;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) act = list[i];
+    if (!act) return { ok: false, reason: 'missing' };
+    if (act.left <= 0) return { ok: false, reason: 'used' };
+    if (s.money < act.cost) return { ok: false, reason: 'poor', cost: act.cost };
+
+    s.money -= act.cost;
+    s.sales.marketSpend = (s.sales.marketSpend || 0) + act.cost;
+    var cap = BAL.marketMulCap || 1.45;
+    s.sales.marketMul = Math.min(cap, (s.sales.marketMul || 1) * act.mul);
+    if (act.priceMul !== 1) s.sales.priceMul = (s.sales.priceMul || 1) * act.priceMul;
+    if (act.fans) s.fans += act.fans;
+    if (act.rep) E.addRep(s, act.rep);
+    if (!s.sales.marketUsed) s.sales.marketUsed = {};
+    s.sales.marketUsed[id] = (s.sales.marketUsed[id] || 0) + 1;
+    if (!Array.isArray(s.sales.mktLog)) s.sales.mktLog = [];
+    s.sales.mktLog.push({ week: s.sales.index + 1, id: id, name: act.name, cost: act.cost });
+    return { ok: true, act: act };
+  };
+
+  /* 兼容旧存档：之前卡在 pending 上的，直接清掉 */
+  E.clearStaleSalesEvent = function (s) {
+    if (s && s.sales && s.sales.pending != null) {
+      s.sales.pending = null;
+      return true;
+    }
+    return false;
   };
 
   E.canBuyAd = function (s) {
@@ -2304,15 +2314,7 @@
     }
 
     else if (s.phase === 'sales') {
-      /* 有待决策就先别推进，等玩家选完；但要有兜底，
-       * 万一界面没把卡片渲染出来（旧缓存 / 容器缺失），不能永久卡死。 */
-      var dueEv = E.salesEventDue(s);
-      if (dueEv) {
-        s.sales.pendingWait = (s.sales.pendingWait || 0) + dt;
-        if (s.sales.pendingWait < (BAL.salesEventTimeout || 10)) return out;
-        E.autoResolveSalesEvent(s);
-        s.sales.pendingWait = 0;
-      }
+      /* 销售期不打断：宣发是「随时可以打开自己点」的窗口 */
       s.timer += dt;
       var target = Math.floor(s.timer / BAL.salesWeekSeconds);
       var guard = 0;
@@ -3003,15 +3005,7 @@
       while (s.phase === 'sales' && guard++ < 20000) {
         var soldBefore = s.sales.sold;
         var revBefore = s.sales.revenue;
-        /* 离线期间发售期决策自动挑最便宜的，玩家不在也不能卡住 */
-        if (s.sales.pending) {
-          var offOpts = s.sales.pending.options.slice().sort(function (a, b) { return (a.cost || 0) - (b.cost || 0); });
-          var offDone = false;
-          for (var oi2 = 0; oi2 < offOpts.length && !offDone; oi2++) {
-            var idx2 = s.sales.pending.options.indexOf(offOpts[oi2]);
-            if (E.chooseSalesEvent(s, idx2)) offDone = true;
-          }
-        }
+        /* 销售期没有打断式决策，离线直接跑完即可 */
         E.tick(s, 0.5);
         if (s.sales) {
           copies += s.sales.sold - soldBefore;
@@ -3091,6 +3085,7 @@
     if (!staff.length) staff = GD.FOUNDERS.map(function (id) { return E.makeStaff(id); });
     s.staff = staff;
 
+    E.clearStaleSalesEvent(s);
     s.seats = Math.round(clampNum(raw.seats, 3, 8, 3));
     if (s.seats < s.staff.length) s.seats = s.staff.length;
 

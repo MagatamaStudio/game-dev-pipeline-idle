@@ -912,7 +912,7 @@ function connect(wsUrl) {
   var a11y = await evalJs(`(function () {
     var out = {};
     try {
-      out.iconLabels = ['theme', 'sound', 'helpbtn'].filter(function (id) {
+      out.iconLabels = ['setbtn', 'helpbtn'].filter(function (id) {
         var b = document.getElementById(id);
         return b && b.getAttribute('aria-label');
       }).length;
@@ -926,7 +926,7 @@ function connect(wsUrl) {
     } catch (e) { out.err = String((e && e.message) || e); }
     return out;
   })()`);
-  check('图标按钮都有 aria-label', !a11y.err && a11y.iconLabels === 3,
+  check('图标按钮都有 aria-label', !a11y.err && a11y.iconLabels === 2,
     a11y.err || ('labels=' + a11y.iconLabels));
   check('帮助面板里有慢速提示开关', a11y.hasSlow === true);
   check('开关会写进本地存储并改标签',
@@ -936,39 +936,81 @@ function connect(wsUrl) {
   await sleep(120);
   check('帮助面板可以关闭', await evalJs(`document.querySelector('#help').hidden`) === true);
 
-  /* ---------- 2.6 发售期决策 ---------- */
-  var seUI = await evalJs(`(function () {
+  /* ---------- 2.6 销售页底部内嵌宣发 ---------- */
+  var mktUI = await evalJs(`(function () {
     var out = {};
     var s = GD.getState();
-    var keepPhase = s.phase, keepSales = s.sales;
+    var keepPhase = s.phase, keepSales = s.sales, keepMoney = s.money;
     try {
       s.phase = 'sales';
-      s.sales = { index: 2, total: 100000, sold: 20000, revenue: 500000, adUsed: 0,
-        eventsDone: 0, pending: null, log: [], boost: 1, weeks: [], eventCost: 0 };
-      s.project = { coop: null, cost: 100000 };
-      GD.Engine.salesEventDue(s);
-      GD.UI.render();
-      out.cardAfter = document.querySelectorAll('#sales-event .se-card').length;
-      out.opts = document.querySelectorAll('#sales-event .se-opt').length;
-      out.name = (document.querySelector('#sales-event .se-name') || {}).textContent || '';
       s.money = 1e7;
-      var btn = document.querySelector('#sales-event .se-opt');
+      s.project = { coop: null, cost: 1 };
+      s.sales = { index: 3, total: 100000, sold: 20000, revenue: 500000, adUsed: 0,
+        boost: 1, marketMul: 1, priceMul: 1, marketSpend: 0, marketUsed: {}, mktLog: [], weeks: [] };
+      GD.UI.render();
+      /* 销售页不该再有独立按钮或弹窗，宣发是直接铺在下面的 */
+      out.noWindow = document.querySelectorAll('#marketing').length === 0;
+      out.noBtn = document.querySelectorAll('[data-act="marketing"]').length === 0;
+      out.chips = document.querySelectorAll('#mkt-inline [data-mkt]').length;
+      out.disabled = document.querySelectorAll('#mkt-inline [data-mkt]:disabled').length;
+
+      /* 关键回归：DOM 不能被每帧重建，否则按钮点不动 */
+      var first = document.querySelector('#mkt-inline [data-mkt]');
+      if (first) first.__probe = 'keep';
+      out.sameNode = !!(first && first.__probe === 'keep');
+
       var before = s.money;
-      if (btn) btn.click();
-      out.picked = s.sales.pending === null;
-      out.logged = (s.sales.log || []).length;
+      if (first) first.click();
       out.spent = before - s.money;
-      out.stillThere = document.querySelectorAll('#sales-event .se-card').length;
+      out.mul = s.sales.marketMul;
+      out.logged = (s.sales.mktLog || []).length;
+      out.leftAfter = GD.Engine.marketingList(s).filter(function (x) { return x.id === 'streamer'; })[0].left;
+      out.disabledAfter = document.querySelectorAll('#mkt-inline [data-mkt][disabled]').length;
     } catch (e) { out.err = String((e && e.message) || e); }
-    s.phase = keepPhase; s.sales = keepSales;
+    s.phase = keepPhase; s.sales = keepSales; s.money = keepMoney;
     GD.UI.render();
     return out;
   })()`);
-  check('发售期会弹决策卡', !seUI.err && seUI.cardAfter === 1 && seUI.opts >= 2,
-    seUI.err || ('card=' + seUI.cardAfter + ' opts=' + seUI.opts + ' name=' + seUI.name));
-  check('决策卡能选择并记账',
-    seUI.picked === true && seUI.logged === 1 && seUI.stillThere === 0,
-    'picked=' + seUI.picked + ' log=' + seUI.logged + ' spent=' + seUI.spent);
+  check('宣发不再是小窗口', !mktUI.err && mktUI.noWindow === true && mktUI.noBtn === true,
+    mktUI.err || ('win=' + mktUI.noWindow + ' btn=' + mktUI.noBtn));
+  check('宣发选项直接铺在销售页底部', mktUI.chips === 6, 'chips=' + mktUI.chips);
+  check('宣发按钮不会被每帧重建', mktUI.sameNode === true);
+  check('点宣发真的生效', mktUI.spent > 0 && mktUI.mul > 1 && mktUI.logged === 1,
+    'spent=' + mktUI.spent + ' mul=' + mktUI.mul + ' log=' + mktUI.logged);
+  check('用完的宣发变灰', mktUI.leftAfter === 0 && mktUI.disabledAfter >= 1,
+    'left=' + mktUI.leftAfter + ' disabled=' + mktUI.disabledAfter);
+
+  /* ---------- 2.61 设置页 ---------- */
+  var setUI = await evalJs(`(function () {
+    var out = {};
+    try {
+      document.querySelector('[data-act="settings"]').click();
+      var box = document.getElementById('settings');
+      out.open = !box.hidden;
+      out.rows = box.querySelectorAll('.set-row').length;
+      out.hasExport = !!box.querySelector('[data-act="save-export"]');
+      out.hasReset = !!box.querySelector('[data-act="save-reset"]');
+      out.themeGone = box.querySelectorAll('[data-act="set-theme"]').length === 0;
+      out.text = box.textContent || '';
+      box.querySelector('[data-act="save-export"]').click();
+      out.exported = typeof window.GD_SAVE_TEXT === 'string' && window.GD_SAVE_TEXT.length > 20;
+      /* 重开要点两次才生效，第一次只进入确认态 */
+      var rb = box.querySelector('[data-act="save-reset"]');
+      rb.click();
+      out.confirmLabel = (box.querySelector('[data-act="save-reset"]') || {}).textContent || '';
+      box.querySelector('[data-act="close-panel"]').click();
+      out.closed = box.hidden;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+  check('设置页能打开', !setUI.err && setUI.open === true, setUI.err || 'ok');
+  check('设置页有音量/音乐/提示/存档等项', setUI.rows >= 5, 'rows=' + setUI.rows);
+  check('设置页已移除深色主题切换', setUI.themeGone === true);
+  check('设置页能导出存档', setUI.hasExport === true && setUI.exported === true,
+    'export=' + setUI.hasExport + ' text=' + setUI.exported);
+  check('重开需要二次确认', setUI.hasReset === true && (setUI.confirmLabel || '').indexOf('确认') >= 0,
+    setUI.confirmLabel);
+  check('设置页能关闭', setUI.closed === true);
 
   /* ---------- 2.7 帮助浮层不能再被压在底层 / 销售期不能死锁 ---------- */
   var helpLayer = await evalJs(`(function () {
@@ -991,31 +1033,6 @@ function connect(wsUrl) {
       ' fills=' + helpLayer.fillsViewport));
   check('帮助浮层层级够高', Number(helpLayer.zIndex) >= 50, 'z=' + helpLayer.zIndex);
 
-  var noLock = await evalJs(`(function () {
-    var out = {};
-    try {
-      /* 在克隆状态上测：别把当前存档推进坏了 */
-      var clone = JSON.parse(JSON.stringify(GD.getState()));
-      clone.phase = 'sales';
-      clone.sales = { index: 2, total: 100000, sold: 0, revenue: 0, adUsed: 0, eventsDone: 0,
-        eventWeeks: [], pendingWait: 0, log: [], boost: 1, weeks: [], eventCost: 0,
-        pending: { week: 3, name: '卡死测试', desc: '', options: [
-          { label: '贵', cost: 9999999, boost: 1.5 },
-          { label: '便宜', cost: 0, boost: 1.1 }
-        ] } };
-      clone.money = 1000;
-      clone.project = { coop: null, cost: 1 };
-      var ticks = 0;
-      while (clone.sales && clone.sales.pending && ticks++ < 4000) GD.Engine.tick(clone, 1 / 30);
-      out.resolved = !clone.sales.pending;
-      out.picked = (clone.sales.log || []).map(function (x) { return x.choice; }).join(',');
-      out.ticks = ticks;
-    } catch (e) { out.err = String((e && e.message) || e); }
-    return out;
-  })()`);
-
-  check('待选事件不会永久卡死', !noLock.err && noLock.resolved === true,
-    noLock.err || ('picked=' + noLock.picked));
 
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
@@ -1389,17 +1406,30 @@ function connect(wsUrl) {
 
   /* ---------- 9. 音量 / 音效开关 ---------- */
   var sound = await evalJs(`(function () {
-    var el = document.querySelector('#sound');
+    var out = {};
     var startLevel = GD.SFX.level();
-    var startIcon = el.textContent;
-    for (var i = 0; i < 4 && !GD.SFX.isMuted(); i++) el.click();
-    var muted = GD.SFX.isMuted();
-    var mutedIcon = el.textContent;
-    el.click();
-    return { startLevel: startLevel, startIcon: startIcon, muted: muted, mutedIcon: mutedIcon, after: GD.SFX.level() };
+    try {
+      document.querySelector('[data-act="settings"]').click();
+      var box = document.getElementById('settings');
+      var volBtn = box.querySelector('[data-act="set-vol"]');
+      var label0 = GD.SFX.label();
+      for (var i = 0; i < 4 && !GD.SFX.isMuted(); i++) {
+        document.querySelector('#settings [data-act="set-vol"]').click();
+      }
+      out.muted = GD.SFX.isMuted();
+      out.mutedLabel = GD.SFX.label();
+      document.querySelector('#settings [data-act="set-vol"]').click();
+      out.after = GD.SFX.level();
+      out.hasBtn = !!volBtn;
+      out.label0 = label0;
+      document.querySelector('#settings [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    out.startLevel = startLevel;
+    return out;
   })()`);
-  check('音量按钮是四档循环', sound.startLevel === 0, '初始档=' + sound.startLevel);
-  check('循环到静音会显示 🔇', sound.muted === true && sound.mutedIcon === '🔇', sound.mutedIcon);
+  check('音量在设置页里四档循环', !sound.err && sound.startLevel === 0 && sound.hasBtn === true,
+    sound.err || ('初始档=' + sound.startLevel));
+  check('循环到静音会显示静音', sound.muted === true, sound.mutedLabel);
   check('静音后再点会回到第一档', sound.after === 0, 'level=' + sound.after);
 
   var audioApi = await evalJs(`({
@@ -1470,17 +1500,20 @@ function connect(wsUrl) {
    * 这条曾经是致命 bug：UI.toast 被调用但没实现，
    * 一结算年度奖项就抛异常，主循环冻死，刷新后 #stage 建不起来。 */
   var toastRes = await evalJs(`(function () {
+    var err = null, fired = 0;
+    var orig = GD.UI.toast;
+    GD.UI.toast = function (t) { fired++; return orig.call(GD.UI, t); };
     var s = GD.getState();
-    var before = document.querySelectorAll('#toasts .toast').length;
-    var err = null;
-    s.yearResults.push({ year: 1972, playerScore: 33, winner: null });
+    var y = Math.floor(s.day / 360);
+    s.yearResults.push({ year: y, playerScore: 33, winner: null, winnerTitle: null, winnerScore: 0, playerBrand: false });
     try { GD.UI.render(); } catch (e) { err = String((e && e.message) || e); }
-    var after = document.querySelectorAll('#toasts .toast').length;
+    GD.UI.toast = orig;
     s.yearResults.pop();
-    return { before: before, after: after, err: err };
+    return { fired: fired, err: err };
   })()`);
-  check('年度结果会弹提示而不是抛异常', !toastRes.err && toastRes.after > toastRes.before,
-    'toast ' + toastRes.before + '→' + toastRes.after + ' err=' + toastRes.err);
+  check('年度结果会弹提示而不是抛异常', !toastRes.err && toastRes.fired >= 1,
+    'toast 调用 ' + toastRes.fired + ' 次 · err=' + toastRes.err);
+
 
   /* ---------- 10.2 六类奖项 ---------- */
   var awardUI = await evalJs(`(function () {

@@ -394,9 +394,16 @@ function playOne(s, plan, choice) {
   var moneyBeforeAd = s.money;
   ok('可以买广告', E.buyAd(s) === true);
   ok('广告扣钱', Math.abs(s.money - (moneyBeforeAd - GD.BAL.adCost)) < 1);
+  /* 曲线是前重后轻的，不能拿「下周 > 本周」判断；改成和「不投广告的同周」对照 */
+  var noAd = E.newGame();
+  noAd.phase = 'sales';
+  noAd.project = { coop: null, cost: 1 };
+  noAd.sales = { index: s.sales.index, total: s.sales.total, sold: 0, revenue: 0,
+    adUsed: 0, boost: 1, marketMul: 1, priceMul: 1, marketSpend: 0, marketUsed: {}, mktLog: [], weeks: [] };
+  var weekNoAd = E.settleWeek(noAd);
   var week2 = E.settleWeek(s);
-  ok('广告提升下周销量', week2.copies > week1.copies,
-    week1.copies + ' → ' + week2.copies);
+  ok('广告提升下周销量', week2.copies > weekNoAd.copies,
+    '投广告 ' + week2.copies + ' vs 不投 ' + weekNoAd.copies);
   ok('只能投一次', E.buyAd(s) === false);
 })();
 
@@ -2637,61 +2644,132 @@ function playOne(s, plan, choice) {
   })());
 })();
 
-/* ---------- 发售期决策 ---------- */
+/* ---------- 宣发（销售期不打断） ---------- */
 (function () {
-  ok('决策池有内容', (GD.SALES_EVENTS || []).length >= 5, String((GD.SALES_EVENTS || []).length));
-  ok('决策配三个时点', (GD.BAL.salesEventWeeks || []).length === 3,
-    JSON.stringify(GD.BAL.salesEventWeeks));
+  var MKT = {};
+  (GD.MARKETING || []).forEach(function (m) { MKT[m.id] = m; });
 
+  ok('宣发动作有 6 个', (GD.MARKETING || []).length === 6, String((GD.MARKETING || []).length));
+  ok('销售期是 20 周', GD.BAL.salesWeeks === 20, String(GD.BAL.salesWeeks));
+  ok('销售曲线和周数对得上', GD.SALES_CURVE.length === GD.BAL.salesWeeks,
+    GD.SALES_CURVE.length + ' vs ' + GD.BAL.salesWeeks);
+  var curveSum = GD.SALES_CURVE.reduce(function (a, b) { return a + b; }, 0);
+  ok('销售曲线合计约为 1', Math.abs(curveSum - 1) < 0.01, curveSum.toFixed(3));
+  ok('不再有打断式事件引擎', E.salesEventDue === undefined && E.chooseSalesEvent === undefined);
+
+  /* 推到销售期 */
   var s = E.newGame();
   s.money = 1e7;
   E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', scale: 'mid' });
   var g = 0;
-  while (g++ < 300000 && s.phase !== 'sales') {
+  while (g++ < 400000 && s.phase !== 'sales') {
     E.tick(s, 1 / 30);
     if (s.phase === 'event') {
-      var en = s.event ? s.event.options.length : 0, ed = false;
-      for (var c = 0; c < en && !ed; c++) ed = E.chooseEvent(s, c);
+      var en = s.event ? s.event.options.length : 0, d = false;
+      for (var c = 0; c < en && !d; c++) d = E.chooseEvent(s, c);
     }
     if (s.phase === 'release') E.confirmRelease(s, 'now');
   }
   ok('能进入销售期', s.phase === 'sales' && !!s.sales);
-  ok('第 1 周还没决策', E.salesEventDue(s) === null);
+  ok('开局没有宣发倍率', (s.sales.marketMul || 1) === 1);
 
-  var g2 = 0;
-  while (!E.salesEventDue(s) && g2++ < 4000) E.tick(s, 1 / 30);
-  var ev = E.salesEventDue(s);
-  ok('第 3 周弹发售期决策', !!ev && ev.week === 3, ev ? ('week=' + ev.week + ' ' + ev.name) : '没弹');
-  ok('决策有 2 个以上选项', !!ev && ev.options.length >= 2, ev ? String(ev.options.length) : '-');
+  var list = E.marketingList(s);
+  ok('宣发列表带次数与价格',
+    list.length === 6 && list[0].left === list[0].max && typeof list[0].cost === 'number',
+    JSON.stringify(list[0]));
 
-  var idxBefore = s.sales.index;
-  E.tick(s, 5);
-  ok('等选择时不推进周数', s.sales.index === idxBefore, idxBefore + ' → ' + s.sales.index);
+  /* 花钱做一次 */
+  var money0 = s.money;
+  var r = E.doMarketing(s, 'streamer');
+  ok('能宣发', r.ok === true, JSON.stringify(r));
+  ok('宣发扣钱', Math.abs(s.money - (money0 - MKT.streamer.cost)) < 1,
+    Math.round(money0 - s.money) + ' vs ' + MKT.streamer.cost);
+  ok('宣发倍率生效',
+    Math.abs(s.sales.marketMul - Math.min(GD.BAL.marketMulCap || 9, MKT.streamer.mul)) < 1e-9,
+    String(s.sales.marketMul) + ' vs ' + MKT.streamer.mul);
+  ok('记了花费与日志',
+    s.sales.marketSpend === MKT.streamer.cost && (s.sales.mktLog || []).length === 1,
+    JSON.stringify(s.sales.mktLog));
+  ok('次数用完就不能再用', E.doMarketing(s, 'streamer').reason === 'used');
 
-  var pickIdx = -1;
-  for (var pi = 0; pi < ev.options.length; pi++) {
-    if ((ev.options[pi].cost || 0) <= s.money) { pickIdx = pi; break; }
-  }
-  var moneyBefore = s.money;
-  var boostBefore = s.sales.boost || 1;
-  ok('能做出选择', E.chooseSalesEvent(s, pickIdx) === true, 'opt=' + pickIdx);
-  ok('选项花钱会扣', Math.abs((moneyBefore - s.money) - (ev.options[pickIdx].cost || 0)) < 1,
-    Math.round(moneyBefore - s.money));
-  ok('选项倍率生效', s.sales.boost !== boostBefore, boostBefore + ' → ' + s.sales.boost);
-  ok('选完就清空待选', s.sales.pending === null);
-  ok('记录了花费', (s.sales.eventCost || 0) >= 0, String(s.sales.eventCost));
-  ok('记录了选择历史', (s.sales.log || []).length === 1, JSON.stringify(s.sales.log));
+  /* 宣发确实放大销量：同一状态下对比「不宣发」的基准 */
+  var base = E.newGame();
+  base.phase = 'sales';
+  base.project = { coop: null, cost: 1 };
+  base.sales = { index: s.sales.index, total: s.sales.total, sold: 0, revenue: 0, adUsed: 0,
+    boost: 1, marketMul: 1, priceMul: 1, marketSpend: 0, marketUsed: {}, mktLog: [], weeks: [] };
+  var wBase = E.settleWeek(base);
+  var w = E.settleWeek(s);
+  ok('宣发后销量明显高于不宣发', w.copies > wBase.copies * 1.05,
+    w.copies + ' vs 基准 ' + wBase.copies);
 
+  /* 可重复的动作用到上限 */
+  E.doMarketing(s, 'forum');
+  E.doMarketing(s, 'forum');
+  E.doMarketing(s, 'forum');
+  ok('论坛投放最多 3 次', E.doMarketing(s, 'forum').reason === 'used',
+    String(E.marketingList(s).filter(function (x) { return x.id === 'forum'; })[0].left));
+
+  /* 降价：销量上去、单价下来 */
   var s2 = E.newGame();
-  s2.money = 0;
+  s2.money = 1e7;
   s2.phase = 'sales';
-  s2.project = { coop: null };
-  s2.sales = { index: 2, pending: { week: 3, name: 'x', desc: '', options: [{ label: 'a', cost: 99999, boost: 1.5 }] } };
-  ok('钱不够选不了贵选项', E.chooseSalesEvent(s2, 0) === false);
+  s2.project = { coop: null, cost: 1 };
+  s2.sales = { index: 3, total: 100000, sold: 0, revenue: 0, adUsed: 0, boost: 1,
+    marketMul: 1, priceMul: 1, marketSpend: 0, marketUsed: {}, mktLog: [], weeks: [] };
+  ok('能限时降价', E.doMarketing(s2, 'discount').ok === true);
+  ok('降价压低单价', Math.abs(s2.sales.priceMul - MKT.discount.priceMul) < 1e-9, String(s2.sales.priceMul));
+  ok('降价拉高销量',
+    Math.abs(s2.sales.marketMul - Math.min(GD.BAL.marketMulCap || 9, MKT.discount.mul)) < 1e-9,
+    String(s2.sales.marketMul));
 
+  /* 倍率封顶 */
+  var s6 = E.newGame();
+  s6.money = 1e9;
+  s6.phase = 'sales';
+  s6.project = { coop: null, cost: 1 };
+  s6.sales = { index: 0, total: 100000, sold: 0, revenue: 0, adUsed: 0, boost: 1,
+    marketMul: 1, priceMul: 1, marketSpend: 0, marketUsed: {}, mktLog: [], weeks: [] };
+  E.marketingList(s6).forEach(function (a) {
+    for (var k = 0; k < a.max; k++) E.doMarketing(s6, a.id);
+  });
+  ok('宣发倍率有上限', s6.sales.marketMul <= (GD.BAL.marketMulCap || 9) + 1e-9,
+    String(s6.sales.marketMul));
+
+  /* 钱不够 / 非销售期 */
   var s3 = E.newGame();
-  ok('没待选时选择无效', E.chooseSalesEvent(s3, 0) === false);
+  s3.phase = 'sales';
+  s3.money = 10;
+  s3.sales = { index: 1, total: 100, sold: 0, revenue: 0, boost: 1, marketMul: 1, priceMul: 1,
+    marketUsed: {}, mktLog: [], weeks: [] };
+  ok('钱不够宣发不了', E.doMarketing(s3, 'esports').reason === 'poor');
+  ok('非销售期不能宣发', E.doMarketing(E.newGame(), 'forum').reason === 'phase');
+
+  /* 老存档卡在 pending 上：清掉 */
+  var old = E.newGame();
+  old.phase = 'sales';
+  old.sales = { index: 2, pending: { week: 3, name: '旧事件', options: [] }, total: 1, sold: 0, revenue: 0, weeks: [] };
+  ok('旧存档的卡死事件会被清掉', E.clearStaleSalesEvent(old) === true && old.sales.pending === null);
+
+  /* 销售期能自己跑完 20 周 */
+  var s5 = E.newGame();
+  s5.money = 1e7;
+  E.startProject(s5, { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', scale: 'mid' });
+  var g5 = 0;
+  while (g5++ < 400000 && s5.phase !== 'sales') {
+    E.tick(s5, 1 / 30);
+    if (s5.phase === 'event') {
+      var en5 = s5.event ? s5.event.options.length : 0, d5 = false;
+      for (var c5 = 0; c5 < en5 && !d5; c5++) d5 = E.chooseEvent(s5, c5);
+    }
+    if (s5.phase === 'release') E.confirmRelease(s5, 'now');
+  }
+  var g6 = 0;
+  while (s5.phase === 'sales' && g6++ < 20000) E.tick(s5, 1 / 30);
+  ok('销售期能自己跑完不卡住', s5.phase === 'done' && s5.sales.index === 20,
+    s5.phase + ' / ' + (s5.sales ? s5.sales.index : '-'));
 })();
+
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);
