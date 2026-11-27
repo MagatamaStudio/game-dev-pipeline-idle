@@ -329,6 +329,23 @@ function connect(wsUrl) {
   })()`);
   check('换年会提示新热门', trendToast.indexOf('年热门') >= 0, trendToast);
 
+  /* 怀旧潮：每 12 年一次，1984 起 */
+  var nostUI = await evalJs(`(() => {
+    const st = GD.getState();
+    const keep = st.day;
+    st.day = 12 * 360;
+    GD.UI.render();
+    const bar = document.querySelector('#stage .nost-bar');
+    const toast = [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ');
+    st.day = keep;
+    GD.UI.render();
+    return { year: GD.Engine.year({ day: 12 * 360 }), hasBar: !!bar,
+             text: bar ? bar.textContent : '', toast: toast };
+  })()`);
+  check('怀旧潮有专属提示条', nostUI.hasBar === true && nostUI.text.indexOf('怀旧潮') >= 0,
+    nostUI.text);
+  check('怀旧潮开始时弹提示', nostUI.toast.indexOf('怀旧潮') >= 0, nostUI.toast);
+
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);
   await sleep(150);
   var arch0 = await evalJs(`({ open: !document.querySelector('#archive').hidden, rows: document.querySelectorAll('#archive .arch-row').length })`);
@@ -977,6 +994,40 @@ function connect(wsUrl) {
   check('开新公司回到企划阶段',
     bankUI.after.phase === 'planning' && bankUI.after.decl === 'makewhat' && bankUI.after.staff === 3,
     JSON.stringify(bankUI.after));
+
+  /* ---------- 10.5 NG+ ---------- */
+  var ngUI = await evalJs(`(() => {
+    const st = GD.getState();
+    st.phase = 'ending';
+    GD.UI.render();
+    const btn = document.querySelector('[data-act="ngplus"]');
+    return {
+      has: !!btn,
+      label: btn ? btn.textContent : '',
+      note: (document.querySelector('.ending-note') || {}).textContent || '',
+      combos: GD.Engine.comboCount(st)
+    };
+  })()`);
+  check('结局页有 NG+ 按钮', ngUI.has === true && ngUI.label.indexOf('NG+') >= 0, ngUI.label);
+  check('结局页说明保留了什么',
+    ngUI.note.indexOf('收藏') >= 0 && ngUI.note.indexOf('粉丝') >= 0, ngUI.note);
+
+  var ng2 = await evalJs(`(() => {
+    document.querySelector('[data-act="ngplus"]').click();
+    const st = GD.getState();
+    return {
+      phase: st.phase,
+      ng: st.ng || 0,
+      combos: GD.Engine.comboCount(st),
+      year: GD.Engine.year(st),
+      fans: st.fans,
+      bar: !!document.querySelector('#stage .ng-bar')
+    };
+  })()`);
+  check('NG+ 回到 1972 且轮次 +1',
+    ng2.phase === 'planning' && ng2.ng === 1 && ng2.year === 1972, JSON.stringify(ng2));
+  check('NG+ 保住收藏', ng2.combos === ngUI.combos, ng2.combos + ' vs ' + ngUI.combos);
+  check('企划页显示 NG+ 标记', ng2.bar === true);
 
   /* ---------- 11. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));

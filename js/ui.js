@@ -262,6 +262,15 @@
         if (E.continueEndless(s)) { GD.SFX.win(); if (hooks.onSave) hooks.onSave(); }
         return;
       }
+      if (panelAct === 'ngplus') {
+        if (E.newGamePlus(s)) {
+          GD.SFX.win();
+          ui.phase = null; ui.planSig = ''; ui.trendYear = null; ui.nostKey = null;
+          UI.render();
+          if (hooks.onSave) hooks.onSave();
+        } else { GD.SFX.bad(); }
+        return;
+      }
       if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
       if (panelAct === 'industry') { GD.SFX.click(); renderIndustry(); el.industry.hidden = false; return; }
@@ -513,6 +522,16 @@
       ui.trendYear = tYear;
     }
 
+    /* 怀旧潮开始时提示一次 */
+    var nost = E.nostalgiaFor(E.year(s));
+    var nostKey = nost ? nost.from : null;
+    if (ui.nostKey !== undefined && ui.nostKey !== nostKey && nost) {
+      UI.toast('🕰 怀旧潮：' + E.genre(nost.genre).name + ' 突然又流行了（销量 ×' +
+        nost.mult.toFixed(2) + '，到 ' + nost.to + ' 年）');
+      GD.SFX.award();
+    }
+    ui.nostKey = nostKey;
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -577,7 +596,7 @@
       E.ensurePlanCombo(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
       var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform +
-        '|' + (s.plan.sequel == null ? '' : s.plan.sequel);
+        '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + E.year(s);
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
     } else if (s.phase === 'developing') {
       var bar = byId('dev-bar');
@@ -674,6 +693,20 @@
       '<b>' + esc(E.genre(trend.genre).name) + '</b>' +
       '<span class="dim">类型 · 销量 ×' + GD.BAL.trendGenreSales.toFixed(2) + '</span>' +
       '</div>';
+
+    /* 怀旧潮 */
+    var nost = E.nostalgiaFor(E.year(s));
+    if (nost) {
+      html += '<div class="nost-bar">🕰 怀旧潮 · ' + esc(E.genre(nost.genre).name) +
+        ' <b>×' + nost.mult.toFixed(2) + '</b>' +
+        '<span class="dim">' + nost.from + '–' + nost.to + ' 年，老类型整年好卖</span></div>';
+    }
+
+    /* NG+ 标记 */
+    if ((s.ng || 0) > 0) {
+      html += '<div class="ng-bar">NG+ 第 ' + s.ng + ' 轮 · 日历 ×' + GD.BAL.ngTimeSpeed +
+        ' · 每部解锁 ' + (2 + GD.BAL.ngComboBonus) + ' 格 · 收藏 ' + E.comboCount(s) + ' / 100</div>';
+    }
 
     html += '<div class="plan-group"><div class="plan-label">类型</div><div class="chips">';
     GD.GENRES.forEach(function (x) {
@@ -1417,6 +1450,11 @@
       '<div class="done-row"><span>累计收入</span><b>' + money(r.earned) + '</b></div>' +
       '</div>' +
       '<button class="primary big" data-act="endless">继续经营</button>' +
+      '<button class="ghost wide" data-act="ngplus">带收藏开第二轮 · NG+ 第 ' + ((s.ng || 0) + 1) + ' 轮</button>' +
+      '<div class="ending-note">保留 ' + E.comboCount(s) + ' / 100 格收藏、' +
+      E.brands(s).length + ' 个子品牌，带 ' + num(Math.floor((s.fans || 0) * GD.BAL.ngFansKeep)) +
+      ' 粉丝回到 ' + GD.BAL.startYear + '；日历 ×' + GD.BAL.ngTimeSpeed +
+      '，每部作品多解锁 ' + GD.BAL.ngComboBonus + ' 格组合。目标：集齐 100 格。</div>' +
       '</div>';
     el.hint.textContent = '主线结束了，但行业还在往前跑。';
   }

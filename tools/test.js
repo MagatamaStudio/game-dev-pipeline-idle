@@ -1730,5 +1730,95 @@ function playOne(s, plan, choice) {
     E.moraleOf(back.staff[0]) === GD.BAL.moraleStart && E.staminaOf(back.staff[0]) === GD.BAL.staminaStart);
 })();
 
+/* ---------- 怀旧潮 ---------- */
+(function () {
+  var waves = [], uniq = [];
+  for (var y = GD.BAL.startYear; y <= 2030; y++) {
+    var n = E.nostalgiaFor(y);
+    if (n) {
+      waves.push(n.from);
+      if (uniq.indexOf(n.from) < 0) uniq.push(n.from);
+    }
+  }
+  ok('怀旧潮每 12 年一次', uniq.length >= 4 && uniq[1] - uniq[0] === 12, uniq.join(','));
+  ok('每次持续 2 年', waves.length === uniq.length * 2, waves.length + ' 年 / ' + uniq.length + ' 波');
+  ok('前 12 年没有怀旧潮', !E.nostalgiaFor(1972) && !E.nostalgiaFor(1983));
+
+  var w = E.nostalgiaFor(1984);
+  ok('同一波年年内一致', JSON.stringify(E.nostalgiaFor(1985)) === JSON.stringify(w));
+  ok('潮期只加成本命类型', E.nostalgiaSalesMul(1984, w.genre) === GD.BAL.nostalgiaSales,
+    w.genre + ' ×' + E.nostalgiaSalesMul(1984, w.genre));
+  var otherG = GD.GENRES.filter(function (g) { return g.id !== w.genre; })[0].id;
+  ok('别的类型没有加成', E.nostalgiaSalesMul(1984, otherG) === 1);
+  ok('潮过了就恢复', E.nostalgiaSalesMul(w.to + 1, w.genre) === 1);
+
+  /* 进销量：潮期做本命类型卖得更多 */
+  var sA = E.newGame(), sB = E.newGame();
+  sA.day = sB.day = (w.from - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  sA.plan = { genre: w.genre, theme: 'fantasy', leader: sA.staff[0].id, platform: 'arc72' };
+  sB.plan = { genre: otherG, theme: 'fantasy', leader: sB.staff[0].id, platform: 'arc72' };
+  sA.project = { sequel: null }; sB.project = { sequel: null };
+  sA.review = { total: 30 }; sB.review = { total: 30 };
+  ok('怀旧潮确实进销量',
+    E.estimateSales(sA, 1).mid > E.estimateSales(sB, 1).mid,
+    E.estimateSales(sB, 1).mid + ' → ' + E.estimateSales(sA, 1).mid);
+})();
+
+/* ---------- NG+ ---------- */
+(function () {
+  var s = E.newGame();
+  ok('开局不是 NG+', (s.ng || 0) === 0 && E.timeSpeed(s) === 1);
+
+  s.phase = 'planning';
+  ok('非结局不能开 NG+', E.canNewGamePlus(s) === false && E.newGamePlus(s) === false);
+
+  s.phase = 'ending';
+  ok('结局可以开 NG+', E.canNewGamePlus(s) === true);
+
+  var picks = E.comboList().slice(0, 40);
+  s.combos = picks.map(function (c) { return E.comboKey(c.genre, c.theme); });
+  s.found = ['rpg:fantasy'];
+  s.fans = 100000;
+  s.rep = 66;
+  s.brands = [{ name: '子品牌A', genre: 'rpg', theme: 'fantasy', income: 1200 }];
+  s.money = 99999999;
+
+  var combosBefore = E.comboCount(s);
+  ok('NG+ 能开', E.newGamePlus(s) === true);
+  ok('回到企划阶段', s.phase === 'planning');
+  ok('年份回到开局', E.year(s) === GD.BAL.startYear, String(E.year(s)));
+  ok('收藏带过来了', E.comboCount(s) === combosBefore, E.comboCount(s) + ' / ' + combosBefore);
+  ok('王牌星带过来了', E.comboStats(s).found === 1);
+  ok('粉丝只带 10%', s.fans === 10000, String(s.fans));
+  ok('子品牌带过来了', E.brands(s).length === 1);
+  ok('轮次 +1', s.ng === 1);
+  ok('日历 ×2', E.timeSpeed(s) === GD.BAL.ngTimeSpeed);
+  ok('声望从零开始', s.rep === 0);
+  ok('钱回到开局', s.money === GD.BAL.startMoney, String(s.money));
+  ok('员工回到 3 个创始人', s.staff.length === 3);
+
+  /* NG+ 每部多解锁 1 格 */
+  var before = E.comboCount(s);
+  playOne(s, { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72' });
+  ok('NG+ 每部多解锁 1 格',
+    E.comboCount(s) === before + 2 + GD.BAL.ngComboBonus,
+    before + ' → ' + E.comboCount(s));
+
+  /* 日历来真的走快一倍 */
+  var s1 = E.newGame(), s2 = E.newGame();
+  var p1 = { genre: 'rpg', theme: 'fantasy', leader: s1.staff[0].id, platform: 'arc72' };
+  var p2 = { genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72' };
+  E.startProject(s1, p1);
+  E.startProject(s2, p2);
+  s2.ng = 1;
+  E.tick(s1, 0.2);
+  E.tick(s2, 0.2);
+  ok('NG+ 日历来走得快一倍', s2.day > s1.day * 1.8, s1.day.toFixed(1) + ' vs ' + s2.day.toFixed(1));
+
+  /* 存档读回来仍然是 NG+ */
+  var back = E.deserialize(E.serialize(s));
+  ok('读档保住 NG+ 轮次', back.ng === 1 && E.timeSpeed(back) === GD.BAL.ngTimeSpeed);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

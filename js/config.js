@@ -978,6 +978,16 @@
     trendThemeSales: 1.25,
     trendGenreSales: 1.10,
 
+    /* 怀旧潮：每 12 年一次，持续 2 年，某一个类型销量 ×1.30 */
+    nostalgiaEvery: 12,
+    nostalgiaYears: 2,
+    nostalgiaSales: 1.30,
+
+    /* NG+：带着收藏 / 品牌 / 10% 粉丝重开，日历 ×2，每部作品多解锁 1 格 */
+    ngTimeSpeed: 2,
+    ngComboBonus: 1,
+    ngFansKeep: 0.10,
+
     /* 士气 / 体力：每部作品消耗，作品之间回一点；低了会掉速度/品质 */
     moraleStart: 72,
     staminaStart: 100,

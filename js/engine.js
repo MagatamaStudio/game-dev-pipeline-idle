@@ -138,6 +138,35 @@
     return t.themes.map(function (id) { return E.theme(id).name; }).join(' / ');
   };
 
+  /* ---------------- 怀旧潮 ----------------
+   * 每 12 年一次（1984、1996、2008…），持续 2 年：年初抽一个类型，销量 ×1.30。
+   * 同样由年份哈希决定，不占存档。收藏越全越容易吃到 —— 那条线正是老类型的招牌组合。 */
+  E.nostalgiaFor = function (year) {
+    var y = Math.floor(year == null ? BAL.startYear : year);
+    var every = BAL.nostalgiaEvery || 12;
+    if (!(every > 0)) return null;
+    var rel = y - BAL.startYear;
+    /* 开局前 12 年不来潮，也别把开局那一年算成一波 */
+    if (rel < every) return null;
+    var from = BAL.startYear + Math.floor(rel / every) * every;
+    if (y < from || y >= from + (BAL.nostalgiaYears || 2)) return null;
+    var g = GD.GENRES[crewHash('nostalgia:' + from) % GD.GENRES.length];
+    return {
+      from: from,
+      to: from + (BAL.nostalgiaYears || 2) - 1,
+      genre: g.id,
+      mult: BAL.nostalgiaSales
+    };
+  };
+
+  E.nostalgiaSalesMul = function (year, genreId) {
+    var n = E.nostalgiaFor(year);
+    return n && n.genre === genreId ? n.mult : 1;
+  };
+
+  /* NG+ 的日历倍速 */
+  E.timeSpeed = function (s) { return (s.ng || 0) > 0 ? (BAL.ngTimeSpeed || 1) : 1; };
+
   /* 当前选中的平台（没选就用最新上市的可用平台） */
   E.platform = function (s) {
     var avail = E.availablePlatforms(s);
@@ -236,7 +265,9 @@
     return {
       affinity: E.affinity(plan.genre, plan.theme) * affMul,
       sequel: sq,
-      trend: E.trendSalesMul(E.year(s), plan.genre, plan.theme),
+      trend: E.trendSalesMul(E.year(s), plan.genre, plan.theme) *
+        E.nostalgiaSalesMul(E.year(s), plan.genre),
+      nostalgia: E.nostalgiaFor(E.year(s)),
       quality: q,
       duration: duration,
       days: days,
@@ -584,6 +615,7 @@
       found: [],
       comboNews: [],
       builtRound: 0,
+      ng: 0,
       candidates: []
     };
     E.rollCandidates(s);
@@ -1481,7 +1513,8 @@
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
     var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
-    var trendMult = s.plan ? E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme) : 1;
+    var trendMult = s.plan ? E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme) *
+      E.nostalgiaSalesMul(E.year(s), s.plan.genre) : 1;
     var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult * sequelMult * trendMult *
       E.bonusMul(s, 'sales') * E.traitFansMul(s) * E.ruleSalesMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
@@ -1498,8 +1531,10 @@
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
     var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
+    /* 今年是不是怀旧潮（老类型整年好卖） */
     var trendMult = E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme);
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
+    var nostMult = E.nostalgiaSalesMul(E.year(s), s.plan.genre);
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * nostMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -1572,7 +1607,7 @@
       s.project.modeQSum += mode.quality * dt;
       if (s.project.mode === 'crunch') s.project.crunchTime = (s.project.crunchTime || 0) + dt;
       s.project.progress += (dt * mode.rate) / s.project.baseDuration;
-      s.day += dt * BAL.daysPerSecond;
+      s.day += dt * BAL.daysPerSecond * E.timeSpeed(s);
 
       /* 每过一天，工资就烧一天——这是「时间有代价」的来源 */
       var burn = E.teamSalary(s) * BAL.daysPerSecond * dt * E.prodMult(s);
@@ -1666,9 +1701,9 @@
         s.history.push(s.lastResult);
         /* 士气 / 体力：做完一部结算一次 */
         E.settleMood(s);
-        /* 做完一部：解锁 2 个新组合；如果这次用的是传说组合，记一笔 */
-        E.unlockNextCombo(s);
-        E.unlockNextCombo(s);
+        /* 做完一部：解锁 2 个新组合（NG+ 多给 1 个）；如果这次用的是传说组合，记一笔 */
+        var unlockN = 2 + ((s.ng || 0) > 0 ? (BAL.ngComboBonus || 0) : 0);
+        for (var ui2 = 0; ui2 < unlockN; ui2++) E.unlockNextCombo(s);
         if (E.isLegendary(s.plan.genre, s.plan.theme)) E.markFound(s, s.plan.genre, s.plan.theme);
         if (s.review.total > (s.yearBest || 0)) {
           s.yearBest = s.review.total;
@@ -1736,6 +1771,36 @@
   E.continueEndless = function (s) {
     if (s.phase !== 'ending') return false;
     s.ended = true;
+    s.phase = 'planning';
+    return true;
+  };
+
+  /* ---------------- NG+ ----------------
+   * 结局后带着收藏 / 子品牌 / 10% 粉丝重开 1972：
+   * 日历 ×2（更早看到新平台与新世代），每部作品多解锁 1 格组合。
+   * 这是唯一的重置层，目标是集齐 100 格。 */
+  E.canNewGamePlus = function (s) { return !!s && s.phase === 'ending'; };
+
+  E.newGamePlus = function (s) {
+    if (!E.canNewGamePlus(s)) return false;
+    var combos = Array.isArray(s.combos) ? s.combos.slice() : E.initialCombos();
+    var found = Array.isArray(s.found) ? s.found.slice() : [];
+    var brands = JSON.parse(JSON.stringify(s.brands || []));
+    var fans = Math.floor((s.fans || 0) * (BAL.ngFansKeep || 0.1));
+    var ng = (s.ng || 0) + 1;
+    /* 公司理念跟着你走：不用再选一次宣言 */
+    var declId = s.declaration || 'ngplus';
+    var declEff = s.declEff ? JSON.parse(JSON.stringify(s.declEff)) : null;
+    var fresh = E.newGame();
+    Object.keys(fresh).forEach(function (k) { s[k] = fresh[k]; });
+    s.combos = combos;
+    s.found = found;
+    s.comboNews = [];
+    s.brands = brands;
+    s.fans = fans;
+    s.ng = ng;
+    s.declaration = declId;
+    s.declEff = declEff;
     s.phase = 'planning';
     return true;
   };
