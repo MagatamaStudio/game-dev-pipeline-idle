@@ -1625,9 +1625,10 @@ function playOne(s, plan, choice) {
   ok('搬完能多招一个人', s.staff.length < s.seats);
 
   var guard = 0;
-  while (E.expandOffice(s) && guard++ < 10) { }
-  ok('一路能搬到独栋', E.room(s).key === 'building' && E.officeLevel(s) === 6,
+  while (E.expandOffice(s) && guard++ < 12) { }
+  ok('一路能搬到总部大楼', E.room(s).key === 'tower' && E.officeLevel(s) === 8,
     E.room(s).name + ' / ' + s.seats + ' 工位');
+  ok('一共 6 级办公室', GD.ROOMS.length === 6, String(GD.ROOMS.length));
   ok('顶了就没有下一级', E.nextRoom(s) === null && E.expandCost(s) === null);
   ok('搬不动时不再扣钱', (function () {
     var m = s.money;
@@ -2502,6 +2503,100 @@ function playOne(s, plan, choice) {
   delete obj.coopCooldown;
   var back = E.deserialize(JSON.stringify(obj));
   ok('老存档读回来合作冷却为空', E.coopCooldownLeft(back, r.id) === 0);
+})();
+
+/* ---------- 规模（小 / 中 / 大） ---------- */
+(function () {
+  var s = E.newGame();
+  ok('一共 3 档规模', GD.SCALES.length === 3, String(GD.SCALES.length));
+  ok('默认是中型', s.plan.scale === 'mid', s.plan.scale);
+  ok('未知规模退回中型', E.scale('nope').id === 'mid', E.scale('nope').id);
+
+  var base = { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72' };
+  var pvS = E.preview(s, { genre: base.genre, theme: base.theme, leader: base.leader, platform: base.platform, scale: 'small' });
+  var pvM = E.preview(s, { genre: base.genre, theme: base.theme, leader: base.leader, platform: base.platform, scale: 'mid' });
+  var pvL = E.preview(s, { genre: base.genre, theme: base.theme, leader: base.leader, platform: base.platform, scale: 'large' });
+  ok('规模越大成本越高', pvS.cost < pvM.cost && pvM.cost < pvL.cost,
+    Math.round(pvS.cost) + ' / ' + Math.round(pvM.cost) + ' / ' + Math.round(pvL.cost));
+  ok('规模越大周期越长', pvS.duration < pvM.duration && pvM.duration < pvL.duration,
+    pvS.duration.toFixed(1) + ' / ' + pvM.duration.toFixed(1) + ' / ' + pvL.duration.toFixed(1));
+  ok('规模越大品质越高', pvS.quality < pvM.quality && pvM.quality < pvL.quality,
+    pvS.quality.toFixed(1) + ' / ' + pvM.quality.toFixed(1) + ' / ' + pvL.quality.toFixed(1));
+  ok('规模越大卖得越多',
+    GD.SCALES[0].sales < GD.SCALES[1].sales && GD.SCALES[1].sales < GD.SCALES[2].sales);
+
+  /* 立项真的按规模扣钱与计时 */
+  var s1 = E.newGame(); var s2 = E.newGame(); var s3 = E.newGame();
+  [s1, s2, s3].forEach(function (x) { x.money = 1e6; });
+  var plan = function (sc) { return { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', scale: sc }; };
+  E.startProject(s1, plan('small'));
+  E.startProject(s2, plan('mid'));
+  E.startProject(s3, plan('large'));
+  ok('小型实际开发更快', s1.project.baseDuration < s2.project.baseDuration &&
+    s2.project.baseDuration < s3.project.baseDuration,
+    s1.project.baseDuration.toFixed(1) + ' / ' + s2.project.baseDuration.toFixed(1) + ' / ' + s3.project.baseDuration.toFixed(1));
+  ok('大型实际花得更多', s3.project.cost > s2.project.cost && s2.project.cost > s1.project.cost,
+    s1.project.cost + ' / ' + s2.project.cost + ' / ' + s3.project.cost);
+  ok('立项后记住规模', s3.plan.scale === 'large' && s3.project.scale.id === 'large');
+
+  /* 老存档没有 scale 字段 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.plan.scale;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档读回来规模补成中型', back.plan.scale === 'mid', String(back.plan.scale));
+})();
+
+/* ---------- 办公室 6 级 ---------- */
+(function () {
+  ok('一共 6 级办公室', GD.ROOMS.length === 6, String(GD.ROOMS.length));
+  ok('工位从 3 到 8', GD.ROOMS[0].seats === 3 && GD.ROOMS[5].seats === 8,
+    GD.ROOMS.map(function (r) { return r.seats; }).join(','));
+  ok('后两级加成更强',
+    GD.ROOMS[5].eff.quality > GD.ROOMS[3].eff.quality &&
+    GD.ROOMS[5].eff.sales > GD.ROOMS[3].eff.sales,
+    GD.ROOMS[3].eff.quality + ' → ' + GD.ROOMS[5].eff.quality);
+
+  var s = E.newGame();
+  s.money = 1e9;
+  var guard = 0;
+  while (E.expandOffice(s) && guard++ < 12) { }
+  ok('能一路搬到第 8 个工位', s.seats === 8 && E.officeLevel(s) === 8, String(s.seats));
+  ok('第 6 级后没有下一级', E.nextRoom(s) === null && E.expandCost(s) === null);
+  ok('工位上限跟着到 8', s.seatCap === 8 || s.seatCap > 8, String(s.seatCap));
+})();
+
+/* ---------- 培训 ---------- */
+(function () {
+  var s = E.newGame();
+  s.money = 1e6;
+  var st = s.staff[0];
+  var c0 = E.trainCost(s, st);
+  ok('培训有价格', c0 > 0, String(c0));
+  ok('等级越高越贵', E.trainCost(s, { level: 10 }) > E.trainCost(s, { level: 1 }),
+    E.trainCost(s, { level: 1 }) + ' vs ' + E.trainCost(s, { level: 10 }));
+
+  var before = { role: st.stats[st.role] };
+  var r = E.trainStaff(s, st.id);
+  ok('培训成功', r.ok === true && s.money === 1e6 - c0, JSON.stringify(r));
+  ok('主属性 +2', st.stats[st.role] === Math.min(99, before.role + 2),
+    before.role + ' → ' + st.stats[st.role]);
+  ok('报出了成长项', r.gained.length >= 1, r.gained.join('、'));
+  ok('同一部作品只能练一次', E.trainStaff(s, st.id).reason === 'done');
+  ok('下轮可以再练', (function () {
+    E.nextRound === undefined;
+    s.round += 1;
+    return E.trainBlock(s, st.id) === null || E.trainBlock(s, st.id) === 'poor';
+  })());
+
+  var s2 = E.newGame();
+  s2.money = 10;
+  var st2 = s2.staff[0];
+  ok('钱不够练不了', E.trainStaff(s2, st2.id).reason === 'poor');
+  ok('非企划阶段不能培训', (function () {
+    s2.money = 1e6; s2.phase = 'developing';
+    return E.trainBlock(s2, st2.id) === 'phase';
+  })());
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

@@ -365,7 +365,17 @@
       seats: 6, key: 'building', name: '独栋小楼', sub: '带招牌',
       desc: '楼下有自己的招牌和会客区。品质 +8%，销量 +6%。',
       eff: { quality: 1.08, research: 1.10, sales: 1.06 }
-    }
+  },
+  {
+    seats: 7, key: 'campus', name: '创意园区', sub: '整栋园区',
+    desc: '整栋园区，独立食堂和放映厅。品质 +10%，研究快 20%，销量 +8%。',
+    eff: { quality: 1.10, research: 1.20, sales: 1.08 }
+  },
+  {
+    seats: 8, key: 'tower', name: '总部大楼', sub: '自建总部',
+    desc: '自建总部，楼下停满了来谈合作的车。品质 +13%，研究快 20%，销量 +12%。',
+    eff: { quality: 1.13, research: 1.20, sales: 1.12 }
+  }
   ];
 
   /* ---------------- 玩家自研平台（2068 起） ----------------
@@ -1114,6 +1124,17 @@ GD.DECLARATIONS_RETRY = [
    * 否则「玩家永远输」或「玩家永远赢」。1.10 是模拟里调出来的。 */
   GD.BAL_AWARD = { catScale: 1.10, catJitter: 6 };
 
+  /* 规模：企划四选一里的第四个维度。
+   * 小 / 中 / 大 决定成本、周期、销量和品质上限 —— 这是「这一部押多大」的决策。 */
+  GD.SCALES = [
+    { id: 'small', name: '小型', short: '小', desc: '成本低、周期短，卖得少',
+      cost: 0.62, days: 0.80, sales: 0.60, quality: 0.96 },
+    { id: 'mid', name: '中型', short: '中', desc: '均衡，默认',
+      cost: 1.00, days: 1.00, sales: 1.00, quality: 1.00 },
+    { id: 'large', name: '大型', short: '大', desc: '成本高、周期长，上限也高',
+      cost: 1.60, days: 1.30, sales: 1.50, quality: 1.10 }
+  ];
+
   GD.BAL = {
     startMoney: 620000,
     startYear: 1972,
@@ -1156,8 +1177,8 @@ GD.DECLARATIONS_RETRY = [
     /* 对手合作（联合开发）：对方分担开发成本，但分成和你的独立性要付代价。
      * 类型对得上加成更高 —— 找对搭档是决策，不是无脑点。 */
     coopFundRate: 0.40,      // 合作方分担 40% 开发成本
-    coopSales: 1.15,         // 对方渠道带量
-    coopRevenueShare: 0.22,  // 分给对方 22% 收入
+    coopSales: 1.20,         // 对方渠道带量
+    coopRevenueShare: 0.15,  // 分给对方 15% 收入
     coopQuality: 0.10,       // 基础品质加成（按对方实力放大）
     coopQualityMatch: 0.06,  // 类型对得上再加
     coopFeeBase: 90000,      // 一次性签约费
@@ -1196,14 +1217,15 @@ GD.DECLARATIONS_RETRY = [
     tiredStaminaMul: 0.70,
     lowMoraleAt: 30,
     lowMoraleMul: 0.94,
+    trainBase: 45000,         // 培训：基础价（随员工等级涨）
     teamBuildCost: 120000,    // 团建：一次性花钱，全员士气 +15
     teamBuildMorale: 15,
 
     /* 续作：销量够高的旧作才能出续作。
      * 续作卖得好、做得快，但同一套组合的相性打折（不能一直吃同一招）。 */
     sequelMinCopies: 80000,
-    sequelSales: 1.40,      // 销量 ×1.40
-    sequelSpeed: 0.80,      // 开发耗时 ×0.80
+    sequelSales: 1.25,      // 销量 ×1.25
+    sequelSpeed: 0.88,      // 开发耗时 ×0.88
     sequelAffinity: 0.85,   // 相性 ×0.85
 
     /* 开发成本 = 平台授权 + 每日工资 × 开发天数
@@ -1214,7 +1236,7 @@ GD.DECLARATIONS_RETRY = [
     /* 团队 */
     hireFeeDays: 70,          // 签约金 = 日薪 × 70 天
     fireDays: 30,             // 遣散费 = 日薪 × 30 天
-    seatCosts: [120000, 220000, 380000],   // 第 4/5/6 个工位
+    seatCosts: [120000, 220000, 380000, 620000, 980000],   // 第 4/5/6/7/8 个工位
     refreshCost: 10000,       // 换一批候选人
     teamSpeedBonus: 4,        // 每多一人，开发快 4 秒
     teamQualityBonus: 0.04,   // 每多一人，品质 +4%

@@ -134,7 +134,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -331,6 +331,25 @@
         else { GD.SFX.bad(); }
         return;
       }
+      var trainId = t.getAttribute('data-train');
+      if (trainId) {
+        var tr = E.trainStaff(s, trainId);
+        if (tr.ok) {
+          GD.SFX.hire();
+          UI.toast('🎓 ' + tr.name + ' 特训完：' + tr.gained.join('、') + '（花 ' + money(tr.cost) + '）');
+          renderTeam();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          el.hint.textContent = tr.reason === 'poor' ? '钱不够，要 ' + money(tr.cost) + '。'
+            : tr.reason === 'done' ? '这轮已经练过了，做完下一部再说。'
+              : tr.reason === 'max' ? '已经到顶了。'
+                : '现在不能培训。';
+        }
+        return;
+      }
+
       if (fireId) {
         var fr = E.fireStaff(s, fireId);
         if (fr.ok) {
@@ -777,7 +796,8 @@
       E.ensurePlanPlatform(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
       var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform +
-        '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + (s.plan.coop || '') + '|' + E.year(s);
+        '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + (s.plan.coop || '') +
+        '|' + (s.plan.scale || 'mid') + '|' + E.year(s);
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
     } else if (s.phase === 'developing') {
       var bar = byId('dev-bar');
@@ -963,6 +983,14 @@
     });
     html += '</div></div>';
 
+    html += '<div class="plan-group"><div class="plan-label">规模</div><div class="chips">';
+    GD.SCALES.forEach(function (x) {
+      var on = (s.plan.scale || 'mid') === x.id;
+      html += '<button class="chip' + (on ? ' on' : '') + '" data-plan="scale:' + x.id + '" title="' +
+        esc(x.desc) + '">' + esc(x.name) +
+        '<span class="ci">成本×' + x.cost.toFixed(2) + '</span></button>';
+    });
+    html += '</div></div>';
     /* 联合开发：找一家对手一起做 */
     var coopList = E.coopOptions(s);
     if (coopList.length) {
@@ -992,6 +1020,8 @@
       '<div class="pv"><label>成本</label><b>' + money(p.cost) + '</b></div>' +
       '<div class="pv"><label>平台装机</label><b>' + E.effInstall(s, E.platform(s)).toFixed(1) + '</b></div>' +
       '<div class="pv"><label>主创</label><b>' + esc(leader.name) + '</b></div>' +
+      '<div class="pv"><label>规模</label><b>' + esc(p.scale.name) + '（成本 ×' +
+        p.scale.cost.toFixed(2) + ' · 销量 ×' + p.scale.sales.toFixed(2) + '）</b></div>' +
       (p.coop
         ? '<div class="pv"><label>联合开发</label><b class="good">' + esc(p.coop.name) +
           '（品质 ×' + p.coop.qualityMul.toFixed(2) + ' · 销量 ×' + p.coop.salesMul.toFixed(2) +
@@ -1125,6 +1155,12 @@
         '</div>' +
         '<div class="staff-side">' +
         '<div class="staff-salary">' + money(E.effSalary(s, st)) + '<small>/天</small></div>' +
+        (function () {
+          var tb = E.trainBlock(s, st.id);
+          var label = tb === 'done' ? '练过了' : tb === 'max' ? '满了' : money(E.trainCost(s, st));
+          return '<button class="ghost tiny train" data-train="' + st.id + '"' +
+            (tb ? ' disabled' : '') + ' title="主属性 +2，次属性 +1">培训 ' + label + '</button>';
+        })() +
         (s.staff.length > 1
           ? '<button class="ghost tiny fire" data-fire="' + st.id + '" title="遣散费 ' +
             money(E.fireCost(s, st)) + '">解雇</button>'

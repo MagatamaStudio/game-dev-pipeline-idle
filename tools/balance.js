@@ -30,26 +30,114 @@ function mulberry32(a) {
 var GENRES = GD.GENRES.map(function (g) { return g.id; });
 var THEMES = GD.THEMES.map(function (t) { return t.id; });
 
-/* 中等水平玩家：在「最近 4 个可用平台」里挑品质 × 装机的最高值 */
-function pickPlan(s) {
-  var plats = E.availablePlatforms(s).slice(-4);
-  var best = null;
-  for (var gi = 0; gi < GENRES.length; gi++) {
-    for (var ti = 0; ti < THEMES.length; ti++) {
-      for (var pi = 0; pi < plats.length; pi++) {
-        for (var si = 0; si < s.staff.length; si++) {
-          var plan = {
-            genre: GENRES[gi], theme: THEMES[ti],
-            leader: s.staff[si].id, platform: plats[pi].id
-          };
-          var pv = E.preview(s, plan);
-          var value = (pv.scoreLow + pv.scoreHigh) / 2 * E.effInstall(s, plats[pi]);
-          if (!best || value > best.value) best = { plan: plan, value: value };
+/* ---------------- 打法（策略） ----------------
+ * 同一个引擎、同一套随机种子，只换「怎么挑企划」，用来找有没有暴力解。 */
+var STRATEGIES = {
+  /* 中等偏上：品质 × 装机 最高 */
+  balanced: {
+    name: '均衡',
+    pick: function (s) {
+      var plats = E.availablePlatforms(s).slice(-4);
+      var best = null;
+      for (var gi = 0; gi < GENRES.length; gi++) {
+        for (var ti = 0; ti < THEMES.length; ti++) {
+          for (var pi = 0; pi < plats.length; pi++) {
+            for (var si = 0; si < s.staff.length; si++) {
+              var plan = { genre: GENRES[gi], theme: THEMES[ti], leader: s.staff[si].id, platform: plats[pi].id, scale: 'mid' };
+              var pv = E.preview(s, plan);
+              var value = (pv.scoreLow + pv.scoreHigh) / 2 * E.effInstall(s, plats[pi]);
+              if (!best || value > best.value) best = { plan: plan, value: value };
+            }
+          }
         }
       }
+      return best ? best.plan : s.plan;
+    }
+  },
+
+  /* 低价快出：只看成本低、周期短，装机大就行，不追品质 */
+  cheap: {
+    name: '低价快出',
+    pick: function (s) {
+      var plats = E.availablePlatforms(s).slice(-2);
+      var best = null;
+      for (var gi = 0; gi < GENRES.length; gi++) {
+        for (var ti = 0; ti < THEMES.length; ti++) {
+          for (var pi = 0; pi < plats.length; pi++) {
+            var fastest = s.staff[0];
+            s.staff.forEach(function (x) { if (x.stats.speed > fastest.stats.speed) fastest = x; });
+            var plan = { genre: GENRES[gi], theme: THEMES[ti], leader: fastest.id, platform: plats[pi].id, scale: 'small' };
+            var pv = E.preview(s, plan);
+            var value = E.effInstall(s, plats[pi]) / Math.max(1, pv.cost);
+            if (!best || value > best.value) best = { plan: plan, value: value };
+          }
+        }
+      }
+      return best ? best.plan : s.plan;
+    }
+  },
+
+  /* 偏科：只堆一项，冲「最佳画面 / 音乐 / 剧情」那三个单项奖 */
+  specialist: {
+    name: '偏科单项',
+    cat: 'art',
+    pick: function (s, strat) {
+      var plats = E.availablePlatforms(s).slice(-4);
+      var best = null;
+      var key = strat.cat || 'art';
+      for (var gi = 0; gi < GENRES.length; gi++) {
+        for (var ti = 0; ti < THEMES.length; ti++) {
+          for (var pi = 0; pi < plats.length; pi++) {
+            var plan = { genre: GENRES[gi], theme: THEMES[ti], leader: s.staff[0].id, platform: plats[pi].id, scale: 'mid' };
+            /* 模拟「把资源全砸在这一项上」：用该项能力当价值 */
+            var bestStat = 0;
+            s.staff.forEach(function (st) { if (st.stats[key] > bestStat) bestStat = st.stats[key]; });
+            s.staff.forEach(function (st) {
+              if (st.stats[key] === bestStat) plan.leader = st.id;
+            });
+            var pv = E.preview(s, plan);
+            var value = (pv.scoreLow + pv.scoreHigh) / 2 * E.effInstall(s, plats[pi]) * (1 + bestStat / 400);
+            if (!best || value > best.value) best = { plan: plan, value: value };
+          }
+        }
+      }
+      return best ? best.plan : s.plan;
+    }
+  },
+
+  /* 续作流：能出续作就出续作 */
+  sequel: {
+    name: '续作流',
+    pick: function (s) {
+      var cands = E.sequelCandidates(s);
+      if (cands.length) {
+        var c = cands[0];
+        var plats = E.availablePlatforms(s).slice(-2);
+        var plan = { genre: c.genre, theme: c.theme, leader: s.staff[0].id, platform: plats[plats.length - 1].id, sequel: c.index, scale: 'mid' };
+        return plan;
+      }
+      return STRATEGIES.balanced.pick(s);
+    }
+  },
+
+  /* 合作流：能拉对手就拉 */
+  coop: {
+    name: '合作流',
+    pick: function (s) {
+      var base = STRATEGIES.balanced.pick(s);
+      var opts = E.coopOptions(s);
+      if (opts.length && s.money > E.coopFee(s, opts[0]) * 3) {
+        var match = null;
+        opts.forEach(function (r) { if (r.genre === base.genre && !match) match = r; });
+        base.coop = (match || opts[0]).id;
+      }
+      return base;
     }
   }
-  return best ? best.plan : s.plan;
+};
+
+function pickPlan(s, strat) {
+  return strat.pick(s, strat);
 }
 
 function manage(s) {
@@ -76,18 +164,26 @@ function manage(s) {
   if (gearPool.length) E.buyGear(s, gearPool[0].id);
 }
 
-function playOnce(seed) {
+function playOnce(seed, strat) {
   Math.random = mulberry32(seed);
   var s = E.newGame();
   E.chooseDeclaration(s, 'garage');
 
-  var guard = 0, bankrupt = 0, marks = {}, platformUse = {}, stuck = null, trace = [];
+  var guard = 0, bankrupt = 0, bankruptsSeen = 0, marks = {}, platformUse = {}, stuck = null, trace = [];
   var revSum = 0, profitSum = 0;
 
   while (guard++ < 500000) {
     E.tick(s, 1 / 30);
 
     if (s.phase === 'ending') break;
+
+    /* 破产：先记账，然后用新公司接着跑（这也是真实玩法，顺便验证重开流程） */
+    if (s.phase === 'bankrupt') {
+      bankrupt++;
+      bankruptsSeen = (bankruptsSeen || 0) + 1;
+      if (!E.newCompany(s, 'makemoney')) { stuck = 'bankrupt'; break; }
+      continue;
+    }
 
     if (s.phase === 'event') {
       if (!s.event) {
@@ -119,7 +215,7 @@ function playOnce(seed) {
     if (s.phase === 'planning') {
       if (marks[E.year(s)] == null) marks[E.year(s)] = s.money;
       manage(s);
-      s.plan = pickPlan(s);
+      s.plan = pickPlan(s, strat);
       if (!E.startProject(s, s.plan)) {
         if (E.rescue(s)) { bankrupt++; }
         else { stuck = 'poor'; break; }
@@ -154,7 +250,7 @@ function playOnce(seed) {
     catWins: catWins,
     wins: wins,
     noms: noms,
-    bankrupt: bankrupt,
+    bankrupt: bankruptsSeen || bankrupt,
     research: (s.research.done || []).length,
     gear: (s.furniture || []).length,
     staff: s.staff.length,
@@ -169,21 +265,58 @@ function playOnce(seed) {
 }
 
 var N = Number(process.argv[2] || 12);
-var DETAIL = process.argv[3] === 'detail';
-var rows = [];
-for (var i = 1; i <= N; i++) {
-  var one = playOnce(i);
-  rows.push(one);
-  if (DETAIL && i === 1) {
-    console.log('=== seed 1 逐年结果 ===');
-    (one.trace || []).slice(-14).forEach(function (t) { console.log('  作品 ' + t.year + ' 平台 ' + t.plat + ' 评分 ' + t.total + ' 收入 $' + (t.rev/1e6).toFixed(2) + 'M 成本 $' + (t.cost/1e6).toFixed(2) + 'M 净利率 ' + (t.rev ? Math.round((t.rev-t.cost)/t.rev*100) : 0) + '%'); });
-    (one.yearResults || []).forEach(function (y) {
-      console.log('  ' + y.year + '  你 ' + y.playerScore + '  ' +
-        (y.winner ? '被 ' + y.winner + '《' + y.winnerTitle + '》' + y.winnerScore + ' 拿走' : '你拿奖') +
-        (y.playerBrand ? '（子品牌）' : ''));
-    });
+var ONLY = process.argv[3] && process.argv[3] !== 'detail' ? process.argv[3] : null;
+var DETAIL = process.argv.indexOf('detail') >= 0;
+
+/* 只跑一种打法（默认均衡），保持旧的输出格式 */
+function runOne(stratKey, detail) {
+  var strat = STRATEGIES[stratKey] || STRATEGIES.balanced;
+  var rows = [];
+  for (var i = 1; i <= N; i++) {
+    var one = playOnce(i, strat);
+    rows.push(one);
+    if (detail && i === 1) {
+      console.log('=== seed 1 逐年结果（' + strat.name + '）===');
+      (one.trace || []).slice(-14).forEach(function (t) { console.log('  作品 ' + t.year + ' 平台 ' + t.plat + ' 评分 ' + t.total + ' 收入 $' + (t.rev/1e6).toFixed(2) + 'M 成本 $' + (t.cost/1e6).toFixed(2) + 'M 净利率 ' + (t.rev ? Math.round((t.rev-t.cost)/t.rev*100) : 0) + '%'); });
+    }
   }
+  return rows;
 }
+
+/* 多打法对比模式 */
+function compareAll() {
+  var keys = Object.keys(STRATEGIES);
+  console.log('=== 多打法对比（每格 ' + N + ' 局）===');
+  console.log('打法        | 作品 | 破产 | 冠/年 | 净利率 | 结束现金 | 总分中位 | 最该赢的赢了吗');
+  keys.forEach(function (k) {
+    var rows = [];
+    for (var i = 1; i <= N; i++) rows.push(playOnce(i, STRATEGIES[k]));
+    var rev = sum(rows.map(function (r) { return r.revSum; }));
+    var prof = sum(rows.map(function (r) { return r.profitSum; }));
+    var wins = sum(rows.map(function (r) { return r.wins; }));
+    var games = sum(rows.map(function (r) { return r.games; }));
+    var bankrupt = sum(rows.map(function (r) { return r.bankrupt; }));
+    var cash = med(rows.map(function (r) { return r.money; }));
+    var scores = [];
+    rows.forEach(function (r) { (r.trace || []).forEach(function (t) { if (t.total) scores.push(t.total); }); });
+    console.log([
+      STRATEGIES[k].name.padEnd(10),
+      String(games).padStart(4),
+      String(bankrupt).padStart(4),
+      String(wins).padStart(5),
+      String(rev ? Math.round(prof / rev * 100) : 0).padStart(5) + '%',
+      ('$' + (cash / 1e6).toFixed(0) + 'M').padStart(8),
+      String(scores.length ? med(scores) : 0).padStart(8),
+      String(rows.map(function (r) { return r.stuck || '-'; }).join('/')).padStart(10)
+    ].join(' | '));
+  });
+}
+
+var rows = (function () {
+  if (ONLY === 'compare') { compareAll(); return []; }
+  return runOne(ONLY || 'balanced', DETAIL);
+})();
+if (!rows.length) process.exit(0);
 
 function avg(list) { return list.reduce(function (a, b) { return a + b; }, 0) / list.length; }
 function sum(list) { return list.reduce(function (a, b) { return a + b; }, 0); }

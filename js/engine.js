@@ -279,7 +279,14 @@
 
   /* 确定性品质（不含随机与事件），用于企划预告。
    * affMul：续作的相性折扣（BAL.sequelAffinity），默认 1。 */
-  E.baseQuality = function (s, genreId, themeId, leaderId, affMul) {
+  /* 规模查表 */
+  E.scale = function (id) {
+    var list = GD.SCALES || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return list[1] || { id: 'mid', name: '中型', cost: 1, days: 1, sales: 1, quality: 1 };
+  };
+
+  E.baseQuality = function (s, genreId, themeId, leaderId, affMul, scaleId) {
     var g = E.genre(genreId);
     var leader = E.staffById(s, leaderId);
     var w = g.weights;
@@ -291,16 +298,17 @@
     var base = 0.75 * leaderQ + 0.25 * teamQ;
     return base * E.affinity(genreId, themeId) * (affMul || 1) * 1.08 *
       E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality') *
-      E.moodMul(leader).quality;
+      E.moodMul(leader).quality * E.scale(scaleId).quality;
   };
 
-  E.devDuration = function (s, leaderId) {
+  E.devDuration = function (s, leaderId, scaleId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
     /* 状态倍率是「速度」，耗时要除：疲劳 0.70 的速度 = 耗时 ÷ 0.70 */
     return Math.max(BAL.minDevSeconds,
-      d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed') * E.ruleMul(s, 'speed') / E.moodMul(leader).speed);
+      d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed') * E.ruleMul(s, 'speed') *
+      E.scale(scaleId).days / E.moodMul(leader).speed);
   };
 
   /* 企划面板的预估 */
@@ -308,16 +316,19 @@
     var sq = E.planSequelOf(s, plan);
     var affMul = sq ? BAL.sequelAffinity : 1;
     var coop = E.planCoopInfo(s, plan);
-    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul) * (coop ? coop.qualityMul : 1);
+    var sc = E.scale(plan.scale);
+    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul, sc.id) *
+      (coop ? coop.qualityMul : 1);
     /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据。
      * 指定平台不合法（未上市/已退市）时退回当前可用平台。 */
     var p = E.planPlatform(s, plan);
     var cap = E.capOf(p);
-    var duration = E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1);
+    var duration = E.devDuration(s, plan.leader, sc.id) * (sq ? BAL.sequelSpeed : 1);
     var days = duration * BAL.daysPerSecond;
     return {
       affinity: E.affinity(plan.genre, plan.theme) * affMul,
       sequel: sq,
+      scale: sc,
       trend: E.trendSalesMul(E.year(s), plan.genre, plan.theme) *
         E.nostalgiaSalesMul(E.year(s), plan.genre),
       nostalgia: E.nostalgiaFor(E.year(s)),
@@ -325,7 +336,8 @@
       coop: coop,
       duration: duration,
       days: days,
-      cost: Math.round((p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMultFor(s, p)) * (coop ? (1 - coop.fund) : 1)),
+      cost: Math.round((p.license * E.bonusMul(s, 'license') +
+        E.teamSalary(s) * days * E.prodMultFor(s, p) * sc.cost) * (coop ? (1 - coop.fund) : 1)),
       platform: p.id,
       license: p.license,
       scoreLow: Math.max(1, Math.min(40, Math.round(40 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 * 0.92))),
@@ -528,7 +540,7 @@
   };
 
   /* 办公室等级：工位数就是房间等级（3 车库 / 4 街边 / 5 写字楼 / 6 独栋） */
-  E.officeLevel = function (s) { return Math.max(3, Math.min(6, s.seats || 3)); };
+  E.officeLevel = function (s) { return Math.max(3, Math.min(8, s.seats || 3)); };
 
   E.roomDef = function (idx) {
     var i = Math.max(0, Math.min((GD.ROOMS || []).length - 1, idx));
@@ -542,7 +554,7 @@
   E.nextRoom = function (s) {
     var i = E.roomIndex(s), n = E.roomDef(i + 1);
     if (!n || (GD.ROOMS || []).length <= i + 1) return null;
-    if (s.seats >= (s.seatCap || 6)) return null;
+    if (s.seats >= (s.seatCap || 8)) return null;
     return n;
   };
 
@@ -599,7 +611,7 @@
 
   E.expandOffice = function (s) {
     var idx = s.seats - 3;
-    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 6)) return false;
+    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 8)) return false;
     var cost = BAL.seatCosts[idx] * E.inflation(s);
     if (s.money < cost) return false;
     s.money -= cost;
@@ -609,7 +621,7 @@
 
   E.expandCost = function (s) {
     var idx = s.seats - 3;
-    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 6)) return null;
+    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 8)) return null;
     return BAL.seatCosts[idx] * E.inflation(s);
   };
 
@@ -641,6 +653,47 @@
     return { gain: gain, ups: ups };
   };
 
+  /* ---------------- 培训 ----------------
+   * 花钱给某个员工开小灶：主属性 +2，随机一个次属性 +1。
+   * 每人每部作品只能练一次，价格随等级涨 —— 越强的人越贵，避免无脑堆一个人。 */
+  E.trainBlock = function (s, id) {
+    if (s.phase !== 'planning') return 'phase';
+    var st = E.staffById(s, id);
+    if (!st) return 'missing';
+    if (!s.trainRound) s.trainRound = {};
+    if (s.trainRound[id] === s.round) return 'done';
+    if (st.level >= 20) return 'max';
+    if (s.money < E.trainCost(s, st)) return 'poor';
+    return null;
+  };
+
+  E.trainCost = function (s, st) {
+    if (!st) return 0;
+    return Math.round(BAL.trainBase * (1 + st.level * 0.22) * E.inflation(s));
+  };
+
+  E.trainStaff = function (s, id) {
+    var blocked = E.trainBlock(s, id);
+    if (blocked) return { ok: false, reason: blocked, cost: E.trainCost(s, E.staffById(s, id)) };
+    var st = E.staffById(s, id);
+    var cost = E.trainCost(s, st);
+    s.money -= cost;
+    var gained = [];
+    var role = st.role;
+    st.stats[role] = Math.min(99, st.stats[role] + 2);
+    gained.push(GD.STAT_NAMES[role] + ' +2');
+    var others = ['code', 'script', 'art', 'audio'].filter(function (k) { return k !== role; });
+    others.sort(function (a, b) { return st.stats[b] - st.stats[a]; });
+    if (st.stats[others[0]] < 99) {
+      st.stats[others[0]] = Math.min(99, st.stats[others[0]] + 1);
+      gained.push(GD.STAT_NAMES[others[0]] + ' +1');
+    }
+    s.trainedTotal = (s.trainedTotal || 0) + 1;
+    if (!s.trainRound) s.trainRound = {};
+    s.trainRound[id] = s.round;
+    return { ok: true, cost: cost, name: st.name, gained: gained };
+  };
+
   /* ---------------- 新游戏 ---------------- */
 
   E.newGame = function () {
@@ -652,7 +705,7 @@
       rep: 0,
       day: 0,
       phase: 'planning',
-      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '' },
+      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '', scale: 'mid' },
       project: null,
       event: null,
       review: null,
@@ -698,7 +751,7 @@
       customCodeN: 0,
       brokeMonths: 0,
       bankrupts: 0,
-      seatCap: 6,
+      seatCap: 8,
       declEff: null,
       combos: E.initialCombos(),
       found: [],
@@ -1762,16 +1815,19 @@
 
     /* 合作方：分担开发成本、贡献品质与渠道，代价是收入分成 */
     var coop = E.planCoopInfo(s, plan);
+    var sc = E.scale(plan.scale);
 
     s.plan = {
       genre: plan.genre, theme: themeId, leader: plan.leader, platform: plat.id,
       name: plan.name || '', sequel: sq ? sq.index : null,
-      coop: coop ? coop.id : null
+      coop: coop ? coop.id : null, scale: sc.id
     };
+    /* 规模影响开发侧成本（授权费不跟着涨） */
+    lic = lic + Math.round(E.teamSalary(s) * (E.devDuration(s, plan.leader, sc.id) * BAL.daysPerSecond) * E.prodMultFor(s, plat) * (sc.cost - 1));
     if (coop) lic = Math.round(lic * (1 - coop.fund));
     s.money -= lic;
     s.project = {
-      baseDuration: E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1),
+      baseDuration: E.devDuration(s, plan.leader, sc.id) * (sq ? BAL.sequelSpeed : 1),
       elapsed: 0,
       progress: 0,
       mode: 'normal',
@@ -1785,6 +1841,7 @@
       cost: lic,
       sequel: sq,
       coop: coop,
+      scale: sc,
       log: [],
       logAt: 0
     };
@@ -1874,6 +1931,8 @@
     q *= 1 + ((s.project.eventQualityPct || 0) + avgMode) / 100;
     /* 联合开发：对方的开发实力摊进品质 */
     if (s.project.coop) q *= s.project.coop.qualityMul;
+    /* 规模：大制作有更高的上限 */
+    if (s.project.scale) q *= s.project.scale.quality;
     q += Math.random() * 6 - 3;
     return Math.max(5, Math.min(100, q));
   }
@@ -2043,7 +2102,8 @@
     var nostMult = E.nostalgiaSalesMul(E.year(s), s.plan.genre);
     /* 联合开发：借用对方的渠道，销量上一个台阶 */
     var coopSales = (s.project && s.project.coop) ? s.project.coop.salesMul : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * nostMult * coopSales * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
+    var scaleSales = (s.project && s.project.scale) ? s.project.scale.sales : 1;
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * nostMult * coopSales * scaleSales * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -2398,7 +2458,7 @@
     s.furniture = [];
     s.staff = GD.FOUNDERS.map(function (id) { return E.makeStaff(id); });
     s.seats = 3;
-    s.seatCap = d.eff.seatCap || 6;
+    s.seatCap = d.eff.seatCap || 8;
     s.fans = Math.round((s.fans || 0) * BAL.newCompanyFansKeep * (d.eff.fansMul || 1));
     s.money = Math.round(E.newCompanyMoney(s) * (d.eff.moneyMul || 1));
     if (d.eff.resetRep) s.rep = 0;
@@ -2949,7 +3009,7 @@
     if (!staff.length) staff = GD.FOUNDERS.map(function (id) { return E.makeStaff(id); });
     s.staff = staff;
 
-    s.seats = Math.round(clampNum(raw.seats, 3, 6, 3));
+    s.seats = Math.round(clampNum(raw.seats, 3, 8, 3));
     if (s.seats < s.staff.length) s.seats = s.staff.length;
 
     /* 候选人 */
@@ -2961,6 +3021,7 @@
 
     /* 企划 */
     if (!s.plan || typeof s.plan !== 'object') s.plan = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id };
+    if (!s.plan.scale || !GD.SCALES.some(function (x) { return x.id === s.plan.scale; })) s.plan.scale = 'mid';
     if (!s.staff.some(function (x) { return x.id === s.plan.leader; })) s.plan.leader = s.staff[0].id;
     if (!GD.GENRES.some(function (g) { return g.id === s.plan.genre; })) s.plan.genre = 'rpg';
     if (!GD.THEMES.some(function (t) { return t.id === s.plan.theme; })) s.plan.theme = 'fantasy';

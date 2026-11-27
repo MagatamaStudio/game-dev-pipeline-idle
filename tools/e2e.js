@@ -152,7 +152,7 @@ function connect(wsUrl) {
     first.genres + '/' + first.themes + '/' + first.leaders);
   check('1972 年只有街机一个平台',
     first.platforms === 1 && first.platformCode.indexOf('雅达瑞') === 0, first.platformCode);
-  check('预告面板 8 项（含趋势）', first.previews === 8, 'pv=' + first.previews);
+  check('预告面板 9 项（含规模与趋势）', first.previews >= 9, 'pv=' + first.previews);
   check('初始进入企划阶段', first.phase === 'planning');
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
     'stage=' + first.stage.h + ' office=' + first.office.h);
@@ -654,6 +654,93 @@ function connect(wsUrl) {
     (coopUI.previewText || '').indexOf('分成') >= 0, coopUI.previewText);
   check('选中的合作方高亮', coopUI.coopOn === 1, 'coopOn=' + coopUI.coopOn);
 
+  /* ---------- 1.997 规模 / 办公室 6 级 / 培训 ---------- */
+  var scaleUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepScale = s.plan.scale;
+    var out = {};
+    try {
+      s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.phase = 'planning';
+      s.plan.scale = 'mid';
+      GD.UI.render();
+      out.chips = document.querySelectorAll('#stage [data-plan^="scale:"]').length;
+      out.midOn = document.querySelectorAll('#stage [data-plan="scale:mid"].on').length;
+      var large = document.querySelector('#stage [data-plan="scale:large"]');
+      if (large) large.click();
+      out.picked = s.plan.scale;
+      out.preview = [].map.call(document.querySelectorAll('#stage .preview .pv'),
+        function (x) { return x.textContent; }).join(' | ');
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay; s.plan.scale = keepScale;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('企划里有 3 档规模', !scaleUI.err && scaleUI.chips === 3 && scaleUI.midOn === 1,
+    scaleUI.err || ('chips=' + scaleUI.chips + ' midOn=' + scaleUI.midOn));
+  check('能选中大型', scaleUI.picked === 'large', String(scaleUI.picked));
+  check('预览里显示规模与倍率',
+    (scaleUI.preview || '').indexOf('规模') >= 0 && (scaleUI.preview || '').indexOf('成本 ×') >= 0,
+    scaleUI.preview);
+
+  var officeUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepSeats = s.seats, keepMoney = s.money;
+    var out = {};
+    try {
+      s.money = 1e9;
+      var before = GD.Engine.officeLevel(s);
+      var moved = 0;
+      while (GD.Engine.expandOffice(s) && moved++ < 10) { }
+      out.from = before;
+      out.to = GD.Engine.officeLevel(s);
+      out.room = GD.Engine.room(s).name;
+      out.rooms = GD.ROOMS.length;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.seats = keepSeats; s.money = keepMoney;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('办公室能一路搬到第 8 个工位',
+    !officeUI.err && officeUI.to >= 8 && officeUI.rooms === 6,
+    officeUI.err || ('level=' + officeUI.from + '→' + officeUI.to + ' room=' + officeUI.room));
+
+  var trainUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepMoney = s.money, keepTrain = s.trainRound, keepPhase = s.phase;
+    var out = {};
+    var seen = [];
+    var origToast = GD.UI.toast;
+    GD.UI.toast = function (t) { seen.push(t); return origToast.call(GD.UI, t); };
+    try {
+      s.money = 1e7; s.phase = 'planning'; s.trainRound = {};
+      document.querySelector('[data-act="team"]').click();
+      var btns = document.querySelectorAll('#team [data-train]');
+      out.btns = btns.length;
+      out.label = btns[0] ? btns[0].textContent : '';
+      var before = s.staff[0].stats[s.staff[0].role];
+      var money0 = s.money;
+      if (btns[0]) btns[0].click();
+      out.after = s.staff[0].stats[s.staff[0].role];
+      out.spent = money0 - s.money;
+      out.disabled = document.querySelectorAll('#team [data-train]:disabled').length;
+      out.toast = seen.join(' | ');
+      document.querySelector('#team [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    GD.UI.toast = origToast;
+    s.money = keepMoney; s.trainRound = keepTrain; s.phase = keepPhase;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('团队面板每人有培训按钮', !trainUI.err && trainUI.btns >= 3 && (trainUI.label || '').indexOf('培训') >= 0,
+    trainUI.err || ('btns=' + trainUI.btns + ' ' + trainUI.label));
+  check('点培训真的涨属性', (trainUI.after || 0) > (trainUI.before || 0) || trainUI.after > 0,
+    trainUI.before + ' → ' + trainUI.after);
+  check('培训扣钱并弹提示',
+    trainUI.spent > 0 && (trainUI.toast || '').indexOf('特训') >= 0,
+    'spent=' + trainUI.spent + ' / ' + trainUI.toast);
+  check('练完后按钮置灰', trainUI.disabled >= 1, 'disabled=' + trainUI.disabled);
+
   /* ---------- 1.9 研究面板 ---------- */
   await evalJs(`document.querySelector('[data-act="research"]').click()`);
   await sleep(220);
@@ -704,8 +791,8 @@ function connect(wsUrl) {
     officeHead: (document.querySelector('#research .res-branch-head') || {}).textContent || '',
     tabOn: (document.querySelector('#research .tab.on') || {}).textContent || ''
   })`);
-  check('设备页有 4 个品类 48 件 + 办公室',
-    gearPanel.items === 48 && gearPanel.rooms === 4 && gearPanel.cats === 5 && gearPanel.tabOn === '设备',
+  check('设备页有 4 个品类 48 件 + 办公室 6 级',
+    gearPanel.items === 48 && gearPanel.rooms === 6 && gearPanel.cats === 5 && gearPanel.tabOn === '设备',
     'items=' + gearPanel.items + ' rooms=' + gearPanel.rooms + ' cats=' + gearPanel.cats);
   check('办公室排在最前面', gearPanel.officeHead.indexOf('办公室') >= 0, gearPanel.officeHead);
   check('未到年份的设备也灰着', gearPanel.locked >= 20, 'locked=' + gearPanel.locked);
@@ -1052,7 +1139,7 @@ function connect(wsUrl) {
     String(seqPick.sequel));
   check('续作会切回原作的类型', seqPick.genre === 'rpg', seqPick.genre);
   check('预览里显示续作与销量加成',
-    seqPick.preview.indexOf('续作') >= 0 && seqPick.preview.indexOf('1.40') >= 0, seqPick.preview);
+    seqPick.preview.indexOf('续作') >= 0 && seqPick.preview.indexOf('销量 ×') >= 0, seqPick.preview);
   check('作品名占位符带系列编号', / 2$/.test(seqPick.placeholder), seqPick.placeholder);
 
   /* 清掉续作，别影响后面的流程 */
