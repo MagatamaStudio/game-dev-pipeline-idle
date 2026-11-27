@@ -641,6 +641,80 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 挖人 ---------------- */
+(function () {
+  var s = E.newGame();
+  var white = s.rivals.filter(function (x) { return x.id === 'white'; })[0];
+
+  var crew = E.rivalCrew(white);
+  ok('每位对手有 2 名可挖员工', crew.length === 2, 'len=' + crew.length);
+  ok('员工 id 由对手与序号组成', crew[0].id === 'rv:white:0', crew[0].id);
+  ok('同一对手的船员稳定不变',
+    E.rivalCrew(white)[0].name === crew[0].name &&
+    E.rivalCrew(white)[0].stats.code === crew[0].stats.code, crew[0].name);
+
+  var names = {};
+  s.rivals.forEach(function (r) {
+    E.rivalCrew(r).forEach(function (m) { names[m.name] = 1; });
+  });
+  ok('六家对手的船员有区分度', Object.keys(names).length >= 5, '种=' + Object.keys(names).length);
+
+  ok('还没出道不能挖', E.poach(s, 'white', 0).reason === 'not-debut');
+
+  s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  ok('没有空工位挖不了', E.poach(s, 'white', 0).reason === 'no-seat');
+
+  s.seats = 6;
+  s.money = 5000000;
+  var info = E.poachInfo(s, white, 0);
+  ok('挖人报价包含签字费与成功率',
+    info.cost > 0 && info.chance > 0.2 && info.chance < 0.9,
+    'cost=' + info.cost + ' chance=' + info.chance.toFixed(2));
+
+  var sA = E.newGame(), sB = E.newGame();
+  sA.fans = 0; sB.fans = 60000;
+  var wA = sA.rivals.filter(function (x) { return x.id === 'white'; })[0];
+  var wB = sB.rivals.filter(function (x) { return x.id === 'white'; })[0];
+  ok('粉丝越多挖人越容易',
+    E.poachInfo(sB, wB, 0).chance > E.poachInfo(sA, wA, 0).chance,
+    E.poachInfo(sA, wA, 0).chance.toFixed(2) + ' → ' + E.poachInfo(sB, wB, 0).chance.toFixed(2));
+
+  /* 把 Math.random 固定成 0 强制成功 */
+  var rand = Math.random;
+  Math.random = function () { return 0; };
+  var powerBefore = white.power;
+  var staffBefore = s.staff.length;
+  var moneyBefore = s.money;
+  var res = E.poach(s, 'white', 0);
+  Math.random = rand;
+
+  ok('挖人成功会加入队伍', res.ok === true && s.staff.length === staffBefore + 1, res.reason || 'ok');
+  ok('挖人成功扣签字费', s.money === moneyBefore - info.cost, 'paid=' + (moneyBefore - s.money));
+  ok('被挖的对手实力下滑', white.power < powerBefore, powerBefore + ' → ' + white.power);
+  ok('同一名员工挖不到第二次', E.poach(s, 'white', 0).reason === 'gone');
+
+  var back = E.deserialize(E.serialize(s));
+  ok('存档往返保留挖来的人',
+    back.staff.some(function (x) { return x.id === 'rv:white:0'; }),
+    back.staff.map(function (x) { return x.id; }).join(','));
+  ok('挖来的人保留出身标记',
+    back.staff.filter(function (x) { return x.id === 'rv:white:0'; })[0].fromRival === 'white');
+
+  /* 强制失败，要赔违约金 */
+  var s2 = E.newGame();
+  s2.seats = 6;
+  s2.money = 5000000;
+  s2.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  var m2 = s2.money;
+  var rand2 = Math.random;
+  Math.random = function () { return 0.999; };
+  var fail = E.poach(s2, 'white', 0);
+  Math.random = rand2;
+  ok('被回绝要赔违约金',
+    fail.ok === false && fail.reason === 'refused' && s2.money < m2,
+    'lost=' + (m2 - s2.money));
+})();
+
 /* ---------------- 设备 / 家具 ---------------- */
 (function () {
   ok('设备一共 24 件', GD.GEAR.length === 24, String(GD.GEAR.length));

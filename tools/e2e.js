@@ -237,6 +237,31 @@ function connect(wsUrl) {
     rivals: document.querySelectorAll('#industry .rival').length
   })`);
   check('行业面板显示竞争对手', ind.open === true && ind.rivals >= 5, 'rivals=' + ind.rivals);
+
+  /* 挖人：把日历推到 1990，对手的员工作表应该出现 */
+  var poachUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keep = { day: s.day, money: s.money };
+    s.day = (1990 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+    s.money = 5000000;
+    GD.UI.render();
+    var crews = 0, btns = 0, name = '';
+    if (document.querySelector('[data-act="industry"]')) {
+      document.querySelector('[data-act="industry"]').click();
+      crews = document.querySelectorAll('#industry .crew-row').length;
+      btns = document.querySelectorAll('#industry [data-poach]').length;
+      name = ((document.querySelector('#industry .crew-name') || {}).textContent || '').trim();
+      document.querySelector('[data-act="close-panel"]').click();
+    }
+    s.day = keep.day;
+    s.money = keep.money;
+    GD.UI.render();
+    return { crews: crews, btns: btns, name: name };
+  })()`);
+  check('行业面板显示对手的可挖员工',
+    poachUI.crews >= 6 && poachUI.btns >= 6,
+    '员工行=' + poachUI.crews + ' 按钮=' + poachUI.btns + ' 例=' + poachUI.name);
+
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 

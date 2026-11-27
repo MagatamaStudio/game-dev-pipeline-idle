@@ -125,7 +125,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -135,6 +135,36 @@
       var researchId = t.getAttribute('data-research');
       var rtab = t.getAttribute('data-rtab');
       var gearId = t.getAttribute('data-gear');
+      var poachId = t.getAttribute('data-poach');
+
+      if (poachId) {
+        var parts = String(poachId).split(':');
+        var pr = E.poach(s, parts[0], Number(parts[1]));
+        if (pr.ok) {
+          GD.SFX.win();
+          UI.toast('📥 挖来了 ' + pr.member.name + '（' + GD.STAT_NAMES[pr.member.role] + ' ' +
+            pr.member.stats[pr.member.role] + '），签字费 ' + money(pr.cost));
+        } else if (pr.reason === 'refused') {
+          GD.SFX.bad();
+          UI.toast('被回绝了：' + pr.member.name + ' 决定留下，违约金 ' +
+            money(Math.round(pr.cost * GD.POACH.failKeep)));
+        } else if (pr.reason === 'no-seat') {
+          GD.SFX.bad();
+          UI.toast('没有空工位 —— 先去团队面板扩建办公室');
+          return;
+        } else if (pr.reason === 'poor') {
+          GD.SFX.bad();
+          UI.toast('钱不够，挖人需要 ' + money(pr.cost));
+          return;
+        } else {
+          GD.SFX.bad();
+          return;
+        }
+        if (hooks.onSave) hooks.onSave();
+        renderIndustry();
+        UI.render();
+        return;
+      }
 
       if (rtab) {
         GD.SFX.click();
@@ -790,8 +820,29 @@
         (last
           ? '<b>' + (active ? last.year + ' 年' : '') + '</b>《' + esc(last.title) + '》<span class="rival-score">' + last.score + '</span>'
           : '<span class="dim">还没出道</span>') +
-        '</div>' +
         '</div>';
+
+      if (active) {
+        html += '<div class="crew">';
+        E.rivalCrew(r).forEach(function (m, idx) {
+          var gone = (r.poached || []).indexOf(idx) >= 0;
+          var info = E.poachInfo(s, r, idx);
+          var poor = s.money < info.cost;
+          html += '<div class="crew-row' + (gone ? ' gone' : '') + '">' +
+            '<div class="avatar sm">' + avatarSvg(m.seed) + '</div>' +
+            '<div class="crew-main">' +
+            '<div class="crew-name">' + esc(m.name) +
+            ' <span class="role">' + esc(GD.STAT_NAMES[m.role]) + ' ' + m.stats[m.role] + '</span></div>' +
+            '<div class="crew-stats">' + esc(statLine(m.stats)) + '</div>' +
+            '</div>' +
+            '<button class="poach" data-poach="' + r.id + ':' + idx + '"' + (gone || poor ? ' disabled' : '') + '>' +
+            (gone ? '已挖走' : '挖<small>' + money(info.cost) + ' · ' + Math.round(info.chance * 100) + '%</small>') +
+            '</button></div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
     });
 
     html += '<div class="panel-block"><div class="block-title">历年年度游戏</div>';

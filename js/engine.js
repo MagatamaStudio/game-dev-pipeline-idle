@@ -309,7 +309,7 @@
       tailTotal: 0,
       awards: [],
       rivals: GD.RIVALS.map(function (d) {
-        return { id: d.id, name: d.name, genre: d.genre, theme: d.theme, power: d.power, debut: d.debut, lastYear: 0, awards: 0, games: [] };
+        return { id: d.id, name: d.name, genre: d.genre, theme: d.theme, power: d.power, debut: d.debut, lastYear: 0, awards: 0, games: [], poached: [] };
       }),
       yearRivalReleases: [],
       yearResults: [],
@@ -468,6 +468,102 @@
   /* 研究 + 设备合并成的总加成 —— 挂钩点统一用这两个 */
   E.bonusMul = function (s, key) { return E.researchMul(s, key) * E.furnitureMul(s, key); };
   E.bonusAdd = function (s, key) { return E.researchAdd(s, key) + E.furnitureAdd(s, key); };
+
+  /* ---------------- 挖人 ----------------
+   * 对手的员工不写进存档：id 形如 'rv:<rivalId>:<idx>'，随时能由种子重建。
+   * 这样存档只需要记「谁被挖走了」。 */
+
+  function crewHash(str) {
+    var h = 2166136261;
+    str = String(str);
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  E.rivalCrew = function (r) {
+    if (!r || !r.id) return [];
+    var out = [];
+    var ROLES = ['code', 'script', 'art', 'audio'];
+    for (var idx = 0; idx < 2; idx++) {
+      var h = crewHash(r.id + ':' + idx);
+      var role = ROLES[h % 4];
+      var base = Math.round(22 + r.power * 12);          // power 1.0~1.2 → 34~36
+      var stats = { code: base, script: base, art: base, audio: base, speed: Math.round(24 + r.power * 4) };
+      stats[role] = Math.min(60, base + 7);
+      var bump = ROLES[(h >>> 5) % 4];
+      stats[bump] = Math.min(60, stats[bump] + 2);
+      out.push({
+        id: 'rv:' + r.id + ':' + idx,
+        rival: r.id,
+        idx: idx,
+        name: GD.CREW_NAMES[(h >>> 8) % GD.CREW_NAMES.length],
+        seed: r.id + '-' + idx,
+        role: role,
+        salary: Math.round(base * 12),
+        quote: GD.CREW_QUOTES[(h >>> 11) % GD.CREW_QUOTES.length],
+        stats: stats
+      });
+    }
+    return out;
+  };
+
+  E.rivalCrewById = function (id) {
+    var m = /^rv:([^:]+):(\d+)$/.exec(String(id));
+    if (!m) return null;
+    for (var i = 0; i < GD.RIVALS.length; i++) {
+      if (GD.RIVALS[i].id !== m[1]) continue;
+      var crew = E.rivalCrew(GD.RIVALS[i]);
+      return crew[Number(m[2])] || null;
+    }
+    return null;
+  };
+
+  E.makeCrewStaff = function (id) {
+    var c = E.rivalCrewById(id);
+    if (!c) return null;
+    return {
+      id: c.id, name: c.name, seed: c.seed, role: c.role, salary: c.salary,
+      quote: c.quote, level: 1, xp: 0, fromRival: c.rival,
+      stats: { code: c.stats.code, script: c.stats.script, art: c.stats.art, audio: c.stats.audio, speed: c.stats.speed }
+    };
+  };
+
+  E.poachInfo = function (s, r, idx) {
+    var crew = E.rivalCrew(r);
+    var m = crew[idx];
+    if (!m) return null;
+    var P = GD.POACH;
+    var cost = Math.round(m.salary * BAL.hireFeeDays * P.feeDays * (1 + r.power * 0.5) * E.inflation(s));
+    var chance = P.chanceBase + s.fans / P.fanDiv - (r.power - 1.0) * P.powerPenalty;
+    chance = Math.max(0.2, Math.min(0.9, chance));
+    return { cost: cost, chance: chance, member: m };
+  };
+
+  E.poach = function (s, rivalId, idx) {
+    var r = null;
+    for (var i = 0; i < s.rivals.length; i++) if (s.rivals[i].id === rivalId) r = s.rivals[i];
+    if (!r) return { ok: false, reason: 'no-rival' };
+    if (E.year(s) < r.debut) return { ok: false, reason: 'not-debut' };
+    if (!Array.isArray(r.poached)) r.poached = [];
+    if (r.poached.indexOf(idx) >= 0) return { ok: false, reason: 'gone' };
+    if (s.staff.length >= s.seats) return { ok: false, reason: 'no-seat' };
+
+    var info = E.poachInfo(s, r, idx);
+    if (!info) return { ok: false, reason: 'no-member' };
+    if (s.money < info.cost) return { ok: false, reason: 'poor', cost: info.cost };
+
+    if (Math.random() >= info.chance) {
+      s.money -= Math.round(info.cost * GD.POACH.failKeep);
+      return { ok: false, reason: 'refused', cost: info.cost, member: info.member };
+    }
+
+    s.money -= info.cost;
+    r.poached.push(idx);
+    r.power = Math.max(0.6, Math.round((r.power - GD.POACH.powerDrop) * 100) / 100);
+    var st = E.makeCrewStaff(info.member.id);
+    s.staff.push(st);
+    return { ok: true, member: info.member, cost: info.cost, staff: st };
+  };
 
   /* ---------------- 企划 → 开发 ---------------- */
 
@@ -1163,10 +1259,11 @@
     if (Array.isArray(raw.staff)) {
       raw.staff.forEach(function (x) {
         if (!x || !x.id) return;
-        var known = GD.ROSTER.some(function (r) { return r.id === x.id; });
-        if (!known) return;
+        var isRoster = GD.ROSTER.some(function (r) { return r.id === x.id; });
+        /* 名单里的人从 ROSTER 重建；挖来的人（rv:...）从对手船员表重建 */
+        var m = isRoster ? E.makeStaff(x.id) : E.makeCrewStaff(x.id);
+        if (!m) return;
         if (staff.some(function (y) { return y.id === x.id; })) return;
-        var m = E.makeStaff(x.id);
         m.level = Math.round(clampNum(x.level, 1, 20, 1));
         m.xp = clampNum(x.xp, 0, 999999, 0);
         ['code', 'script', 'art', 'audio', 'speed'].forEach(function (k) {
