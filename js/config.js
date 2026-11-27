@@ -1053,6 +1053,23 @@
     editing: 2012, empire: 2013, arsenal: 2015
   };
 
+  /* 年度 6 个奖项：年度游戏 + 2 个类型奖 + 3 个单项奖。
+   * 类型奖只在该类型的作品里评；单项奖看画面 / 音乐 / 剧情分。
+   * min 是「够格线」：低于这个数哪怕没有对手也不给奖（避免烂片躺赢）。 */
+  GD.AWARD_CATS = [
+    { id: 'goty', name: '年度游戏', kind: 'total', min: 26, icon: '🏆', short: '年度' },
+    { id: 'rpg', name: '最佳 RPG', kind: 'genre', genre: 'rpg', min: 24, icon: '⚔', short: 'RPG' },
+    { id: 'action', name: '最佳动作', kind: 'genre', genre: 'action', min: 24, icon: '✦', short: '动作' },
+    { id: 'art', name: '最佳画面', kind: 'cat', cat: 'art', min: 42, icon: '🎨', short: '画面' },
+    { id: 'audio', name: '最佳音乐', kind: 'cat', cat: 'audio', min: 42, icon: '🎵', short: '音乐' },
+    { id: 'script', name: '最佳剧情', kind: 'cat', cat: 'script', min: 42, icon: '📖', short: '剧情' }
+  ];
+
+  /* 对手的单项分换算比例：对手只有总分，按这个系数摊成单项分。
+   * 玩家的单项分是按员工能力算的（后期约 50–65），所以这条必须落在同一量级，
+   * 否则「玩家永远输」或「玩家永远赢」。1.10 是模拟里调出来的。 */
+  GD.BAL_AWARD = { catScale: 1.10, catJitter: 6 };
+
   GD.BAL = {
     startMoney: 500000,
     startYear: 1972,

@@ -620,6 +620,8 @@
         return { id: d.id, name: d.name, genre: d.genre, theme: d.theme, power: d.power, debut: d.debut, lastYear: 0, awards: 0, games: [], poached: [] };
       }),
       yearRivalReleases: [],
+      yearBrand: [],
+      yearWorks: [],
       yearResults: [],
       yearBest: 0,
       awardYear: BAL.startYear,
@@ -1175,7 +1177,13 @@
       var score = Math.round(26 + (yr - b.since) * 0.35 + b.power * 3 + (Math.random() * 4 - 2));
       score = Math.max(14, Math.min(40, score));
       b.output = out + 1;
-      s.yearBrand.push({ year: yr, title: title, score: score, brand: b.id, brandName: b.name });
+      var bCats = E.rivalCats({ year: yr, title: title }, score, b.id);
+      s.yearBrand.push({
+        year: yr, title: title, score: score, brand: b.id, brandName: b.name,
+        genre: (b.genre || (def && def.genre) || 'rpg'),
+        theme: (b.theme || (def && def.theme) || 'fantasy'),
+        cats: bCats
+      });
     }
     if (s.yearBrand.length > 200) s.yearBrand.shift();
   };
@@ -1744,6 +1752,18 @@
           sequelOf: s.project.sequel ? s.project.sequel.title : ''
         };
         s.history.push(s.lastResult);
+        /* 记录这部作品的四个单项分，年底评「最佳画面 / 音乐 / 剧情」要用 */
+        var myCats = E.catScores(s, s.plan, s.review.total);
+        s.lastResult.cats = myCats;
+        if (!Array.isArray(s.yearWorks)) s.yearWorks = [];
+        s.yearWorks.push({
+          year: E.year(s), title: E.gameName(s),
+          genre: s.plan.genre, theme: s.plan.theme,
+          total: s.review.total, cats: myCats,
+          brandName: '', fromBrand: false,
+          hi: s.history.length - 1
+        });
+        if (s.yearWorks.length > 60) s.yearWorks.shift();
         /* 士气 / 体力：做完一部结算一次 */
         E.settleMood(s);
         /* 做完一部：解锁 2 个新组合（NG+ 多给 1 个）；如果这次用的是传说组合，记一笔 */
@@ -1948,7 +1968,13 @@
 
       var def = E.rivalDef(r.id);
       var title = def.titles[r.games.length % def.titles.length];
-      var game = { year: yr, week: 1 + Math.floor(Math.random() * 52), title: title, score: score, rival: r.id, name: r.name };
+      var game = {
+        year: yr, week: 1 + Math.floor(Math.random() * 52), title: title, score: score,
+        rival: r.id, name: r.name,
+        genre: r.genre || (def && def.genre) || 'action',
+        theme: r.theme || (def && def.theme) || 'modern'
+      };
+      game.cats = E.rivalCats(game, score, r.id);
       r.games.push(game);
       s.yearRivalReleases.push(game);
       if (s.yearRivalReleases.length > 200) s.yearRivalReleases.shift();
@@ -1957,72 +1983,204 @@
 
   /* ---------------- 年度奖项 ---------------- */
 
+  /* 一部作品的四个单项分：
+   *   该项最强的人 45% + 团队平均 35% + 主创 20%，再按总口碑微调。
+   * 谁当主创仍然有影响（20%），但「招了个好美术」比「让谁当导演」更重要，
+   * 否则剧本型主创会把画面分一直压死、这三个奖变成永远拿不到。 */
+  E.catScores = function (s, plan, total) {
+    var leader = E.staffById(s, (plan && plan.leader)) || (s.staff && s.staff[0]);
+    var t = total == null ? 30 : total;
+    var team = s.staff || [];
+    var out = {};
+    ['code', 'script', 'art', 'audio'].forEach(function (k) {
+      var lead = leader && leader.stats ? leader.stats[k] : 40;
+      var teamAvg = team.length ? E.teamStat(s, k) : lead;
+      var best = 0;
+      for (var i = 0; i < team.length; i++) {
+        if (team[i].stats && team[i].stats[k] > best) best = team[i].stats[k];
+      }
+      if (!best) best = lead;
+      var base = 0.45 * best + 0.35 * teamAvg + 0.20 * lead;
+      out[k] = Math.max(4, Math.min(99, Math.round(base * (0.55 + 0.45 * (t / 40)))));
+    });
+    return out;
+  };
+
+  /* 对手没有明细数据，用分数 + 哈希摊出四个单项分（同一条记录永远一样） */
+  E.rivalCats = function (game, score, seedKey) {
+    var sc = score == null ? (game && game.score) || 30 : score;
+    var cfg = GD.BAL_AWARD || { catScale: 1.35, catJitter: 6 };
+    var h = crewHash('cats:' + (game ? game.year : 0) + ':' + (seedKey || (game && game.rival) || '') + ':' + (game ? game.title : ''));
+    var span = cfg.catJitter * 2 + 1;
+    var out = {};
+    ['code', 'script', 'art', 'audio'].forEach(function (k, i) {
+      var off = ((h >>> (i * 5 + 1)) % span) - cfg.catJitter;
+      out[k] = Math.max(4, Math.min(99, Math.round(sc * cfg.catScale + off)));
+    });
+    return out;
+  };
+
+  /* 从一组候选里挑某个奖项值最高的一个 */
+  function pickBest(list, cat) {
+    var best = null, bestV = -1;
+    for (var i = 0; i < list.length; i++) {
+      var v = E.awardValue(cat, list[i]);
+      if (v > bestV) { bestV = v; best = list[i]; }
+    }
+    return { entry: best, value: bestV < 0 ? 0 : bestV };
+  }
+
+  /* 奖项奖金 / 粉丝 / 声望 */
+  function awardPrize(cat, year) {
+    var y = Math.max(0, year - BAL.startYear);
+    if (cat && cat.id === 'goty') {
+      return { rep: 10, money: 60000 + y * 30000, fans: 3000 + y * 600 };
+    }
+    return { rep: 5, money: 25000 + y * 12000, fans: 1200 + y * 250 };
+  }
+
+  /* 某个奖项的候选值；没资格返回 -1。
+   * 玩家作品用 total，对手/子品牌记录用的是 score，这里统一回退。 */
+  E.awardValue = function (cat, entry) {
+    if (!entry) return -1;
+    var total = entry.total != null ? entry.total : (entry.score || 0);
+    if (cat.kind === 'total') return total;
+    if (cat.kind === 'genre') return entry.genre === cat.genre ? total : -1;
+    var cats = entry.cats || {};
+    return cats[cat.cat] || 0;
+  };
+
+  E.awardCount = function (s, id) {
+    var n = 0;
+    (s.awards || []).forEach(function (a) { if (a && a.cat === id) n++; });
+    return n;
+  };
+
   E.settleAwards = function (s) {
     var yr = E.year(s);
     var last = s.awardYear || BAL.startYear;
     var got = [];
     var guard = 0;
+    if (!Array.isArray(s.yearWorks)) s.yearWorks = [];
+    if (!Array.isArray(s.yearBrand)) s.yearBrand = [];
 
     while (last < yr && guard++ < 50) {
-      var mine = s.yearBest || 0;
-
       /* 每年粉丝衰减，防止「粉丝越多卖越多」的无限滚雪球 */
       s.fans = Math.max(0, s.fans * (1 - BAL.fanDecayPerYear));
 
-      /* 子品牌的作品算你的成绩：取当年子品牌里最好的一部 */
-      var brandBest = null;
-      var brandList = Array.isArray(s.yearBrand) ? s.yearBrand : [];
-      for (var bi = 0; bi < brandList.length; bi++) {
-        if (brandList[bi].year !== last) continue;
-        if (!brandBest || brandList[bi].score > brandBest.score) brandBest = brandList[bi];
+      /* 这一年算你名下的所有作品：自己的 + 子品牌的 */
+      var mine = [];
+      for (var wi = 0; wi < s.yearWorks.length; wi++) {
+        var w = s.yearWorks[wi];
+        if (w && w.year === last) mine.push(w);
       }
-      if (brandBest && brandBest.score > mine) mine = brandBest.score;
-      var byBrand = !!(brandBest && brandBest.score === mine && brandBest.score > (s.yearBest || 0));
+      for (var bi = 0; bi < s.yearBrand.length; bi++) {
+        var bw = s.yearBrand[bi];
+        if (!bw || bw.year !== last) continue;
+        mine.push({
+          year: last, title: bw.title, genre: bw.genre, theme: bw.theme,
+          total: bw.score,
+          cats: bw.cats || E.rivalCats({ year: last, title: bw.title }, bw.score, bw.brand),
+          brandName: bw.brandName || '', fromBrand: true, hi: -1
+        });
+      }
+
+      /* 老存档兼容：当年只记了 yearBest、没有 yearWorks 明细时，用当前企划补一条 */
+      if (!mine.length && (s.yearBest || 0) > 0) {
+        var fp = s.plan || {};
+        var fTotal = s.yearBest;
+        var fTitle = s.yearBestTitle || '';
+        if (!fTitle) {
+          try { fTitle = E.gameName(s); } catch (e) { fTitle = '旧作'; }
+        }
+        mine.push({
+          year: last, title: fTitle,
+          genre: fp.genre || 'rpg', theme: fp.theme || 'fantasy',
+          total: fTotal, cats: E.catScores(s, fp, fTotal),
+          brandName: '', fromBrand: false, hi: -1
+        });
+      }
 
       var theirs = [];
       for (var i = 0; i < s.yearRivalReleases.length; i++) {
         if (s.yearRivalReleases[i].year === last) theirs.push(s.yearRivalReleases[i]);
       }
-      theirs.sort(function (a, b) { return b.score - a.score; });
-      var top = theirs[0] || null;
 
-      var topScore = top ? top.score : 0;
-      var best = Math.max(mine, topScore);
-      /* 必须「严格超过」才算拿奖：同分归对手，否则满分玩家会白拿所有年份 */
-      var playerWins = mine > 0 && mine >= best && mine >= 26;
-      var award = null;
+      /* 6 个奖项逐个评：玩家最好的那部和对手最好的那部比 */
+      var detail = [];
+      var fresh = [];
+      for (var ci = 0; ci < GD.AWARD_CATS.length; ci++) {
+        var cat = GD.AWARD_CATS[ci];
+        var p = pickBest(mine, cat);
+        var r = pickBest(theirs, cat);
+        var min = cat.min || 0;
+        var won = !!(p.entry && p.value >= min && p.value >= r.value);
 
-      if (playerWins) {
-        award = {
-          year: last, title: '年度游戏', score: mine,
-          money: 60000 + (last - BAL.startYear) * 30000,
-          fans: 3000 + (last - BAL.startYear) * 600
+        detail.push({
+          id: cat.id, name: cat.name, icon: cat.icon, kind: cat.kind,
+          won: won,
+          me: p.entry ? p.value : 0,
+          meTitle: p.entry ? p.entry.title : '',
+          meBrand: (p.entry && p.entry.brandName) ? p.entry.brandName : null,
+          them: r.entry ? r.value : 0,
+          themName: r.entry ? (r.entry.name || r.entry.brandName || '') : '',
+          themTitle: r.entry ? (r.entry.title || '') : ''
+        });
+
+        if (!won) continue;
+
+        /* 给你的那部作品挂上奖章（作品集里显示） */
+        if (p.entry && p.entry.hi != null && p.entry.hi >= 0) {
+          var hist = s.history[p.entry.hi];
+          if (hist) {
+            if (!Array.isArray(hist.awards)) hist.awards = [];
+            hist.awards.push(cat.name);
+          }
+        }
+
+        var prize = awardPrize(cat, last);
+        var aw = {
+          year: last, cat: cat.id, title: cat.name, score: Math.round(p.value),
+          money: prize.money, fans: prize.fans
         };
-      } else if (mine >= 24 && mine >= best - 2) {
-        award = {
-          year: last, title: '年度提名', score: mine,
-          money: 20000 + (last - BAL.startYear) * 10000,
-          fans: 800 + (last - BAL.startYear) * 200
-        };
+        E.addRep(s, prize.rep);
+        s.money += prize.money;
+        s.fans += prize.fans;
+        s.awards.push(aw);
+        got.push(aw);
+        fresh.push(aw);
       }
 
-      if (award) {
-        E.addRep(s, award.title === '年度游戏' ? 10 : 5);
-        s.money += award.money;
-        s.fans += award.fans;
-        s.awards.push(award);
-        got.push(award);
+      /* 年度游戏没拿到但差得不多：给提名（唯一保留的「安慰奖」） */
+      var goty = detail[0];
+      var nom = null;
+      if (goty && !goty.won && goty.me >= 24 && goty.me >= goty.them - 2) {
+        var y0 = Math.max(0, last - BAL.startYear);
+        nom = {
+          year: last, cat: 'nominee', title: '年度提名', score: goty.me,
+          money: 20000 + y0 * 10000, fans: 800 + y0 * 200
+        };
+        E.addRep(s, 5);
+        s.money += nom.money;
+        s.fans += nom.fans;
+        s.awards.push(nom);
+        got.push(nom);
       }
+      if (s.awards.length > 400) s.awards = s.awards.slice(-400);
 
       s.yearResults.push({
         year: last,
-        winner: playerWins ? null : (top ? top.name : null),
-        winnerTitle: playerWins ? null : (top ? top.title : null),
-        winnerScore: playerWins ? mine : (top ? top.score : 0),
-        playerScore: mine,
-        playerAward: award ? award.title : null,
-        playerBrand: byBrand ? brandBest.brandName : null,
-        playerBrandTitle: byBrand ? brandBest.title : null
+        winner: goty && !goty.won ? (goty.themName || null) : null,
+        winnerTitle: goty && !goty.won ? (goty.themTitle || null) : null,
+        winnerScore: goty ? (goty.won ? goty.me : goty.them) : 0,
+        playerScore: goty ? goty.me : 0,
+        playerAward: fresh.length
+          ? fresh.map(function (a) { return a.title; }).join(' / ')
+          : (nom ? nom.title : null),
+        playerBrand: goty && goty.won ? goty.meBrand : null,
+        playerBrandTitle: goty && goty.won && goty.meBrand ? goty.meTitle : null,
+        awards: detail,
+        won: fresh.map(function (a) { return a.cat; })
       });
       if (s.yearResults.length > 100) s.yearResults.shift();
 
@@ -2031,8 +2189,10 @@
     }
 
     s.awardYear = yr;
-    s.yearRivalReleases = s.yearRivalReleases.filter(function (g) { return g.year >= yr - 1; });
-    s.yearBrand = (Array.isArray(s.yearBrand) ? s.yearBrand : []).filter(function (g) { return g.year >= yr - 1; });
+    var keepFrom = yr - 1;
+    s.yearWorks = s.yearWorks.filter(function (w) { return w && w.year >= keepFrom; });
+    s.yearRivalReleases = s.yearRivalReleases.filter(function (g) { return g.year >= keepFrom; });
+    s.yearBrand = s.yearBrand.filter(function (g) { return g.year >= keepFrom; });
     return got;
   };
 

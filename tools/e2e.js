@@ -1014,6 +1014,52 @@ function connect(wsUrl) {
   check('年度结果会弹提示而不是抛异常', !toastRes.err && toastRes.after > toastRes.before,
     'toast ' + toastRes.before + '→' + toastRes.after + ' err=' + toastRes.err);
 
+  /* ---------- 10.2 六类奖项 ---------- */
+  var awardUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepRes = s.yearResults.slice(), keepAw = s.awards.slice();
+    var err = null, toastText = '', wall = null, sub = '';
+    var fake = {
+      year: 1972, winner: null, playerScore: 34, playerAward: '年度游戏 / 最佳画面',
+      won: ['goty', 'art'],
+      awards: GD.AWARD_CATS.map(function (c) {
+        return { id: c.id, name: c.name, won: c.id === 'goty' || c.id === 'art', me: 34, them: 30 };
+      })
+    };
+    try {
+      /* 多推两条：UI 用 yearResults.length 判新结果，单推一条会被上一轮计数吃掉 */
+      s.yearResults.push(fake, fake);
+      s.awards.push({ year: 1972, cat: 'goty', title: '年度游戏', score: 34, money: 1, fans: 1 });
+      s.awards.push({ year: 1972, cat: 'art', title: '最佳画面', score: 60, money: 1, fans: 1 });
+      GD.UI.render();
+      toastText = [].map.call(document.querySelectorAll('#toasts .toast'), function (x) { return x.textContent; }).join(' | ');
+
+      document.querySelector('[data-act="industry"]').click();
+      var box = document.querySelector('#industry .award-wall');
+      wall = {
+        has: !!box,
+        items: document.querySelectorAll('#industry .aw').length,
+        hasCount: document.querySelectorAll('#industry .aw.has').length,
+        text: box ? box.textContent : ''
+      };
+      sub = (document.querySelector('#industry .panel-sub') || {}).textContent || '';
+      document.querySelector('#industry [data-act="close-panel"]').click();
+    } catch (e) { err = String((e && e.message) || e); }
+    s.yearResults = keepRes;
+    s.awards = keepAw;
+    return { err: err, toast: toastText, wall: wall, sub: sub, cats: GD.AWARD_CATS.length };
+  })()`);
+  check('六类奖项提示能正常弹出', !awardUI.err, awardUI.err || 'ok');
+  check('提示里会带上「另夺」的其它奖',
+    awardUI.toast.indexOf('另夺') >= 0 && awardUI.toast.indexOf('画面') >= 0, awardUI.toast);
+  check('奖项一共 6 类', awardUI.cats === 6, String(awardUI.cats));
+  check('行业面板有奖项墙', !!awardUI.wall && awardUI.wall.has === true && awardUI.wall.items === 6,
+    'items=' + (awardUI.wall || {}).items);
+  check('奖项墙标出哪些拿过', (awardUI.wall || {}).hasCount >= 2,
+    'has=' + (awardUI.wall || {}).hasCount);
+  check('行业面板顶部改成「奖项 N 座」', awardUI.sub.indexOf('奖项') >= 0, awardUI.sub);
+  await sleep(120);
+
   /* ---------- 10.5 破产与新公司 ---------- */
   var bankUI = await evalJs(`(function () {
     var s = GD.getState();

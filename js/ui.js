@@ -468,16 +468,26 @@
     if ((s.yearResults || []).length > (ui.yearCount || 0)) {
       var y = s.yearResults[s.yearResults.length - 1];
       ui.yearCount = s.yearResults.length;
-      if (!y.winner) {
-        if (y.playerBrand) {
-          UI.toast('🏆 ' + y.year + ' 年度游戏：《' + esc(y.playerBrandTitle) + '》—— 你的子品牌 ' +
-            esc(y.playerBrand) + '（' + y.playerScore + ' 分）');
-        } else {
-          UI.toast('🏆 ' + y.year + ' 年度游戏：你（' + y.playerScore + ' 分）');
+      /* 一年可能拿好几个奖：年度游戏之外还有类型奖和单项奖 */
+      var wonIds = Array.isArray(y.won) ? y.won : (y.playerAward ? [] : []);
+      var shortOf = function (id) {
+        for (var ci = 0; ci < GD.AWARD_CATS.length; ci++) {
+          if (GD.AWARD_CATS[ci].id === id) return GD.AWARD_CATS[ci].short;
         }
+        return id;
+      };
+      var gotyWon = wonIds.indexOf('goty') >= 0;
+      var others = wonIds.filter(function (id) { return id !== 'goty'; }).map(shortOf);
+      var tail = others.length ? '　另夺 ' + others.join(' / ') : '';
+      if (!y.winner) {
+        UI.toast('🏆 ' + y.year + ' 年度游戏：' +
+          (y.playerBrand ? '子品牌 ' + esc(y.playerBrand) + '《' + esc(y.playerBrandTitle) + '》' : '你') +
+          '（' + y.playerScore + ' 分）' + tail);
         GD.SFX.award();
       } else {
-        UI.toast(y.year + ' 年度游戏被 ' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》' + y.winnerScore + ' 分拿走（你 ' + y.playerScore + ' 分）');
+        UI.toast(y.year + ' 年度游戏被 ' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》' + y.winnerScore +
+          ' 分拿走（你 ' + y.playerScore + ' 分）' +
+          (others.length ? '　你拿到 ' + others.join(' / ') : (gotyWon ? '' : '')));
         GD.SFX.awardLose();
       }
     }
@@ -1040,6 +1050,9 @@
           '<div class="arch-name">' + esc(title) +
           (isCustom ? '<span class="arch-genre">' + esc(autoName) + '</span>' : '') +
           (h.seq > 1 ? '<span class="arch-seq">系列第 ' + h.seq + ' 作</span>' : '') +
+          (Array.isArray(h.awards) && h.awards.length
+            ? '<span class="arch-awards">🏆 ' + h.awards.map(function (a) { return esc(a); }).join(' · ') + '</span>'
+            : '') +
           '</div>' +
           '<div class="arch-meta">' + esc(h.date || '') + ' · ' + esc(h.window || '普通档期') + '</div>' +
           '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
@@ -1218,7 +1231,7 @@
         var on = E.ruleOf(s) ? '' : '（未投入，未生效）';
         return r.name + '：' + r.desc + on;
       })() +
-      ' · 你的年度奖 ' + s.awards.length + ' 次</div></div>' +
+      ' · 你的奖项 ' + s.awards.length + ' 座</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
 
@@ -1299,14 +1312,34 @@
       html += '</div>';
     });
 
-    html += '<div class="panel-block"><div class="block-title">历年年度游戏</div>';
+    /* 奖项墙：6 类各拿过几次 */
+    var awCount = {};
+    (s.awards || []).forEach(function (a) { if (a && a.cat) awCount[a.cat] = (awCount[a.cat] || 0) + 1; });
+    html += '<div class="panel-block"><div class="block-title">奖项墙</div><div class="award-wall">';
+    GD.AWARD_CATS.forEach(function (c) {
+      var n = awCount[c.id] || 0;
+      html += '<div class="aw' + (n ? ' has' : '') + '">' +
+        '<span class="aw-ico">' + c.icon + '</span>' +
+        '<span class="aw-name">' + esc(c.name) + '</span>' +
+        '<b>' + n + '</b></div>';
+    });
+    html += '</div></div>';
+
+    html += '<div class="panel-block"><div class="block-title">历年评奖</div>';
     if (!s.yearResults.length) {
       html += '<p class="dim">还没有评过奖。</p>';
     } else {
       s.yearResults.slice().reverse().slice(0, 8).forEach(function (y) {
+        var wl = (Array.isArray(y.won) ? y.won : []).map(function (id) {
+          var nm = id;
+          GD.AWARD_CATS.forEach(function (c) { if (c.id === id) nm = c.short; });
+          return nm;
+        });
+        var mine = wl.length ? '<b class="good">' + wl.join(' / ') + '</b>'
+          : (y.playerAward ? '<b class="dim">' + esc(y.playerAward) + '</b>' : '<span class="dim">—</span>');
         html += '<div class="year-row"><span>' + y.year + '</span>' +
-          (y.winner ? '<b class="dim">' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》</b>' :
-            '<b class="good">你《' + esc(y.playerAward || '') + '》') +
+          (y.winner ? '<b class="dim">' + esc(y.winner) + '《' + esc(y.winnerTitle) + '》</b>' : '<b class="good">你拿年度</b>') +
+          '<span class="year-mine">' + mine + '</span>' +
           '<span class="mono">' + y.winnerScore + '</span></div>';
       });
     }

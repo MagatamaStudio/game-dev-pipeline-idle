@@ -137,6 +137,11 @@ function playOnce(seed) {
   (s.yearResults || []).forEach(function (y) {
     if (!y.winner) wins++; else if (y.playerAward) noms++;
   });
+  var catWins = {};
+  (s.awards || []).forEach(function (a) {
+    var k = a.cat || a.title || '?';
+    catWins[k] = (catWins[k] || 0) + 1;
+  });
   return {
     seed: seed,
     ended: s.phase,
@@ -146,6 +151,7 @@ function playOnce(seed) {
     money: Math.round(s.money),
     totalEarned: Math.round(s.totalEarned),
     awards: s.awards.length,
+    catWins: catWins,
     wins: wins,
     noms: noms,
     bankrupt: bankrupt,
@@ -180,6 +186,8 @@ for (var i = 1; i <= N; i++) {
 }
 
 function avg(list) { return list.reduce(function (a, b) { return a + b; }, 0) / list.length; }
+function sum(list) { return list.reduce(function (a, b) { return a + b; }, 0); }
+function and(list) { return sum(list) || 1; }
 function med(list) {
   var c = list.slice().sort(function (a, b) { return a - b; });
   return c[Math.floor(c.length / 2)];
@@ -216,6 +224,17 @@ console.log('设备购置    中位 ' + med(rows.map(function (r) { return r.gea
 var endings = {};
 rows.forEach(function (r) { endings[r.ended] = (endings[r.ended] || 0) + 1; });
 console.log('结局分布   ' + JSON.stringify(endings));
+
+/* 6 类奖项分别赢了多少年（分母是总局数 × 30 年） */
+var catTotal = {};
+rows.forEach(function (r) {
+  for (var k in r.catWins) catTotal[k] = (catTotal[k] || 0) + r.catWins[k];
+});
+var yearsTotal = and(rows.map(function (r) { return r.endedYear - GD.BAL.startYear; }));
+console.log('奖项分布   ' + GD.AWARD_CATS.map(function (c) {
+  var n = catTotal[c.id] || 0;
+  return c.short + ' ' + (n / yearsTotal * 100).toFixed(0) + '%';
+}).join(' · '));
 var revs = rows.reduce(function (a, r) { return a + r.revSum; }, 0);
 var profs = rows.reduce(function (a, r) { return a + r.profitSum; }, 0);
 console.log('整体净利率  ' + (revs ? Math.round(profs / revs * 100) : 0) + '%（利润/营收）');

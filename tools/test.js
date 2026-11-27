@@ -569,28 +569,93 @@ function playOne(s, plan, choice) {
     popNew + ' / ' + popPeak + ' / ' + popOld);
 })();
 
-/* ---------- 年度奖项 ---------- */
+/* ---------- 年度奖项（6 类） ---------- */
 (function () {
   var s = E.newGame();
   s.yearBest = 33;
+  s.yearBestTitle = '试作';
+  s.plan = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72' };
   s.day = 360;
   var got = E.settleAwards(s);
-  ok('没有对手时拿年度游戏', got.length === 1 && got[0].title === '年度游戏', JSON.stringify(got));
-  ok('奖项进档案', s.awards.length === 1);
+  var titles = got.map(function (a) { return a.title; });
+  ok('没有对手时拿年度游戏', titles.indexOf('年度游戏') >= 0, titles.join(' / '));
+  ok('年度游戏排在第一个', !!got[0] && got[0].cat === 'goty', JSON.stringify(got[0] || null));
+  ok('类型对得上就给类型奖', titles.indexOf('最佳 RPG') >= 0, titles.join(' / '));
+  ok('类型对不上就没有类型奖', titles.indexOf('最佳动作') < 0, titles.join(' / '));
+  ok('奖项进档案', s.awards.length === got.length && s.awards.length >= 2,
+    'awards=' + s.awards.length + ' got=' + got.length);
   ok('同一年不重复颁奖', E.settleAwards(s).length === 0);
+  ok('一年最多 6 个奖', got.length <= GD.AWARD_CATS.length, String(got.length));
 
+  var r0 = s.yearResults[0];
+  ok('年度结果记了 6 个奖项明细', r0.awards && r0.awards.length === 6,
+    String((r0.awards || []).length));
+  ok('年度游戏那行确实记成赢了',
+    (r0.awards.filter(function (a) { return a.id === 'goty'; })[0] || {}).won === true);
+
+  /* 输给对手：不算年度游戏，但仍可能拿类型奖 */
   var s2 = E.newGame();
   s2.yearBest = 33;
-  s2.yearRivalReleases = [{ year: 1972, score: 35, name: '白噪音', title: '第七夜' }];
+  s2.plan = { genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72' };
+  s2.yearRivalReleases = [{ year: 1972, score: 35, name: '白噪音', title: '第七夜', genre: 'rpg', theme: 'modern' }];
   s2.day = 360;
-  var got2 = E.settleAwards(s2);
-  ok('输给对手只给提名', got2.length === 1 && got2[0].title === '年度提名', JSON.stringify(got2));
-  ok('年度结果记录了对手', s2.yearResults[0].winner === '白噪音', JSON.stringify(s2.yearResults[0]));
+  var t2 = E.settleAwards(s2).map(function (a) { return a.title; });
+  ok('输给对手不给年度游戏', t2.indexOf('年度游戏') < 0, t2.join(' / '));
+  ok('输给对手只给提名', t2.indexOf('年度提名') >= 0, t2.join(' / '));
+  ok('年度结果记录了对手', s2.yearResults[0].winner === '白噪音', String(s2.yearResults[0].winner));
+
+  /* 对手太强时连类型奖也丢 */
+  var s2b = E.newGame();
+  s2b.yearBest = 26;
+  s2b.plan = { genre: 'rpg', theme: 'fantasy', leader: s2b.staff[0].id, platform: 'arc72' };
+  s2b.yearRivalReleases = [{ year: 1972, score: 40, name: '白噪音', title: '第七夜', genre: 'rpg', theme: 'modern' }];
+  s2b.day = 360;
+  var t2b = E.settleAwards(s2b).map(function (a) { return a.title; });
+  ok('对手更强时类型奖也拿不到', t2b.indexOf('最佳 RPG') < 0, t2b.join(' / '));
 
   var s3 = E.newGame();
   s3.yearBest = 20;
+  s3.plan = { genre: 'rpg', theme: 'fantasy', leader: s3.staff[0].id, platform: 'arc72' };
   s3.day = 360;
   ok('分数不够没有奖', E.settleAwards(s3).length === 0);
+
+  /* 单项奖：偏科也能拿 */
+  var s5 = E.newGame();
+  s5.plan = { genre: 'puzzle', theme: 'cyber', leader: 'ya', platform: 'arc72' };
+  s5.day = 360;
+  s5.yearWorks = [{
+    year: 1972, title: '画面之作', genre: 'puzzle', theme: 'cyber', total: 22,
+    cats: { code: 30, script: 28, art: 88, audio: 30 }, brandName: '', fromBrand: false, hi: -1
+  }];
+  var t5 = E.settleAwards(s5).map(function (a) { return a.title; });
+  ok('总分不高但画面强也能拿最佳画面', t5.indexOf('最佳画面') >= 0, t5.join(' / '));
+  ok('偏科不会送它年度游戏', t5.indexOf('年度游戏') < 0, t5.join(' / '));
+
+  /* 门槛：烂片不会因为没有对手就躺赢 */
+  var s6 = E.newGame();
+  s6.plan = { genre: 'rpg', theme: 'fantasy', leader: 'ya', platform: 'arc72' };
+  s6.day = 360;
+  s6.yearWorks = [{
+    year: 1972, title: '烂作', genre: 'rpg', theme: 'fantasy', total: 24,
+    cats: { code: 20, script: 20, art: 20, audio: 20 }, brandName: '', fromBrand: false, hi: -1
+  }];
+  var t6 = E.settleAwards(s6).map(function (a) { return a.title; });
+  ok('单项分不够不给单项奖', t6.indexOf('最佳画面') < 0 && t6.indexOf('最佳音乐') < 0, t6.join(' / '));
+
+  /* 奖项挂到作品上，作品集能显示 */
+  var s7 = E.newGame();
+  s7.plan = { genre: 'rpg', theme: 'fantasy', leader: s7.staff[0].id, platform: 'arc72' };
+  s7.day = 360;
+  s7.history = [{ name: '获奖作', genre: 'rpg', theme: 'fantasy', total: 34, copies: 90000, revenue: 1, cost: 1 }];
+  s7.yearWorks = [{
+    year: 1972, title: '获奖作', genre: 'rpg', theme: 'fantasy', total: 34,
+    cats: { code: 60, script: 62, art: 60, audio: 60 }, brandName: '', fromBrand: false, hi: 0
+  }];
+  E.settleAwards(s7);
+  ok('奖项挂到了作品上',
+    Array.isArray(s7.history[0].awards) && s7.history[0].awards.indexOf('年度游戏') >= 0,
+    JSON.stringify(s7.history[0].awards || null));
+  ok('能按类别数奖项', E.awardCount(s7, 'goty') === 1, String(E.awardCount(s7, 'goty')));
 })();
 
 /* ---------- 结局 ---------- */
@@ -632,26 +697,39 @@ function playOne(s, plan, choice) {
     cheap < full && Math.abs(cheap / full - 0.6) < 0.02,
     full + ' → ' + cheap);
 
-  /* 拿年度游戏：+10 声望，粉丝先衰减 5% 再加奖项粉丝 */
+  /* 拿年度游戏：+10 声望，其它奖项各 +5；粉丝先衰减 5% 再加奖项粉丝 */
   var s3 = E.newGame();
   s3.awardYear = 1972;
   s3.day = (1973 - GD.BAL.startYear) * 360;
   s3.yearBest = 38;
+  s3.yearBestTitle = '神作';
+  s3.plan = { genre: 'rpg', theme: 'fantasy', leader: s3.staff[0].id, platform: 'arc72' };
   s3.yearRivalReleases = [];
   s3.fans = 100000;
-  E.settleAwards(s3);
-  ok('拿下年度游戏加 10 点声望', s3.rep === 10, String(s3.rep));
+  var gotA = E.settleAwards(s3);
+  var gotyWon = gotA.some(function (a) { return a.cat === 'goty'; });
+  var others = gotA.filter(function (a) { return a.cat !== 'goty'; }).length;
+  ok('拿下年度游戏加 10 点声望', gotyWon && s3.rep === 10 + 5 * others,
+    'rep=' + s3.rep + ' 其它奖=' + others);
+  var fansWant = 100000 * (1 - GD.BAL.fanDecayPerYear);
+  gotA.forEach(function (a) { fansWant += a.fans; });
   ok('粉丝每年衰减 5%（再叠加奖项粉丝）',
-    Math.abs(s3.fans - 98000) < 1, '100000 → ' + Math.round(s3.fans));
+    Math.abs(s3.fans - fansWant) < 1,
+    '100000 → ' + Math.round(s3.fans) + ' 期望 ' + Math.round(fansWant));
 
-  /* 只拿提名：+5 */
+  /* 没拿年度游戏：只有提名和类型/单项奖，声望按 +5 计 */
   var s4 = E.newGame();
   s4.awardYear = 1972;
   s4.day = (1973 - GD.BAL.startYear) * 360;
   s4.yearBest = 37;
-  s4.yearRivalReleases = [{ year: 1972, title: '对手作', score: 39, rival: 'old', name: '老街机' }];
-  E.settleAwards(s4);
-  ok('只拿提名加 5 点声望', s4.rep === 5, String(s4.rep));
+  s4.yearBestTitle = '惜败';
+  s4.plan = { genre: 'rpg', theme: 'fantasy', leader: s4.staff[0].id, platform: 'arc72' };
+  s4.yearRivalReleases = [{ year: 1972, title: '对手作', score: 39, rival: 'old', name: '老街机', genre: 'action', theme: 'modern' }];
+  var gotB = E.settleAwards(s4);
+  var gotyLost = !gotB.some(function (a) { return a.cat === 'goty'; });
+  var nB = gotB.length;
+  ok('没拿年度游戏时声望按每次 +5 计', gotyLost && s4.rep === 5 * nB,
+    'rep=' + s4.rep + ' 奖项数=' + nB);
 
   /* 结局四档 */
   var e1 = E.newGame(); e1.rep = 50;
@@ -819,8 +897,11 @@ function playOne(s, plan, choice) {
     s2.yearResults.length === 1 && s2.yearResults[0].playerScore === 33,
     'playerScore=' + (s2.yearResults[0] || {}).playerScore);
   ok('子品牌拿奖会标出品牌名',
-    s2.yearResults[0].playerBrand === '白噪音' && got.length === 1,
+    s2.yearResults[0].playerBrand === '白噪音' && got.length >= 1,
     String(s2.yearResults[0].playerBrand));
+  ok('子品牌拿的年度游戏记在品牌名下',
+    got.some(function (a) { return a.cat === 'goty'; }),
+    got.map(function (a) { return a.title; }).join(' / '));
 })();
 
 /* ---------------- 收购 / 子品牌 ---------------- */
