@@ -93,6 +93,10 @@ function connect(wsUrl) {
   await waitFor(async function () { return await evalJs('document.readyState === "complete" && !!window.GD'); }, 15000, 'load');
   await sleep(600);
 
+  /* 0. 创业宣言（全新一局才有；有存档时会直接跳过） */
+  await evalJs(`(function () { var d = document.querySelector('[data-dec]'); if (d) d.click(); return !!d; })()`);
+  await sleep(400);
+
   /* 1. 企划 */
   await evalJs(`document.querySelector('[data-plan="theme:fantasy"]').click()`);
   await sleep(300);
