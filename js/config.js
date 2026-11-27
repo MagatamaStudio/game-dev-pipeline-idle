@@ -389,7 +389,7 @@
     tierCut: [
       { id: 'lure', name: '低抽成', cut: 0.15, thirdMul: 1.5, tip: '吸引更多第三方上架' },
       { id: 'normal', name: '标准抽成', cut: 0.30, thirdMul: 1.0, tip: '均衡' },
-      { id: 'greedy', name: '高抽成', cut: 0.45, thirdMul: 0.6, tip: '抽得多但上架的少' }
+      { id: 'greedy', name: '高抽成', cut: 0.45, thirdMul: 0.35, tip: '抽得多，但第三方跑掉一大半' }
     ]
   };
 
@@ -1143,6 +1143,15 @@ GD.DECLARATIONS_RETRY = [
     portCostRate: 0.25,       // 移植成本 = 原开发成本 × 25%
     portSalesRate: 0.45,      // 移植销量 = 原销量 × 装机比 × 0.45
     portMinAge: 4,            // 平台至少用了 4 年才能往外移植（不让人刚发完就搬）
+
+    /* 自研平台：每年要养服务器。收入盖不住维护费就会连年亏损，撑不住就倒闭（现金 −60%）。 */
+    platformUpkeepRate: 0.20,        // 每部第三方作品的认证/带宽成本（× 该部带来的收入）
+    platformUpkeepPerInstall: 20000, // 每年养服务器的固定成本 = 装机 × 这个数 × 通胀
+    platformFailYears: 2,            // 连续亏几年就撑不住
+    platformCrashLoss: 0.60,         // 倒闭时现金损失比例
+
+    /* 子品牌：破产脱离后可以按 0.8 折买回来 */
+    buybackRate: 0.8,
 
     /* 对手强度：跟着年代抬，1990 年代后期要能真的压住你 */
     rivalBase: 27,

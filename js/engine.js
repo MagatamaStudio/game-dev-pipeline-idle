@@ -686,6 +686,9 @@
       brands: [],
       myPlatform: null,
       rulesPaid: [],
+      lostBrands: [],
+      platformCrashes: 0,
+      crashedPlatforms: [],
       influence: 0,
       customRules: [],
       customOffer: null,
@@ -1415,6 +1418,57 @@
     return { ok: true, cost: cost, fans: fans, brand: brand };
   };
 
+  /* ---------------- 子品牌买回 ----------------
+   * 破产清算时子品牌会脱离、变回独立对手。之后可以按 0.8 折买回来。
+   * 记录的是「谁脱离过」，所以买回是有限次的重逢，不是无限白嫖。 */
+
+  E.lostBrands = function (s) {
+    if (!Array.isArray(s.lostBrands)) s.lostBrands = [];
+    return s.lostBrands;
+  };
+
+  E.isLostBrand = function (s, rivalId) {
+    var list = E.lostBrands(s);
+    for (var i = 0; i < list.length; i++) if (list[i].id === rivalId) return true;
+    return false;
+  };
+
+  E.buybackCost = function (s, r) {
+    return Math.round(E.acquireCost(s, r) * (BAL.buybackRate || 0.8));
+  };
+
+  /* 返回 null 表示可以买回，否则是拦下来的原因 */
+  E.buybackBlock = function (s, r) {
+    if (!r) return 'no-rival';
+    /* 已经归到旗下的，先说清楚是「重复」而不是「没脱离过」 */
+    if (E.isAcquired(s, r.id)) return 'owned';
+    if (!E.isLostBrand(s, r.id)) return 'not-lost';
+    if (s.money < E.buybackCost(s, r)) return 'poor';
+    return null;
+  };
+
+  E.buyback = function (s, rivalId) {
+    var r = null;
+    for (var i = 0; i < s.rivals.length; i++) if (s.rivals[i].id === rivalId) r = s.rivals[i];
+    if (!r) return { ok: false, reason: 'no-rival' };
+    var blocked = E.buybackBlock(s, r);
+    if (blocked) return { ok: false, reason: blocked, cost: E.buybackCost(s, r) };
+
+    var cost = E.buybackCost(s, r);
+    s.money -= cost;
+    r.acquired = true;
+    var brand = {
+      id: r.id, name: r.name, genre: r.genre, theme: r.theme,
+      since: E.year(s), power: r.power, titles: r.games.length,
+      output: 0, lastYear: 0, boughtBack: true
+    };
+    E.brands(s).push(brand);
+    /* 从「脱离名单」里划掉 */
+    s.lostBrands = E.lostBrands(s).filter(function (x) { return x.id !== rivalId; });
+    E.unlockCombo(s, r.genre, r.theme);
+    return { ok: true, cost: cost, brand: brand };
+  };
+
   /* 子品牌每月的被动收入 */
   E.brandIncome = function (s) {
     var list = E.brands(s), sum = 0;
@@ -1507,6 +1561,8 @@
       name: 'M-' + String(E.year(s)).slice(-2),
       launched: E.year(s),
       install: pv.install,
+      launchInstall: pv.install,
+      installTarget: Math.round(pv.install * 2.2 * 10) / 10,
       price: pv.price,
       unitMul: pv.p.unitMul,
       cut: pv.cut,
@@ -1523,7 +1579,7 @@
     return { ok: true, cost: pv.cost, mp: s.myPlatform };
   };
 
-  /* 每年：装机增长 + 第三方上架与抽成 */
+  /* 每年：装机增长 + 第三方上架与抽成 + 维护费。亏损连年会倒闭。 */
   E.tickPlatform = function (s) {
     var mp = s.myPlatform;
     if (!mp) return null;
@@ -1531,9 +1587,12 @@
     if (mp.lastYear >= yr) return null;
     mp.lastYear = yr;
 
-    /* 装机：投入越大涨得越多，但基数越大越难涨 */
-    var grow = 1.6 * (mp.install > 0 ? 1 : 0) - 0.055 * mp.install;
+    /* 装机：朝「天花板」增长。天花板在开台时由三档参数定死，
+     * 所以选型决定的是上限，不是一时的数字。 */
+    var target = mp.installTarget || (mp.installTarget = Math.round((mp.launchInstall || mp.install) * 2.2 * 10) / 10);
+    var grow = 0.95 * (1 - mp.install / Math.max(1, target));
     mp.install = Math.max(0.5, Math.round((mp.install + grow) * 10) / 10);
+    if (mp.install > target) mp.install = target;
 
     var rivals = 0;
     for (var i = 0; i < s.rivals.length; i++) {
@@ -1542,13 +1601,63 @@
     var titles = Math.max(0, Math.round((rivals + 1) * mp.thirdMul * (0.4 + mp.install / 22)));
 
     var rev = Math.round(titles * mp.install * mp.price * 900 * mp.cut * E.inflation(s));
+    /* 维护费两部分：
+     *   1) 每上架一部第三方作品都要认证 + 带宽，抽成越低越可能亏；
+     *   2) 装机本身要养服务器，所以「重注投入」不是稳赚。
+     * 两项都和收入同量级，选型才真的要做取舍。 */
+    var perTitle = Math.round(titles * mp.install * mp.price * 900 *
+      (BAL.platformUpkeepRate || 0.20) * E.inflation(s));
+    var perInstall = Math.round(mp.install * (BAL.platformUpkeepPerInstall || 20000) * E.inflation(s));
+    var upkeep = perTitle + perInstall;
+    var net = rev - upkeep;
+
     mp.lastTitles = titles;
     mp.lastRevenue = rev;
+    mp.upkeep = upkeep;
+    mp.net = net;
     mp.thirdParty += titles;
     mp.revenue += rev;
     s.money += rev;
     s.totalEarned += rev;
-    return { titles: titles, revenue: rev, install: mp.install };
+
+    /* 连年亏损：先警告，撑不住就倒闭 */
+    if (net < 0) mp.debtYears = (mp.debtYears || 0) + 1;
+    else mp.debtYears = 0;
+
+    var crashed = false;
+    if ((mp.debtYears || 0) >= (BAL.platformFailYears || 2)) {
+      var loss = Math.round(Math.max(0, s.money) * (BAL.platformCrashLoss || 0.6));
+      s.money -= loss;
+      mp.crashed = { year: yr, loss: loss, install: mp.install };
+      s.platformCrashes = (s.platformCrashes || 0) + 1;
+      if (!Array.isArray(s.crashedPlatforms)) s.crashedPlatforms = [];
+      s.crashedPlatforms.push({
+        name: mp.name, launched: mp.launched, year: yr,
+        install: mp.install, revenue: mp.revenue, loss: loss
+      });
+      s.myPlatform = null;
+      crashed = true;
+    }
+
+    return {
+      titles: titles, revenue: rev, install: mp.install,
+      upkeep: upkeep, net: net, debtYears: crashed ? 0 : (mp.debtYears || 0),
+      crashed: crashed, loss: crashed ? mp.crashed.loss : 0
+    };
+  };
+
+  /* 平台健康度：给界面用 */
+  E.platformHealth = function (s) {
+    var mp = s.myPlatform;
+    if (!mp) return null;
+    var debt = mp.debtYears || 0;
+    return {
+      net: mp.net || 0,
+      upkeep: mp.upkeep || 0,
+      debtYears: debt,
+      left: Math.max(0, (BAL.platformFailYears || 2) - debt),
+      danger: debt > 0
+    };
   };
 
   /* ---------------- 企划 → 开发 ---------------- */
@@ -2169,8 +2278,9 @@
     if (!d) return false;
     if (s.phase !== 'bankrupt') return false;
 
-    /* 子品牌脱离，变回独立竞争对手 */
+    /* 子品牌脱离，变回独立竞争对手；记下 id 供之后按 0.8 折买回 */
     var released = [];
+    if (!Array.isArray(s.lostBrands)) s.lostBrands = [];
     E.brands(s).forEach(function (b) {
       for (var i = 0; i < s.rivals.length; i++) {
         if (s.rivals[i].id !== b.id) continue;
@@ -2178,6 +2288,12 @@
         s.rivals[i].power = Math.max(0.8, b.power);
         s.rivals[i].lastYear = 0;
         released.push(s.rivals[i].name);
+        /* 已经是「脱离过」的就不重复记 */
+        var had = false;
+        for (var k = 0; k < s.lostBrands.length; k++) if (s.lostBrands[k].id === b.id) had = true;
+        if (!had) {
+          s.lostBrands.push({ id: b.id, name: b.name, at: E.year(s), power: b.power });
+        }
       }
     });
     s.brands = [];

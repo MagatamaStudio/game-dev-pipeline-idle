@@ -1637,3 +1637,20 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 .ce-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ce-actions button { flex: 1; min-width: 120px; }
+
+/* ---------------- 平台倒闭 / 买回 ---------------- */
+
+.mp-warn {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--bad);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.rival.lost { border-color: var(--accent); border-style: dashed; }
+.lost-tag { background: var(--accent-soft); color: var(--accent); }
+.buyback { display: flex; align-items: center; gap: 6px; }
+.buyback .dim { font-size: 10px; }

@@ -506,6 +506,114 @@ function connect(wsUrl) {
   check('选卡后不再待选', cePick.stillPending === false);
   check('选卡会弹提示', (cePick.toast || '').indexOf('自定规则生效') >= 0, cePick.toast);
 
+  /* ---------- 1.995 自研平台倒闭 + 子品牌买回 ---------- */
+  var mpUI2 = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepMoney = s.money, keepFans = s.fans, keepRep = s.rep;
+    var keepMp = s.myPlatform, keepCrashes = s.platformCrashes, keepCrashed = s.crashedPlatforms;
+    var out = {};
+    try {
+      s.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.money = 1e8; s.fans = 6e5; s.rep = 95;
+      s.myPlatform = null; s.platformCrashes = 0; s.crashedPlatforms = [];
+      var lr = GD.Engine.launchPlatform(s, { budget: 'normal', price: 'mid', cut: 'lure' });
+      out.launched = lr.ok === true;
+      var crashed = false;
+      for (var i = 0; i < 8 && !crashed; i++) {
+        s.day += GD.BAL.daysPerYear;
+        var ev = GD.Engine.tickPlatform(s);
+        if (ev && ev.crashed) crashed = true;
+      }
+      out.crashed = crashed;
+      out.noPlatform = s.myPlatform === null;
+      out.crashes = s.platformCrashes || 0;
+      document.querySelector('[data-act="industry"]').click();
+      out.panelOk = !document.querySelector('#industry').hidden;
+      out.noMpBlock = document.querySelector('#industry .mp-status') === null;
+      document.querySelector('#industry [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay; s.money = keepMoney; s.fans = keepFans; s.rep = keepRep;
+    s.myPlatform = keepMp; s.platformCrashes = keepCrashes; s.crashedPlatforms = keepCrashed;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('低抽成平台会在界面里倒闭', !mpUI2.err && mpUI2.launched === true && mpUI2.crashed === true,
+    mpUI2.err || ('launched=' + mpUI2.launched + ' crashed=' + mpUI2.crashed));
+  check('倒闭后平台位清空', mpUI2.noPlatform === true && mpUI2.crashes === 1,
+    'crashes=' + mpUI2.crashes);
+  check('倒闭后行业面板正常', mpUI2.panelOk === true && mpUI2.noMpBlock === true);
+
+  /* 平台健康度显示 */
+  var mpHealth = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepMp = s.myPlatform, keepMoney = s.money, keepFans = s.fans, keepRep = s.rep;
+    var out = {};
+    try {
+      s.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.money = 1e8; s.fans = 6e5; s.rep = 95; s.myPlatform = null;
+      GD.Engine.launchPlatform(s, { budget: 'normal', price: 'mid', cut: 'normal' });
+      s.day += GD.BAL.daysPerYear;
+      GD.Engine.tickPlatform(s);
+      document.querySelector('[data-act="industry"]').click();
+      out.rowText = (document.querySelector('#industry .mp-status') || {}).textContent || '';
+      out.warn = document.querySelectorAll('#industry .mp-warn').length;
+      document.querySelector('#industry [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay; s.myPlatform = keepMp; s.money = keepMoney;
+    s.fans = keepFans; s.rep = keepRep;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('平台面板显示维护费与净收益',
+    !mpHealth.err && mpHealth.rowText.indexOf('维护费') >= 0 && mpHealth.rowText.indexOf('净') >= 0,
+    mpHealth.err || mpHealth.rowText);
+  check('正常配置不会报警', mpHealth.warn === 0, 'warn=' + mpHealth.warn);
+
+  /* 买回脱离的子公司 */
+  var bbUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepMoney = s.money, keepFans = s.fans;
+    var keepBrands = s.brands, keepLost = s.lostBrands, keepPhase = s.phase;
+    var keepRivals = s.rivals.map(function (r) { return r.acquired; });
+    var out = {};
+    try {
+      s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.money = 1e9; s.fans = 6e5;
+      s.brands = []; s.lostBrands = [];
+      GD.Engine.acquire(s, 'white');
+      s.phase = 'bankrupt';
+      GD.Engine.newCompany(s, 'makemoney');
+      s.money = 1e9;
+      document.querySelector('[data-act="industry"]').click();
+      out.lostTag = document.querySelectorAll('#industry .lost-tag').length;
+      var btn = document.querySelector('#industry [data-buyback]');
+      out.hasBtn = !!btn;
+      out.btnText = btn ? btn.textContent : '';
+      var money0 = s.money;
+      var seen = [];
+      var origToast = GD.UI.toast;
+      GD.UI.toast = function (t) { seen.push(t); return origToast.call(GD.UI, t); };
+      try { if (btn) btn.click(); } finally { GD.UI.toast = origToast; }
+      out.owned = GD.Engine.isAcquired(s, 'white');
+      out.spent = money0 - s.money;
+      out.lostLeft = (s.lostBrands || []).length;
+      out.toast = seen.join(' | ');
+      document.querySelector('#industry [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay; s.money = keepMoney; s.fans = keepFans;
+    s.brands = keepBrands; s.lostBrands = keepLost; s.phase = keepPhase;
+    s.rivals.forEach(function (r, i) { r.acquired = keepRivals[i]; });
+    GD.UI.render();
+    return out;
+  })()`);
+  check('脱离的子公司在行业面板有标记', !bbUI.err && bbUI.lostTag >= 1, bbUI.err || ('tag=' + bbUI.lostTag));
+  check('有买回按钮且写明价格',
+    bbUI.hasBtn === true && (bbUI.btnText || '').indexOf('买回') >= 0, bbUI.btnText);
+  check('点买回真的收回来了', bbUI.owned === true && bbUI.lostLeft === 0,
+    'owned=' + bbUI.owned + ' left=' + bbUI.lostLeft);
+  check('买回扣钱并弹提示',
+    bbUI.spent > 0 && (bbUI.toast || '').indexOf('买回') >= 0, 'spent=' + bbUI.spent + ' / ' + bbUI.toast);
+
   /* ---------- 1.9 研究面板 ---------- */
   await evalJs(`document.querySelector('[data-act="research"]').click()`);
   await sleep(220);

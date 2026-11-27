@@ -2307,5 +2307,111 @@ function playOne(s, plan, choice) {
   ok('老存档读回来不会待选', E.customPendingFrom(back) === null);
 })();
 
+/* ---------- 自研平台倒闭 ---------- */
+(function () {
+  var s = E.newGame();
+  s.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s.money = 5e7; s.fans = 6e5; s.rep = 95;
+  ok('2068 年之前不能开台', E.launchBlock((function () {
+    var t = E.newGame();
+    t.day = (2060 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+    return t;
+  })(), { budget: 'normal', price: 'mid', cut: 'normal' }) === 'early');
+
+  var lr = E.launchPlatform(s, { budget: 'normal', price: 'mid', cut: 'normal' });
+  ok('能开自研平台', lr.ok === true && !!s.myPlatform, JSON.stringify(lr.ok));
+  ok('开台记下装机天花板', s.myPlatform.installTarget > s.myPlatform.install,
+    s.myPlatform.install + ' → ' + s.myPlatform.installTarget);
+
+  /* 正常配置：能赚钱 */
+  for (var i = 0; i < 6; i++) {
+    s.day += GD.BAL.daysPerYear;
+    E.tickPlatform(s);
+  }
+  ok('正常配置的平台不会倒闭', !!s.myPlatform && s.platformCrashes === 0);
+  var hp = E.platformHealth(s);
+  ok('平台有健康度', !!hp && typeof hp.net === 'number', JSON.stringify(hp));
+  ok('正常配置净收益为正', hp.net > 0, String(hp.net));
+  ok('装了机但没超过天花板', s.myPlatform.install <= s.myPlatform.installTarget + 0.05,
+    s.myPlatform.install + ' / ' + s.myPlatform.installTarget);
+
+  /* 低抽成 = 每部都亏，连亏两年倒闭 */
+  var s2 = E.newGame();
+  s2.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s2.money = 1e8; s2.fans = 6e5; s2.rep = 95;
+  E.launchPlatform(s2, { budget: 'normal', price: 'mid', cut: 'lure' });
+  var cash0 = s2.money;
+  var crashed = false, guard = 0;
+  while (!crashed && guard++ < 8) {
+    s2.day += GD.BAL.daysPerYear;
+    var ev = E.tickPlatform(s2);
+    if (ev && ev.crashed) crashed = true;
+  }
+  ok('低抽成平台会倒闭', crashed === true && s2.myPlatform === null);
+  ok('倒闭记了档案', s2.platformCrashes === 1 && s2.crashedPlatforms.length === 1,
+    JSON.stringify(s2.crashedPlatforms));
+  ok('倒闭赔掉六成现金', s2.crashedPlatforms[0].loss > 0, String(s2.crashedPlatforms[0].loss));
+  ok('倒闭后平台没了但作品粉丝留着',
+    s2.myPlatform === null && Array.isArray(s2.history) && s2.fans >= 0);
+  ok('倒闭不影响长尾', typeof E.monthIncome(s2) === 'number');
+})();
+
+/* ---------- 子品牌买回 ---------- */
+(function () {
+  var s = E.newGame();
+  var white = s.rivals.filter(function (x) { return x.id === 'white'; })[0];
+  ok('开局没有脱离的子公司', E.lostBrands(s).length === 0);
+
+  /* 先收购再破产，看它是否进「脱离名单」（white 1981 年才出道，先把年份推过去） */
+  s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s.money = 1e9; s.fans = 6e5;
+  ok('先收购成功', E.acquire(s, 'white').ok === true && E.isAcquired(s, 'white') === true);
+  s.phase = 'bankrupt';
+  E.newCompany(s, 'makemoney');
+  ok('破产后子公司脱离', E.isAcquired(s, 'white') === false);
+  ok('脱离名单记下了它', E.isLostBrand(s, 'white') === true, JSON.stringify(E.lostBrands(s)));
+  ok('脱离的是对手不是子公司', E.brands(s).length === 0);
+
+  s.money = 1e9;
+  var cost = E.buybackCost(s, white);
+  ok('买回有 0.8 折', Math.abs(cost - Math.round(E.acquireCost(s, white) * GD.BAL.buybackRate)) < 1,
+    String(cost));
+  ok('买回比正常收购便宜', cost < E.acquireCost(s, white),
+    cost + ' < ' + E.acquireCost(s, white));
+
+  var money0 = s.money;
+  var bb = E.buyback(s, 'white');
+  ok('能买回', bb.ok === true, JSON.stringify(bb));
+  ok('买回扣钱', s.money === money0 - cost, money0 + ' → ' + s.money);
+  ok('买回后重新归到旗下', E.isAcquired(s, 'white') === true && E.brands(s).length === 1);
+  ok('买回后从脱离名单里划掉', E.isLostBrand(s, 'white') === false);
+  ok('不能重复买回', E.buyback(s, 'white').reason === 'owned');
+  ok('买回的子品牌标了来源', E.brands(s)[0].boughtBack === true);
+
+  /* 没脱离过的对手不能买回 */
+  var s2 = E.newGame();
+  s2.money = 1e9; s2.fans = 6e5;
+  var black = s2.rivals.filter(function (x) { return x.id !== 'white'; })[0];
+  ok('没脱离过的不能买回', E.buybackBlock(s2, black) === 'not-lost', String(E.buybackBlock(s2, black)));
+
+  /* 钱不够 */
+  var s3 = E.newGame();
+  s3.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s3.money = 1e9; s3.fans = 6e5;
+  E.acquire(s3, 'white');
+  s3.phase = 'bankrupt';
+  E.newCompany(s3, 'makemoney');
+  s3.money = 10;
+  var w3 = s3.rivals.filter(function (x) { return x.id === 'white'; })[0];
+  ok('钱不够买不回来', E.buybackBlock(s3, w3) === 'poor', String(E.buybackBlock(s3, w3)));
+
+  /* 老存档没有 lostBrands 不崩 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.lostBrands;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档没有脱离名单也能跑', Array.isArray(E.lostBrands(back)) && E.lostBrands(back).length === 0);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

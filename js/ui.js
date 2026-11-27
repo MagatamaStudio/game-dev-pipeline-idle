@@ -134,7 +134,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -174,7 +174,26 @@
       var poachId = t.getAttribute('data-poach');
       var acqId = t.getAttribute('data-acquire');
 
-      if (acqId) {        var ar = E.acquire(s, acqId);
+      var buybackId = t.getAttribute('data-buyback');
+      if (buybackId) {
+        var bb = E.buyback(s, buybackId);
+        if (bb.ok) {
+          GD.SFX.award();
+          UI.toast('🏷 买回了「' + bb.brand.name + '」，花 ' + money(bb.cost) + '。它重新归到旗下。');
+          if (hooks.onSave) hooks.onSave();
+          renderIndustry();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          el.hint.textContent = bb.reason === 'poor' ? '钱不够，要 ' + money(bb.cost) + '。'
+            : bb.reason === 'not-lost' ? '这家不是从你这儿脱离的子公司。'
+              : '现在买不回来。';
+        }
+        return;
+      }
+
+      if (acqId) {
+        var ar = E.acquire(s, acqId);
         if (ar.ok) {
           GD.SFX.award();
           UI.toast('🤝 收购了 ' + ar.brand.name + '：粉丝 +' + num(ar.fans) + '，他们以后不再参赛');
@@ -1506,9 +1525,12 @@
       for (var i = 0; i < s.yearResults.length; i++) {
         if (s.yearResults[i].winner === r.name) wins++;
       }
-      html += '<div class="rival' + (active ? '' : ' off') + '">' +
+      html += '<div class="rival' + (active ? '' : ' off') + (E.isLostBrand(s, r.id) ? ' lost' : '') + '">' +
         '<div class="rival-main">' +
-        '<div class="rival-name">' + esc(r.name) + '<span class="role">' + esc(E.genre(r.genre).name) + '</span></div>' +
+        '<div class="rival-name">' + esc(r.name) +
+        '<span class="role">' + esc(E.genre(r.genre).name) + '</span>' +
+        (E.isLostBrand(s, r.id) ? '<span class="role lost-tag">脱离的子公司</span>' : '') +
+        '</div>' +
         '<div class="rival-sub">出道 ' + r.debut + ' · 年度奖 ' + wins + ' 次</div>' +
         '</div>' +
         '<div class="rival-latest">' +
@@ -1516,6 +1538,16 @@
           ? '<b>' + (active ? last.year + ' 年' : '') + '</b>《' + esc(last.title) + '》<span class="rival-score">' + last.score + '</span>'
           : '<span class="dim">还没出道</span>') +
         '</div>';
+
+      /* 破产时脱离的子公司：可以按 0.8 折买回来 */
+      if (E.isLostBrand(s, r.id) && !E.isAcquired(s, r.id)) {
+        var bbBlock = E.buybackBlock(s, r);
+        html += '<div class="buyback">' +
+          '<button class="ghost tiny" data-buyback="' + r.id + '"' + (bbBlock ? ' disabled' : '') + '>' +
+          '买回子公司 · ' + money(E.buybackCost(s, r)) + '</button>' +
+          (bbBlock === 'poor' ? '<span class="dim">钱不够</span>' : '') +
+          '</div>';
+      }
 
       if (active) {
         html += '<div class="crew">';
@@ -1587,6 +1619,7 @@
     html += '<div class="panel-block"><div class="block-title">平台方</div>';
     if (s.myPlatform) {
       var mp = s.myPlatform;
+      var hp = E.platformHealth(s);
       html += '<div class="mp-status">' +
         '<div class="mp-row"><span>平台</span><b>' + esc(mp.name) + '</b>' +
         '<span class="mono">' + mp.launched + ' 年发布 · ' + esc(mp.budgetName) + ' / ' +
@@ -1596,6 +1629,11 @@
         '<span>抽成</span><b>' + Math.round(mp.cut * 100) + '%</b></div>' +
         '<div class="mp-row"><span>去年分成</span><b class="good">' + money(mp.lastRevenue) + '</b>' +
         '<span class="mono">上架 ' + mp.lastTitles + ' 部 · 累计 ' + mp.thirdParty + ' 部</span></div>' +
+        (hp ? '<div class="mp-row"><span>维护费</span><b class="bad">−' + money(hp.upkeep) + '</b>' +
+          '<span>净</span><b class="' + (hp.net >= 0 ? 'good' : 'bad') + '">' +
+          (hp.net >= 0 ? '+' : '') + money(hp.net) + '</b></div>' : '') +
+        (hp && hp.danger ? '<div class="mp-warn">⚠ 去年亏了。再亏 ' + hp.left +
+          ' 年会撑不住 —— 倒闭要赔掉 60% 现金。</div>' : '') +
         '</div>';
     } else if (E.year(s) < GD.MYPLATFORM.minYear) {
       html += '<p class="dim">到 ' + GD.MYPLATFORM.minYear + ' 年才能自研平台（现在是 ' + E.year(s) + ' 年）。</p>';
