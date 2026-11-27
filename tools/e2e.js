@@ -934,6 +934,40 @@ function connect(wsUrl) {
   await sleep(120);
   check('帮助面板可以关闭', await evalJs(`document.querySelector('#help').hidden`) === true);
 
+  /* ---------- 2.6 发售期决策 ---------- */
+  var seUI = await evalJs(`(function () {
+    var out = {};
+    var s = GD.getState();
+    var keepPhase = s.phase, keepSales = s.sales;
+    try {
+      s.phase = 'sales';
+      s.sales = { index: 2, total: 100000, sold: 20000, revenue: 500000, adUsed: 0,
+        eventsDone: 0, pending: null, log: [], boost: 1, weeks: [], eventCost: 0 };
+      s.project = { coop: null, cost: 100000 };
+      GD.Engine.salesEventDue(s);
+      GD.UI.render();
+      out.cardAfter = document.querySelectorAll('#sales-event .se-card').length;
+      out.opts = document.querySelectorAll('#sales-event .se-opt').length;
+      out.name = (document.querySelector('#sales-event .se-name') || {}).textContent || '';
+      s.money = 1e7;
+      var btn = document.querySelector('#sales-event .se-opt');
+      var before = s.money;
+      if (btn) btn.click();
+      out.picked = s.sales.pending === null;
+      out.logged = (s.sales.log || []).length;
+      out.spent = before - s.money;
+      out.stillThere = document.querySelectorAll('#sales-event .se-card').length;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.phase = keepPhase; s.sales = keepSales;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('发售期会弹决策卡', !seUI.err && seUI.cardAfter === 1 && seUI.opts >= 2,
+    seUI.err || ('card=' + seUI.cardAfter + ' opts=' + seUI.opts + ' name=' + seUI.name));
+  check('决策卡能选择并记账',
+    seUI.picked === true && seUI.logged === 1 && seUI.stillThere === 0,
+    'picked=' + seUI.picked + ' log=' + seUI.logged + ' spent=' + seUI.spent);
+
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
   await evalJs(`document.querySelector('[data-act="go"]').click()`);

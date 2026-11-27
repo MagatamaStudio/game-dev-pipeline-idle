@@ -200,6 +200,15 @@ function playOnce(seed, strat) {
       continue;
     }
     if (s.phase === 'release') { E.confirmRelease(s, 'now'); continue; }
+    /* 发售期决策：选第一个买得起的 */
+    if (s.phase === 'sales' && s.sales && s.sales.pending) {
+      var sopts = s.sales.pending.options, sogood = false;
+      for (var soi = 0; soi < sopts.length && !sogood; soi++) {
+        if (E.chooseSalesEvent(s, soi)) sogood = true;
+      }
+      if (!sogood) { stuck = 'sales-event'; break; }
+      continue;
+    }
     if (s.phase === 'done') {
       var lr = s.lastResult || {};
       trace.push({

@@ -18,7 +18,7 @@
 
   function load() {
     try {
-      var raw = localStorage.getItem(E.SAVE_KEY);
+      var raw = localStorage.getItem(E.SAVE_KEY) || localStorage.getItem(E.SAVE_KEY_LEGACY);
       if (!raw) return null;
       return E.deserialize(raw);
     } catch (err) {
@@ -41,7 +41,7 @@
 
   function quarantine() {
     try {
-      var raw = localStorage.getItem(E.SAVE_KEY);
+      var raw = localStorage.getItem(E.SAVE_KEY) || localStorage.getItem(E.SAVE_KEY_LEGACY);
       if (raw) localStorage.setItem(E.SAVE_KEY + '.broken', raw);
       localStorage.removeItem(E.SAVE_KEY);
     } catch (e) { }

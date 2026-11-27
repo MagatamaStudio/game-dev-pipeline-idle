@@ -1,8 +1,8 @@
 {
-  "name": "garage-studio",
+  "name": "game-workshop-story",
   "version": "0.2.0-m0",
   "private": true,
-  "description": "《游戏发展国》式经营模拟的垂直切片，纯静态",
+  "description": "游戏工坊物语：像素游戏工作室经营模拟，纯静态",
   "scripts": {
     "start": "node tools/serve.js",
     "serve": "node tools/serve.js",

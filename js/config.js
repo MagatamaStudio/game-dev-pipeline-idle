@@ -1135,6 +1135,64 @@ GD.DECLARATIONS_RETRY = [
       cost: 1.60, days: 1.30, sales: 1.50, quality: 1.10 }
   ];
 
+  /* 发售期决策：销售 12 周里挑 3 个时点各弹一次。
+   * 每个选项改销量倍率 / 花钱 / 动声望，让「等 24 秒」变成 3 次小抉择。 */
+  GD.SALES_EVENTS = [
+    {
+      id: 'streamer', name: '主播试玩',
+      desc: '有个主播想播你的新作。',
+      options: [
+        { label: '请头部主播', cost: 90000, boost: 1.5, rep: 2, tip: '当周 +50%，声望 +2' },
+        { label: '找小主播', cost: 25000, boost: 1.2, rep: 0, tip: '当周 +20%' },
+        { label: '不请', cost: 0, boost: 1, rep: 0, tip: '省钱' }
+      ]
+    },
+    {
+      id: 'reviewbomb', name: '差评刷屏',
+      desc: '论坛上突然一堆差评。',
+      options: [
+        { label: '公开回应', cost: 0, boost: 0.9, rep: -2, tip: '当周 -10%，声望 -2' },
+        { label: '紧急发补丁', cost: 60000, boost: 1.15, rep: 1, tip: '当周 +15%，声望 +1' },
+        { label: '无视', cost: 0, boost: 0.8, rep: 0, tip: '当周 -20%' }
+      ]
+    },
+    {
+      id: 'pirate', name: '盗版流出',
+      desc: '破解版已经在流传了。',
+      options: [
+        { label: '法务维权', cost: 45000, boost: 1.1, rep: 0, tip: '当周 +10%' },
+        { label: '限时降价', cost: 0, boost: 1.25, rep: -1, tip: '当周 +25%，声望 -1' },
+        { label: '不管', cost: 0, boost: 0.85, rep: 0, tip: '当周 -15%' }
+      ]
+    },
+    {
+      id: 'demand', name: '续作呼声',
+      desc: '玩家在喊「快出续作」。',
+      options: [
+        { label: '当场宣布续作', cost: 0, boost: 0.95, fans: 2200, tip: '当周 -5%，粉丝 +2200' },
+        { label: '暗示在做了', cost: 0, boost: 1.05, fans: 800, tip: '当周 +5%，粉丝 +800' },
+        { label: '不做承诺', cost: 0, boost: 1, rep: 1, tip: '声望 +1' }
+      ]
+    },
+    {
+      id: 'retail', name: '实体版加印',
+      desc: '渠道想要更多实体光盘。',
+      options: [
+        { label: '加印一批', cost: 70000, boost: 1.3, tip: '当周 +30%' },
+        { label: '只供数字版', cost: 0, boost: 1, rep: 0, tip: '稳妥' }
+      ]
+    },
+    {
+      id: 'esports', name: '社区赛事',
+      desc: '玩家自发组织比赛，问你要不要赞助。',
+      options: [
+        { label: '冠名赞助', cost: 120000, boost: 1.45, fans: 3000, tip: '当周 +45%，粉丝 +3000' },
+        { label: '给点奖品', cost: 30000, boost: 1.15, fans: 1200, tip: '当周 +15%，粉丝 +1200' },
+        { label: '婉拒', cost: 0, boost: 1, rep: -1, tip: '声望 -1' }
+      ]
+    }
+  ];
+
   GD.BAL = {
     startMoney: 620000,
     startYear: 1972,
@@ -1273,6 +1331,7 @@ GD.DECLARATIONS_RETRY = [
     reviewPerCritic: 1.1,
     reviewTail: 1.4,
     salesWeeks: 12,
+    salesEventWeeks: [3, 6, 9],   // 第 3/6/9 周各弹一次发售期决策
     salesWeekSeconds: 2.0,
     salesBase: 12000,
     adCost: 50000,

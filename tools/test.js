@@ -32,6 +32,17 @@ function playOne(s, plan, choice) {
       if (!done) break;
     }
     if (s.phase === 'release') E.confirmRelease(s, 'now');
+    /* 发售期决策：挑第一个买得起的，别让循环卡在等选择 */
+    if (s.phase === 'sales' && s.sales && s.sales.pending) {
+      /* 挑最便宜的买得起的，模拟「稳健玩家」，别把利润率测试打崩 */
+      var opts = s.sales.pending.options.slice().sort(function (a, b) { return (a.cost || 0) - (b.cost || 0); });
+      var picked = false;
+      for (var oi = 0; oi < opts.length && !picked; oi++) {
+        var realIdx = s.sales.pending.options.indexOf(opts[oi]);
+        if (E.chooseSalesEvent(s, realIdx)) picked = true;
+      }
+      if (!picked) break;
+    }
   }
   return s.lastResult;
 }
@@ -400,7 +411,8 @@ function playOne(s, plan, choice) {
   ok('粉丝增长', s.fans > 0, 'fans=' + Math.round(s.fans));
   ok('记入历史', s.history.length === 1);
 
-  var expected = before - r.cost + r.revenue + (s.tailTotal || 0);
+  var eventCost = (s.sales && s.sales.eventCost) || 0;
+  var expected = before - r.cost + r.revenue + (s.tailTotal || 0) - eventCost;
   ok('资金账目对得上', Math.abs(s.money - expected) < 1,
     'money=' + Math.round(s.money) + ' expected=' + Math.round(expected));
 
@@ -2496,6 +2508,17 @@ function playOne(s, plan, choice) {
       if (!picked) s.event = null;
     }
     if (s.phase === 'release') E.confirmRelease(s, 'now');
+    /* 发售期决策：挑第一个买得起的，别让循环卡在等选择 */
+    if (s.phase === 'sales' && s.sales && s.sales.pending) {
+      /* 挑最便宜的买得起的，模拟「稳健玩家」，别把利润率测试打崩 */
+      var opts = s.sales.pending.options.slice().sort(function (a, b) { return (a.cost || 0) - (b.cost || 0); });
+      var picked = false;
+      for (var oi = 0; oi < opts.length && !picked; oi++) {
+        var realIdx = s.sales.pending.options.indexOf(opts[oi]);
+        if (E.chooseSalesEvent(s, realIdx)) picked = true;
+      }
+      if (!picked) break;
+    }
   }
   ok('做完一部后对方实力上涨', E.coopRival(s, r.id).power > power0,
     power0 + ' → ' + E.coopRival(s, r.id).power);
@@ -2612,6 +2635,62 @@ function playOne(s, plan, choice) {
     s2.money = 1e6; s2.phase = 'developing';
     return E.trainBlock(s2, st2.id) === 'phase';
   })());
+})();
+
+/* ---------- 发售期决策 ---------- */
+(function () {
+  ok('决策池有内容', (GD.SALES_EVENTS || []).length >= 5, String((GD.SALES_EVENTS || []).length));
+  ok('决策配三个时点', (GD.BAL.salesEventWeeks || []).length === 3,
+    JSON.stringify(GD.BAL.salesEventWeeks));
+
+  var s = E.newGame();
+  s.money = 1e7;
+  E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', scale: 'mid' });
+  var g = 0;
+  while (g++ < 300000 && s.phase !== 'sales') {
+    E.tick(s, 1 / 30);
+    if (s.phase === 'event') {
+      var en = s.event ? s.event.options.length : 0, ed = false;
+      for (var c = 0; c < en && !ed; c++) ed = E.chooseEvent(s, c);
+    }
+    if (s.phase === 'release') E.confirmRelease(s, 'now');
+  }
+  ok('能进入销售期', s.phase === 'sales' && !!s.sales);
+  ok('第 1 周还没决策', E.salesEventDue(s) === null);
+
+  var g2 = 0;
+  while (!E.salesEventDue(s) && g2++ < 4000) E.tick(s, 1 / 30);
+  var ev = E.salesEventDue(s);
+  ok('第 3 周弹发售期决策', !!ev && ev.week === 3, ev ? ('week=' + ev.week + ' ' + ev.name) : '没弹');
+  ok('决策有 2 个以上选项', !!ev && ev.options.length >= 2, ev ? String(ev.options.length) : '-');
+
+  var idxBefore = s.sales.index;
+  E.tick(s, 5);
+  ok('等选择时不推进周数', s.sales.index === idxBefore, idxBefore + ' → ' + s.sales.index);
+
+  var pickIdx = -1;
+  for (var pi = 0; pi < ev.options.length; pi++) {
+    if ((ev.options[pi].cost || 0) <= s.money) { pickIdx = pi; break; }
+  }
+  var moneyBefore = s.money;
+  var boostBefore = s.sales.boost || 1;
+  ok('能做出选择', E.chooseSalesEvent(s, pickIdx) === true, 'opt=' + pickIdx);
+  ok('选项花钱会扣', Math.abs((moneyBefore - s.money) - (ev.options[pickIdx].cost || 0)) < 1,
+    Math.round(moneyBefore - s.money));
+  ok('选项倍率生效', s.sales.boost !== boostBefore, boostBefore + ' → ' + s.sales.boost);
+  ok('选完就清空待选', s.sales.pending === null);
+  ok('记录了花费', (s.sales.eventCost || 0) >= 0, String(s.sales.eventCost));
+  ok('记录了选择历史', (s.sales.log || []).length === 1, JSON.stringify(s.sales.log));
+
+  var s2 = E.newGame();
+  s2.money = 0;
+  s2.phase = 'sales';
+  s2.project = { coop: null };
+  s2.sales = { index: 2, pending: { week: 3, name: 'x', desc: '', options: [{ label: 'a', cost: 99999, boost: 1.5 }] } };
+  ok('钱不够选不了贵选项', E.chooseSalesEvent(s2, 0) === false);
+
+  var s3 = E.newGame();
+  ok('没待选时选择无效', E.chooseSalesEvent(s3, 0) === false);
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

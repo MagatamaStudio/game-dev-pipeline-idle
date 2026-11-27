@@ -136,7 +136,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train],[data-atab]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train],[data-atab],[data-se]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -382,6 +382,15 @@
         GD.SFX.click();
         renderHelp();
         UI.toast(ui.slowToast ? '已切成慢速（停 8 秒）' : '已切回常规速度');
+        return;
+      }
+      var seIdx = t.getAttribute('data-se');
+      if (seIdx != null) {
+        if (E.chooseSalesEvent(s, Number(seIdx))) {
+          GD.SFX.coin();
+          renderSalesEvent();
+          if (hooks.onSave) hooks.onSave();
+        } else { GD.SFX.bad(); }
         return;
       }
       if (panelAct === 'help') { GD.SFX.click(); renderHelp(); el.help.hidden = false; return; }
@@ -2007,6 +2016,25 @@
 
   /* ---------------- 销售 ---------------- */
 
+  /* 发售期决策：有待选就把卡片插到销量下面 */
+  function renderSalesEvent() {
+    var box = byId('sales-event');
+    if (!box) return;
+    var ev = s.sales && s.sales.pending;
+    if (!ev) { box.innerHTML = ''; return; }
+    var html = '<div class="se-card"><div class="se-week">第 ' + ev.week + ' 周</div>' +
+      '<div class="se-name">' + esc(ev.name) + '</div>' +
+      '<div class="se-desc">' + esc(ev.desc) + '</div><div class="se-opts">';
+    ev.options.forEach(function (o, i) {
+      var poor = o.cost > 0 && s.money < o.cost;
+      html += '<button class="se-opt" data-se="' + i + '"' + (poor ? ' disabled' : '') + '>' +
+        '<b>' + esc(o.label) + '</b>' +
+        '<span>' + esc(o.tip) + (o.cost ? ' · ' + money(o.cost) : '') + '</span></button>';
+    });
+    html += '</div></div>';
+    box.innerHTML = html;
+  }
+
   function buildSales() {
     ui.weekCount = 0;
     el.stage.innerHTML =
@@ -2019,13 +2047,15 @@
       '<div class="sales-col"><div class="sales-label">累计收入</div><div class="sales-big money" id="revenue">$0</div></div>' +
       '</div>' +
       '<div class="weeks" id="weeks"></div>' +
-      '<div class="sales-acts"><button class="ad" id="adbtn" data-act="ad">追加广告 ' + money(GD.BAL.adCost) + ' · 下周 +' + Math.round((GD.BAL.adBoost - 1) * 100) + '%</button></div>' +
+      '<div id="sales-event"></div>' +
+    '<div class="sales-acts"><button class="ad" id="adbtn" data-act="ad">追加广告 ' + money(GD.BAL.adCost) + ' · 下周 +' + Math.round((GD.BAL.adBoost - 1) * 100) + '%</button></div>' +
       '</div>';
     el.hint.textContent = '销量按周结算。前 6 周内可以追加一次广告。';
   }
 
   function updateSales() {
     if (!s.sales) return;
+    renderSalesEvent();
 
     var copiesEl = byId('copies');
     if (copiesEl) copiesEl.textContent = num(s.sales.sold);

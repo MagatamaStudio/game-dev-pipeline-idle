@@ -2113,6 +2113,9 @@
       revenue: 0,
       index: 0,
       adUsed: 0,
+      eventsDone: 0,
+      pending: null,
+      log: [],
       boost: 1,
       weeks: []
     };
@@ -2139,6 +2142,44 @@
     s.sales.weeks.push({ week: i + 1, copies: copies, revenue: revenue });
 
     return { week: i + 1, copies: copies, revenue: revenue };
+  };
+
+  /* ---------------- 发售期决策 ----------------
+   * 销售 12 周，在第 BAL.salesEventWeeks 指定的周次各弹一次（默认 3 次）。
+   * 弹的时候暂停周推进，等玩家选完再继续。 */
+
+  E.salesEventDue = function (s) {
+    if (!s.sales || s.phase !== 'sales') return null;
+    if (s.sales.pending) return s.sales.pending;
+    var weeks = BAL.salesEventWeeks || [3, 6, 9];
+    var next = s.sales.index + 1;              // 下一周（1-based）
+    if (weeks.indexOf(next) < 0) return null;
+    if ((s.sales.eventsDone || 0) >= weeks.length) return null;
+    if (s.sales.index >= BAL.salesWeeks) return null;
+    var pool = GD.SALES_EVENTS || [];
+    if (!pool.length) return null;
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    s.sales.pending = { id: pick.id, week: next, name: pick.name, desc: pick.desc, options: pick.options };
+    return s.sales.pending;
+  };
+
+  E.chooseSalesEvent = function (s, idx) {
+    if (!s.sales || !s.sales.pending) return false;
+    var ev = s.sales.pending;
+    var opt = ev.options[idx];
+    if (!opt) return false;
+    if (opt.cost > 0 && s.money < opt.cost) return false;
+    s.money -= opt.cost || 0;
+    /* 当周倍率直接叠进 boost（settleWeek 之后会重置 boost） */
+    s.sales.boost = (s.sales.boost || 1) * (opt.boost || 1);
+    if (opt.rep) E.addRep(s, opt.rep);
+    if (opt.fans) s.fans += opt.fans;
+    s.sales.eventsDone = (s.sales.eventsDone || 0) + 1;
+    s.sales.eventCost = (s.sales.eventCost || 0) + (opt.cost || 0);
+    s.sales.log = s.sales.log || [];
+    s.sales.log.push({ week: ev.week, name: ev.name, choice: opt.label });
+    s.sales.pending = null;
+    return true;
   };
 
   E.canBuyAd = function (s) {
@@ -2244,6 +2285,8 @@
     }
 
     else if (s.phase === 'sales') {
+      /* 有待决策就先别推进，等玩家选完 */
+      if (E.salesEventDue(s)) return out;
       s.timer += dt;
       var target = Math.floor(s.timer / BAL.salesWeekSeconds);
       var guard = 0;
@@ -2934,6 +2977,15 @@
       while (s.phase === 'sales' && guard++ < 20000) {
         var soldBefore = s.sales.sold;
         var revBefore = s.sales.revenue;
+        /* 离线期间发售期决策自动挑最便宜的，玩家不在也不能卡住 */
+        if (s.sales.pending) {
+          var offOpts = s.sales.pending.options.slice().sort(function (a, b) { return (a.cost || 0) - (b.cost || 0); });
+          var offDone = false;
+          for (var oi2 = 0; oi2 < offOpts.length && !offDone; oi2++) {
+            var idx2 = s.sales.pending.options.indexOf(offOpts[oi2]);
+            if (E.chooseSalesEvent(s, idx2)) offDone = true;
+          }
+        }
         E.tick(s, 0.5);
         if (s.sales) {
           copies += s.sales.sold - soldBefore;
@@ -2962,7 +3014,9 @@
   /* ---------------- 存档 ---------------- */
 
   E.SAVE_VERSION = 2;
-  E.SAVE_KEY = 'garageStudio.save.v2';
+  E.SAVE_KEY = 'gameWorkshop.save.v2';
+  /* 改名前的旧 key：读档时回退，别让老存档丢失 */
+  E.SAVE_KEY_LEGACY = 'garageStudio.save.v2';
 
   E.serialize = function (s) {
     s.version = E.SAVE_VERSION;
