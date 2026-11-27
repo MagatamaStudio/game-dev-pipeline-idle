@@ -352,6 +352,42 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('#research [data-act="close-panel"]').click()`);
   await sleep(150);
 
+  /* ---------- 1.99 换平台立即生效 + 作品名 ---------- */
+  var platSwitch = await evalJs(`(function () {
+    var s = GD.getState();
+    var keep = { day: s.day, plat: s.plan.platform, genre: s.plan.genre };
+    s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+    /* 改个类型把界面推到 1985 年再重建（顺手验证多平台列表） */
+    s.plan.genre = (s.plan.genre === 'rpg' ? 'action' : 'rpg');
+    GD.UI.render();
+    var chips = Array.prototype.slice.call(document.querySelectorAll('[data-plan^="platform:"]'));
+    var target = chips.filter(function (c) { return !c.classList.contains('on'); })[0];
+    var picked = target ? target.textContent.trim() : '';
+    if (target) target.click();
+    var onNow = Array.prototype.slice.call(document.querySelectorAll('[data-plan^="platform:"]'))
+      .filter(function (c) { return c.classList.contains('on'); })
+      .map(function (c) { return c.textContent.trim(); }).join('|');
+    var out = { count: chips.length, picked: picked, nowOn: onNow };
+    s.day = keep.day;
+    s.plan.platform = keep.plat;
+    s.plan.genre = keep.genre;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('换平台会立刻生效（不需要再点别的按钮）',
+    platSwitch.count >= 2 && platSwitch.picked.length > 0 && platSwitch.nowOn === platSwitch.picked,
+    '平台数=' + platSwitch.count + ' 点了=' + platSwitch.picked + ' 现在=' + platSwitch.nowOn);
+
+  var nameTyped = await evalJs(`(function () {
+    var inp = document.getElementById('plan-name');
+    if (!inp) return { ok: false };
+    inp.value = '星海列车';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    return { ok: true, name: GD.getState().plan.name };
+  })()`);
+  check('可以给作品起自定义名字',
+    nameTyped.ok === true && nameTyped.name === '星海列车', String(nameTyped.name));
+
   /* ---------- 2. 选择类型/题材 ---------- */
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);
@@ -369,9 +405,11 @@ function connect(wsUrl) {
     progress: GD.getState().project.progress,
     bar: !!document.querySelector('#dev-bar'),
     cost: (document.querySelector('.dev-cost') || {}).textContent || '',
+    title: (document.querySelector('.dev-name') || {}).textContent || '',
     active: document.querySelectorAll('.desk.active').length
   })`);
   check('立项后进入开发', started.phase === 'developing' && started.bar === true);
+  check('开发界面显示自定义作品名', started.title.indexOf('星海列车') >= 0, started.title);
   check('每日成本显示的是数字不是 NaN', started.cost.indexOf('NaN') < 0 && /\d/.test(started.cost), started.cost);
   check('立项扣了平台授权费', moneyBefore - started.money >= 6000, 'paid ' + (moneyBefore - started.money));
   check('主创被高亮', started.active === 1, 'active=' + started.active);

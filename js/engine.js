@@ -300,7 +300,7 @@
       fans: 0,
       day: 0,
       phase: 'planning',
-      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72' },
+      plan: { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '' },
       project: null,
       event: null,
       review: null,
@@ -769,7 +769,7 @@
     var lic = plat.license * E.bonusMul(s, 'license');
     if (s.money < lic) return false;
 
-    s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id };
+    s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id, name: plan.name || '' };
     s.money -= lic;
     s.project = {
       baseDuration: E.devDuration(s, plan.leader),
@@ -1215,15 +1215,24 @@
 
   /* ---------------- 收尾 ---------------- */
 
+  /* 作品名：玩家填了就用玩家的，没填就用「类型·题材」自动名 */
   E.gameName = function (s) {
+    var custom = (s.plan && s.plan.name) ? String(s.plan.name).trim() : '';
+    if (custom) return custom.slice(0, 18);
     var g = E.genre(s.plan.genre), t = E.theme(s.plan.theme);
     return g.name + '·' + t.name;
+  };
+
+  E.randomGameName = function () {
+    var a = GD.GAME_WORDS.a, b = GD.GAME_WORDS.b;
+    return a[Math.floor(Math.random() * a.length)] + b[Math.floor(Math.random() * b.length)];
   };
 
   E.nextRound = function (s) {
     if (s.phase !== 'done') return false;
     s.round++;
     s.phase = 'planning';
+    if (s.plan) s.plan.name = '';
     s.project = null;
     s.review = null;
     s.release = null;

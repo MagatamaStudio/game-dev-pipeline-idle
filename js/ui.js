@@ -343,6 +343,13 @@
       } else if (act === 'release-hold') {
         if (E.confirmRelease(s, 'hold')) { GD.SFX.coin(); }
         else { GD.SFX.bad(); }
+      } else if (act === 'random-name') {
+        if (s.phase === 'planning') {
+          s.plan.name = E.randomGameName();
+          var nameInput = byId('plan-name');
+          if (nameInput) { nameInput.value = s.plan.name; nameInput.focus(); }
+          GD.SFX.click();
+        }
       } else if (act === 'theme') {
         applyTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
         GD.SFX.click();
@@ -353,6 +360,13 @@
         if (!st.muted) GD.SFX.click();
       }
       UI.render();
+    });
+
+    /* 作品名输入：不重建界面，避免打字时输入框失焦 */
+    document.addEventListener('input', function (ev) {
+      if (!ev.target || ev.target.id !== 'plan-name') return;
+      if (!s || !s.plan) return;
+      s.plan.name = String(ev.target.value || '').slice(0, 18);
     });
   }
 
@@ -472,7 +486,8 @@
 
   function updateStage() {
     if (s.phase === 'planning') {
-      var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader;
+      /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
+      var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform;
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
     } else if (s.phase === 'developing') {
       var bar = byId('dev-bar');
@@ -572,6 +587,13 @@
     });
     html += '</div></div>';
 
+    html += '<div class="plan-group"><div class="plan-label">作品名<span class="plan-label-hint">可以不填</span></div>' +
+      '<div class="name-row">' +
+      '<input class="plan-name" id="plan-name" maxlength="18" autocomplete="off" spellcheck="false" ' +
+      'placeholder="' + esc(g.name + '·' + t.name) + '" value="' + esc(s.plan.name || '') + '">' +
+      '<button class="ghost tiny" data-act="random-name">随机</button>' +
+      '</div></div>';
+
     html += '<div class="plan-group"><div class="plan-label">平台</div><div class="chips">';
     E.availablePlatforms(s).forEach(function (x) {
       var pop = E.popMult(x, E.year(s));
@@ -621,7 +643,7 @@
     el.stage.innerHTML =
       '<div class="dev">' +
       '<div class="dev-head">' +
-      '<span class="dev-name">《' + esc(g.name) + ' · ' + esc(t.name) + '》</span>' +
+      '<span class="dev-name">《' + esc(E.gameName(s)) + '》</span>' +
       '<span class="dev-cost">-$' + Math.round(burn).toLocaleString('en-US') + ' / 秒</span>' +
       '</div>' +
       '<div class="bar"><i id="dev-bar" style="width:0%"></i></div>' +
@@ -1243,7 +1265,7 @@
 
     el.stage.innerHTML =
       '<div class="done">' +
-      '<div class="done-title">《' + esc(g.name) + ' · ' + esc(t.name) + '》</div>' +
+      '<div class="done-title">《' + esc(E.gameName(s)) + '》</div>' +
       '<div class="done-score ' + cls + '">' + r.total + '<span>/40</span></div>' +
       '<div class="done-row"><span>销量</span><b>' + num(r.copies) + ' 份</b></div>' +
       '<div class="done-row"><span>收入</span><b>' + money(r.revenue) + '</b></div>' +

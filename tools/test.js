@@ -789,6 +789,36 @@ function playOne(s, plan, choice) {
   ok('存档往返保留子品牌', back.brands.length === 1 && E.isAcquired(back, 'white'));
 })();
 
+/* ---------------- 作品名 ---------------- */
+(function () {
+  var s = E.newGame();
+  s.plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '' };
+
+  ok('不填名字时用「类型·题材」自动名',
+    E.gameName(s).indexOf('·') > 0, E.gameName(s));
+
+  s.plan.name = '星海列车';
+  ok('填了名字就用玩家的名字', E.gameName(s) === '星海列车', E.gameName(s));
+
+  s.plan.name = '  前后留空格  ';
+  ok('名字会去掉首尾空格', E.gameName(s) === '前后留空格', '[' + E.gameName(s) + ']');
+
+  s.plan.name = '这是一个超过十八个字的非常长的作品名字测试';
+  ok('名字过长会被截断到 18 字', E.gameName(s).length === 18, String(E.gameName(s).length));
+
+  s.plan.name = '星海列车';
+  E.startProject(s, s.plan);
+  ok('立项后自定义名跟着项目走', E.gameName(s) === '星海列车');
+
+  s.phase = 'done';
+  E.nextRound(s);
+  ok('下一部会清空上一部的名字', s.plan.name === '' && E.gameName(s).indexOf('·') > 0,
+    '[' + s.plan.name + '] ' + E.gameName(s));
+
+  var rnd = E.randomGameName();
+  ok('随机名不是空的', typeof rnd === 'string' && rnd.length >= 2, rnd);
+})();
+
 /* ---------------- 挖人 ---------------- */
 (function () {
   var s = E.newGame();
