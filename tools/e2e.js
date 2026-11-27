@@ -619,6 +619,33 @@ function connect(wsUrl) {
   check('音频接口齐全（音效 + 循环 BGM）',
     audioApi.hasBgm === true && audioApi.sfx >= 30, 'api=' + audioApi.sfx);
 
+  /* ---------- 9.5 窗口尺寸自适应 ---------- */
+  async function sizeAt(w, h) {
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+    await sleep(420);
+    return await evalJs(`(function () {
+      var o = document.querySelector('.office').getBoundingClientRect();
+      var st = document.querySelector('#stage').getBoundingClientRect();
+      var cv = document.getElementById('office-scene');
+      return {
+        office: Math.round(o.height), stage: Math.round(st.height),
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        canvasW: cv ? cv.width : 0
+      };
+    })()`);
+  }
+  var vTall = await sizeAt(1280, 1000);
+  var vShort = await sizeAt(1280, 620);
+  var vWide = await sizeAt(1920, 900);
+  check('窗口变矮时办公室跟着变矮', vShort.office < vTall.office,
+    vTall.office + 'px → ' + vShort.office + 'px');
+  check('窗口变矮后舞台仍然可用', vShort.stage >= 120, 'stage=' + vShort.stage);
+  check('超宽窗口不会横向溢出', vWide.overflow <= 0, 'overflow=' + vWide.overflow);
+  check('超宽窗口下画布也跟着变宽', vWide.canvasW > vTall.canvasW,
+    vTall.canvasW + ' → ' + vWide.canvasW);
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+
   /* ---------- 10. 手机尺寸 ---------- */
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await sleep(400);
