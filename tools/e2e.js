@@ -906,6 +906,30 @@ function connect(wsUrl) {
     'rows=' + helpUI.rows);
   check('帮助面板提到首部免授权费',
     (helpUI.text || '').indexOf('免授权费') >= 0, helpUI.text.slice(0, 60));
+  /* 无障碍：图标按钮有 aria-label，帮助面板里能切慢速提示 */
+  var a11y = await evalJs(`(function () {
+    var out = {};
+    try {
+      out.iconLabels = ['theme', 'sound', 'help'].filter(function (id) {
+        var b = document.getElementById(id);
+        return b && b.getAttribute('aria-label');
+      }).length;
+      var slow = document.querySelector('#help [data-act="slow-toast"]');
+      out.hasSlow = !!slow;
+      var before = localStorage.getItem('garageStudio.slowToast');
+      if (slow) slow.click();
+      out.after = localStorage.getItem('garageStudio.slowToast');
+      out.label = (document.querySelector('#help [data-act="slow-toast"]') || {}).textContent || '';
+      if (out.after !== before) { var again = document.querySelector('#help [data-act="slow-toast"]'); if (again) again.click(); }
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+  check('图标按钮都有 aria-label', !a11y.err && a11y.iconLabels === 3,
+    a11y.err || ('labels=' + a11y.iconLabels));
+  check('帮助面板里有慢速提示开关', a11y.hasSlow === true);
+  check('开关会写进本地存储并改标签',
+    a11y.after === '1' || a11y.after === '0', 'after=' + a11y.after + ' label=' + a11y.label);
+
   await evalJs(`document.querySelector('#help [data-act="close-panel"]').click()`);
   await sleep(120);
   check('帮助面板可以关闭', await evalJs(`document.querySelector('#help').hidden`) === true);

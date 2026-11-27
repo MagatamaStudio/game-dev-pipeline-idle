@@ -67,6 +67,7 @@
     ui.ruleFrom = (E.ruleFor(E.year(s)) || {}).from || 0;
     ui.rulesPaidN = (s.rulesPaid || []).length;
   ui.platSeen = {};
+  ui.slowToast = readSlowToast();
   ui.platSeenInit = 0;
     el.money = byId('money');
     el.fans = byId('fans');
@@ -373,6 +374,14 @@
           if (fr.reason === 'money') el.hint.textContent = '遣散费不够（要 ' + money(fr.cost) + '）。';
           else if (fr.reason === 'last') el.hint.textContent = '最后一个人不能解雇，否则没人开工。';
         }
+        return;
+      }
+      if (panelAct === 'slow-toast') {
+        ui.slowToast = !ui.slowToast;
+        writeSlowToast(ui.slowToast);
+        GD.SFX.click();
+        renderHelp();
+        UI.toast(ui.slowToast ? '已切成慢速（停 8 秒）' : '已切回常规速度');
         return;
       }
       if (panelAct === 'help') { GD.SFX.click(); renderHelp(); el.help.hidden = false; return; }
@@ -750,6 +759,13 @@
    * 主循环出异常时把原因固定显示在底部提示条上，
    * 否则下一次 buildStage 会把它覆盖掉，用户什么也看不到。 */
 
+  function readSlowToast() {
+    try { return localStorage.getItem('garageStudio.slowToast') === '1'; } catch (e) { return false; }
+  }
+  function writeSlowToast(v) {
+    try { localStorage.setItem('garageStudio.slowToast', v ? '1' : '0'); } catch (e) { }
+  }
+
   function applyError() {
     if (!el.hint) return;
     if (ui.lastError) {
@@ -782,7 +798,7 @@
       window.setTimeout(function () {
         if (node.parentNode) node.parentNode.removeChild(node);
       }, 400);
-    }, 4200);
+    }, ui.slowToast ? 8000 : 4200);
   };
 
   function buildStage() {
@@ -1290,6 +1306,8 @@
       '<div class="help-row"><b>第一部免授权费</b><span>新开局第一部作品不用交平台授权费，先把流程跑一遍。</span></div>' +
       '<div class="help-row"><b>主创很重要</b><span>探索创作强的人做剧情类，程序强的做动作类。</span></div>' +
       '<div class="help-row"><b>不要只堆一个类型</b><span>玩家会腻、评审也会。市场流行每年都在换。</span></div>' +
+      '<div class="help-row"><b>提示停留</b><span>短提示看不过来就切成慢速（停 8 秒）。</span>' +
+      '<button class="ghost tiny" data-act="slow-toast">' + (ui.slowToast ? '慢速：开' : '慢速：关') + '</button></div>' +
       '</div>';
     html += '</div></div>';
     el.help.innerHTML = html;
