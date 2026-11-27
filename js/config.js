@@ -78,7 +78,7 @@
   ];
 
   /* 相性表：行=类型，列=题材，10×10 全填。
-   * ≥1.30 的算「传说组合」，一共 12 格；其余自动生成评语。 */
+   * ≥1.30 的算「王牌组合」，一共 12 格（见 E.isLegendary）；其余自动生成评语。 */
   GD.COMBO = {
     rpg: { fantasy: 1.35, scifi: 1.15, medieval: 1.25, modern: 0.95, warring: 1.30, cyber: 1.05, myth: 1.30, school: 0.90, post: 1.10, idol: 0.85 },
     action: { fantasy: 1.05, scifi: 1.10, medieval: 1.10, modern: 1.15, warring: 1.15, cyber: 1.30, myth: 1.05, school: 0.95, post: 1.15, idol: 0.90 },

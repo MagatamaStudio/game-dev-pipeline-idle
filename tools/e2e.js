@@ -391,11 +391,19 @@ function connect(wsUrl) {
     nameTyped.ok === true && nameTyped.name === '星海列车', String(nameTyped.name));
 
   /* ---------- 2. 选择类型/题材 ---------- */
-  await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
+  /* 题材现在要先解锁，所以挑一个当前类型下已经开放的题材来点 */
+  var themePick = await evalJs(`(() => {
+    const st = GD.getState();
+    const before = st.plan.theme;
+    const open = GD.Engine.comboThemes(st, st.plan.genre).filter(id => id !== before);
+    const target = open[0];
+    document.querySelector('[data-plan="theme:' + target + '"]').click();
+    return { before: before, target: target };
+  })()`);
   await sleep(200);
   var afterPick = await evalJs(`({ theme: GD.getState().plan.theme, on: document.querySelectorAll('.chip.on').length })`);
-  check('点击题材会改变企划', afterPick.theme === 'modern' && afterPick.on === 4,
-    'theme=' + afterPick.theme + ' on=' + afterPick.on);
+  check('点击题材会改变企划', afterPick.theme === themePick.target && afterPick.on === 4,
+    themePick.before + ' → theme=' + afterPick.theme + ' on=' + afterPick.on);
 
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
@@ -564,12 +572,103 @@ function connect(wsUrl) {
   var next = await evalJs(`({ phase: GD.getState().phase, round: GD.getState().round, genres: document.querySelectorAll('[data-plan^="genre:"]').length })`);
   check('可以开始下一部', next.phase === 'planning' && next.round === 2 && next.genres === 10);
 
+  /* ---------- 8.4 组合收藏：企划界面 ---------- */
+  var lockUI = await evalJs(`(() => {
+    const st = GD.getState();
+    const chips = [...document.querySelectorAll('[data-plan^="theme:"]')];
+    const locked = chips.filter(c => c.disabled);
+    const open = chips.filter(c => !c.disabled);
+    return {
+      total: chips.length,
+      open: open.length,
+      expectOpen: GD.Engine.comboThemes(st, st.plan.genre).length,
+      locked: locked.length,
+      lockedLook: locked.every(c => c.classList.contains('lock')
+        && c.querySelector('.ci').textContent === '🔒'),
+      hint: (document.querySelector('.plan-label-hint') || {}).textContent || '',
+      combos: GD.Engine.comboCount(st)
+    };
+  })()`);
+  check('题材一定显示 10 个', lockUI.total === 10, String(lockUI.total));
+  check('已解锁题材数 = 该类型解锁数', lockUI.open === lockUI.expectOpen,
+    lockUI.open + ' vs ' + lockUI.expectOpen);
+  check('没解锁的题材都带锁', lockUI.locked === 10 - lockUI.open && lockUI.lockedLook === true,
+    'locked=' + lockUI.locked);
+  check('题材标题显示已解锁进度', lockUI.hint.indexOf('已解锁') >= 0, lockUI.hint);
+  check('玩过一部之后组合比开局多', lockUI.combos > 20, String(lockUI.combos));
+
+  var lockClick = await evalJs(`(() => {
+    const chip = [...document.querySelectorAll('[data-plan^="theme:"]')].find(c => c.disabled);
+    const t0 = GD.getState().plan.theme;
+    chip.click();
+    return { same: GD.getState().plan.theme === t0, had: !!chip };
+  })()`);
+  check('点锁着的题材不会改企划', lockClick.had === true && lockClick.same === true);
+
+  var snapUI = await evalJs(`(() => {
+    document.querySelector('[data-plan="genre:rhythm"]').click();
+    const st = GD.getState();
+    return {
+      genre: st.plan.genre,
+      theme: st.plan.theme,
+      ok: GD.Engine.comboUnlocked(st, st.plan.genre, st.plan.theme),
+      open: [...document.querySelectorAll('[data-plan^="theme:"]')].filter(c => !c.disabled).length
+    };
+  })()`);
+  check('换类型后题材自动落到已解锁的',
+    snapUI.genre === 'rhythm' && snapUI.ok === true && snapUI.open > 0, JSON.stringify(snapUI));
+  await evalJs(`document.querySelector('[data-plan="genre:rpg"]').click()`);
+  await sleep(150);
+
   /* ---------- 8.5 作品集与存档 ---------- */
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);
   await sleep(200);
   var arch1 = await evalJs(`({ rows: document.querySelectorAll('#archive .arch-row').length, text: (document.querySelector('.arch-name') || {}).textContent || '' })`);
   check('作品集记录了这一部', arch1.rows === 1, arch1.text);
   check('作品集显示自定义作品名', arch1.text.indexOf('星海列车') >= 0, arch1.text);
+
+  /* ---------- 8.5b 组合收藏：作品集面板 ---------- */
+  var cmUI = await evalJs(`(() => {
+    const box = document.querySelector('#archive .cm-box');
+    const cells = [...document.querySelectorAll('#archive .cm-cell')]
+      .filter(c => !c.closest('.cm-legend'));
+    const st = GD.getState();
+    return {
+      box: !!box,
+      rows: document.querySelectorAll('#archive .cm-row').length,
+      cells: cells.length,
+      unlocked: cells.filter(c => !c.classList.contains('lock')).length,
+      locked: cells.filter(c => c.classList.contains('lock')).length,
+      combos: GD.Engine.comboCount(st),
+      stat: (document.querySelector('#archive .cm-stat') || {}).textContent || '',
+      legend: document.querySelectorAll('#archive .cm-cell.won').length
+    };
+  })()`);
+  check('作品集里有组合收藏面板', cmUI.box === true);
+  check('收藏是 10 类型 x 10 题材', cmUI.rows === 11 && cmUI.cells === 100,
+    'rows=' + cmUI.rows + ' cells=' + cmUI.cells);
+  check('收藏格数与实际解锁一致', cmUI.unlocked === cmUI.combos,
+    cmUI.unlocked + ' vs ' + cmUI.combos);
+  check('未解锁的格子占多数', cmUI.locked === 100 - cmUI.combos, 'locked=' + cmUI.locked);
+  check('收藏表头显示已解锁 / 王牌', cmUI.stat.indexOf('已解锁') >= 0 && cmUI.stat.indexOf('王牌') >= 0,
+    cmUI.stat);
+
+  /* 解锁与王牌达成都会弹提示（引擎队列 -> UI 取走） */
+  var cmToast = await evalJs(`(() => {
+    const st = GD.getState();
+    const miss = GD.Engine.comboList().find(c => !GD.Engine.comboUnlocked(st, c.genre, c.theme));
+    st.comboNews = [];
+    GD.Engine.unlockCombo(st, miss.genre, miss.theme);
+    const leg = GD.Engine.comboList().find(c => GD.Engine.isLegendary(c.genre, c.theme));
+    GD.Engine.markFound(st, leg.genre, leg.theme);
+    GD.UI.render();
+    const texts = [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ');
+    return { left: st.comboNews.length, texts: texts, found: GD.Engine.comboStats(st).found };
+  })()`);
+  check('解锁组合会弹提示',
+    cmToast.left === 0 && cmToast.texts.indexOf('解锁组合') >= 0, cmToast.texts);
+  check('王牌达成会弹提示',
+    cmToast.texts.indexOf('王牌组合达成') >= 0 && cmToast.found > 0, cmToast.texts);
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 

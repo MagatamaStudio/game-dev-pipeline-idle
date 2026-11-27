@@ -365,6 +365,9 @@
       bankrupts: 0,
       seatCap: 6,
       declEff: null,
+      combos: E.initialCombos(),
+      found: [],
+      comboNews: [],
       candidates: []
     };
     E.rollCandidates(s);
@@ -459,6 +462,134 @@
     s.money -= cost;
     s.rulesPaid.push(r.from);
     return { type: 'paid', rule: r, cost: cost };
+  };
+  /* ---------------- 组合收藏 ----------------
+   * 10 类型 x 10 题材 = 100 格，开局每个类型给相性最高的 2 格（共 20）。
+   * 其余靠玩拿到，三条路：
+   *   完成一部作品 -> 解锁 2 格（优先相性高的，同时往题材种类上铺开）
+   *   完成一项研究 -> 解锁 1 格
+   *   收购一家对手 -> 解锁它主打的类型 x 题材
+   * 相性 >= 1.30 的 12 格是「王牌组合」，做出一部就记进 found（只在收藏里加星）。
+   * 新拿到的东西进 s.comboNews 队列，UI 取走弹提示后清空。 */
+
+  E.LEGEND_AFF = 1.30;
+
+  E.comboKey = function (g, t) { return g + ':' + t; };
+
+  E.comboList = function () {
+    var out = [];
+    for (var i = 0; i < GD.GENRES.length; i++) {
+      for (var j = 0; j < GD.THEMES.length; j++) {
+        out.push({
+          genre: GD.GENRES[i].id, theme: GD.THEMES[j].id,
+          aff: E.affinity(GD.GENRES[i].id, GD.THEMES[j].id)
+        });
+      }
+    }
+    return out;
+  };
+
+  E.comboUnlocked = function (s, g, t) {
+    return Array.isArray(s.combos) && s.combos.indexOf(E.comboKey(g, t)) >= 0;
+  };
+
+  E.comboCount = function (s) { return Array.isArray(s.combos) ? s.combos.length : 0; };
+
+  E.isLegendary = function (g, t) { return E.affinity(g, t) >= E.LEGEND_AFF; };
+
+  E.comboFound = function (s, g, t) {
+    return Array.isArray(s.found) && s.found.indexOf(E.comboKey(g, t)) >= 0;
+  };
+
+  /* 收藏总览：have/total 格数，found 王牌已达成数 */
+  E.comboStats = function (s) {
+    var all = E.comboList(), legend = 0, have = 0;
+    for (var i = 0; i < all.length; i++) {
+      if (E.isLegendary(all[i].genre, all[i].theme)) legend++;
+      if (E.comboUnlocked(s, all[i].genre, all[i].theme)) have++;
+    }
+    return {
+      have: have, total: all.length,
+      found: Array.isArray(s.found) ? s.found.length : 0,
+      legend: legend
+    };
+  };
+
+  /* 开局：每个类型相性最高的 2 个题材 */
+  E.initialCombos = function () {
+    var all = E.comboList(), out = [];
+    for (var i = 0; i < GD.GENRES.length; i++) {
+      var g = GD.GENRES[i].id;
+      var row = all.filter(function (c) { return c.genre === g; });
+      row.sort(function (a, b) { return b.aff - a.aff; });
+      for (var k = 0; k < 2 && k < row.length; k++) out.push(E.comboKey(row[k].genre, row[k].theme));
+    }
+    return out;
+  };
+
+  E.unlockCombo = function (s, g, t) {
+    if (!Array.isArray(s.combos)) s.combos = [];
+    var key = E.comboKey(g, t);
+    if (s.combos.indexOf(key) >= 0) return null;
+    s.combos.push(key);
+    if (!Array.isArray(s.comboNews)) s.comboNews = [];
+    s.comboNews.push({ type: 'unlock', genre: g, theme: t, aff: E.affinity(g, t) });
+    return { genre: g, theme: t, aff: E.affinity(g, t) };
+  };
+
+  /* 下一个该给哪个：相性高的优先，但题材被用过的次数越多扣得越狠，避免一路只堆一个题材 */
+  E.unlockNextCombo = function (s) {
+    var all = E.comboList(), best = null, bestScore = -1e9, use = {};
+    for (var i = 0; i < (s.combos || []).length; i++) {
+      var th = String(s.combos[i]).split(':')[1];
+      use[th] = (use[th] || 0) + 1;
+    }
+    for (var j = 0; j < all.length; j++) {
+      var c = all[j];
+      if (E.comboUnlocked(s, c.genre, c.theme)) continue;
+      var score = c.aff - 0.16 * (use[c.theme] || 0);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    if (!best) return null;
+    return E.unlockCombo(s, best.genre, best.theme);
+  };
+
+  E.markFound = function (s, g, t) {
+    if (!Array.isArray(s.found)) s.found = [];
+    var key = E.comboKey(g, t);
+    if (s.found.indexOf(key) >= 0) return false;
+    s.found.push(key);
+    if (!Array.isArray(s.comboNews)) s.comboNews = [];
+    s.comboNews.push({ type: 'found', genre: g, theme: t, aff: E.affinity(g, t) });
+    return true;
+  };
+
+  E.drainComboNews = function (s) {
+    var out = Array.isArray(s.comboNews) ? s.comboNews.slice() : [];
+    s.comboNews = [];
+    return out;
+  };
+
+  /* 某类型下已解锁的题材 id */
+  E.comboThemes = function (s, g) {
+    var out = [];
+    for (var i = 0; i < GD.THEMES.length; i++) {
+      if (E.comboUnlocked(s, g, GD.THEMES[i].id)) out.push(GD.THEMES[i].id);
+    }
+    return out;
+  };
+
+  /* 题材被锁时自动落到该类型里相性最高的已解锁题材；返回换成了哪个（没换返回 null） */
+  E.ensurePlanCombo = function (s) {
+    if (!s || !s.plan) return null;
+    if (E.comboUnlocked(s, s.plan.genre, s.plan.theme)) return null;
+    var row = E.comboList().filter(function (c) {
+      return c.genre === s.plan.genre && E.comboUnlocked(s, c.genre, c.theme);
+    }).sort(function (a, b) { return b.aff - a.aff; });
+    if (!row.length) return null;
+    var was = s.plan.theme;
+    s.plan.theme = row[0].theme;
+    return { from: was, to: s.plan.theme };
   };
   /* ---------------- 研究 ----------------
    * 一次只做一个项目，按日历推进：不开发游戏时间就不走。
@@ -721,6 +852,7 @@
       output: 0, lastYear: 0
     };
     E.brands(s).push(brand);
+    E.unlockCombo(s, r.genre, r.theme);
     return { ok: true, cost: cost, fans: fans, brand: brand };
   };
 
@@ -862,7 +994,20 @@
     var lic = plat.license * E.bonusMul(s, 'license');
     if (s.money < lic) return false;
 
-    s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id, name: plan.name || '' };
+    /* 锁着的题材不能立项：落到该类型里相性最高的已解锁题材 */
+    var themeId = plan.theme;
+    if (!E.comboUnlocked(s, plan.genre, themeId)) {
+      var list = E.comboList(), best = null, bestAff = -1;
+      for (var ci = 0; ci < list.length; ci++) {
+        var c = list[ci];
+        if (c.genre !== plan.genre || !E.comboUnlocked(s, c.genre, c.theme)) continue;
+        if (c.aff > bestAff) { bestAff = c.aff; best = c.theme; }
+      }
+      if (!best) return false;
+      themeId = best;
+    }
+
+    s.plan = { genre: plan.genre, theme: themeId, leader: plan.leader, platform: plat.id, name: plan.name || '' };
     s.money -= lic;
     s.project = {
       baseDuration: E.devDuration(s, plan.leader),
@@ -1183,6 +1328,7 @@
       var ra = E.researchById(rs.active.id);
       if (ra && s.day - rs.active.start >= ra.days) {
         rs.done.push(ra.id);
+        E.unlockNextCombo(s);
         rs.active = null;
         out.push({ type: 'research', item: ra });
       }
@@ -1282,6 +1428,10 @@
           windowMult: s.release ? s.release.mult : 1
         };
         s.history.push(s.lastResult);
+        /* 做完一部：解锁 2 个新组合；如果这次用的是传说组合，记一笔 */
+        E.unlockNextCombo(s);
+        E.unlockNextCombo(s);
+        if (E.isLegendary(s.plan.genre, s.plan.theme)) E.markFound(s, s.plan.genre, s.plan.theme);
         if (s.review.total > (s.yearBest || 0)) {
           s.yearBest = s.review.total;
           s.yearBestTitle = E.gameName(s);

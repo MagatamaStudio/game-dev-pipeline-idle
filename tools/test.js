@@ -1374,5 +1374,102 @@ function playOne(s, plan, choice) {
     E.traitList(back.staff[0]).map(function (t) { return t.name; }).join('+'));
 })();
 
+/* ---------- 组合收藏 ---------- */
+(function () {
+  var s = E.newGame();
+  var st0 = E.comboStats(s);
+  ok('开局解锁 20 格', st0.have === 20, String(st0.have));
+  ok('收藏一共 100 格', st0.total === 100, String(st0.total));
+  ok('王牌格一共 12 个', st0.legend === 12, String(st0.legend));
+
+  var twoEach = GD.GENRES.every(function (g) { return E.comboThemes(s, g.id).length === 2; });
+  ok('每个类型开局给 2 个题材', twoEach);
+
+  var topTwo = GD.GENRES.every(function (g) {
+    var row = E.comboList().filter(function (c) { return c.genre === g.id; })
+      .sort(function (a, b) { return b.aff - a.aff; });
+    return E.comboUnlocked(s, g.id, row[0].theme) && E.comboUnlocked(s, g.id, row[1].theme);
+  });
+  ok('开局给的都是该类型相性最高的两个', topTwo);
+
+  ok('没解锁的组合默认选不了', !E.comboUnlocked(s, 'rpg', 'idol'));
+
+  var u1 = E.unlockCombo(s, 'rpg', 'idol');
+  var u2 = E.unlockCombo(s, 'rpg', 'idol');
+  ok('重复解锁返回 null', !!u1 && u2 === null);
+  ok('解锁后格数 +1', E.comboCount(s) === 21, String(E.comboCount(s)));
+  ok('解锁进提示队列', s.comboNews.length === 1 && s.comboNews[0].type === 'unlock');
+  var news = E.drainComboNews(s);
+  ok('提示队列取走后清空', news.length === 1 && s.comboNews.length === 0);
+
+  var legend = E.comboList().filter(function (c) { return c.aff >= 1.3; })[0];
+  ok('王牌判定用相性 >= 1.30', E.isLegendary(legend.genre, legend.theme));
+  var first = E.markFound(s, legend.genre, legend.theme);
+  ok('王牌达成记进 found', first && E.comboFound(s, legend.genre, legend.theme));
+  ok('同一格不重复记', E.markFound(s, legend.genre, legend.theme) === false);
+  ok('王牌达成数跟着涨', E.comboStats(s).found === 1, String(E.comboStats(s).found));
+
+  /* 换类型：原来选的题材可能没解锁，要自动纠正 */
+  var s2 = E.newGame();
+  s2.plan.genre = 'rhythm';
+  s2.plan.theme = 'fantasy';
+  var swap = E.ensurePlanCombo(s2);
+  ok('换类型后自动落到已解锁题材', !!swap && E.comboUnlocked(s2, 'rhythm', s2.plan.theme),
+    JSON.stringify(swap));
+  ok('已解锁的题材不会被乱动', E.ensurePlanCombo(s2) === null);
+
+  /* 立项兜底：锁着的题材也能立项，但会换成已解锁的 */
+  var s3 = E.newGame();
+  var plan3 = { genre: 'rpg', theme: 'idol', leader: s3.staff[0].id, platform: 'arc72', name: '' };
+  var started = E.startProject(s3, plan3);
+  ok('锁着的题材立项会被换成已解锁的',
+    !!started && E.comboUnlocked(s3, 'rpg', s3.plan.theme),
+    started ? s3.plan.theme : '没立项');
+
+  /* 做完一部作品 -> 解锁 2 格 */
+  var s4 = E.newGame();
+  var before4 = E.comboCount(s4);
+  var r4 = playOne(s4, {
+    genre: 'rpg', theme: 'fantasy', leader: s4.staff[0].id, platform: 'arc72', name: ''
+  });
+  ok('做完一部作品解锁 2 格', !!r4 && E.comboCount(s4) >= before4 + 2,
+    before4 + ' → ' + E.comboCount(s4));
+
+  /* 完成一项研究 -> 解锁 1 格 */
+  var s5 = E.newGame();
+  var before5 = E.comboCount(s5);
+  ok('研究能开工', E.startResearch(s5, 'toolchain') === true);
+  s5.day += 61;
+  E.tick(s5, 1 / 30);
+  ok('完成研究解锁 1 格', E.comboCount(s5) === before5 + 1,
+    before5 + ' → ' + E.comboCount(s5));
+
+  /* 收满不会卡住 */
+  var s6 = E.newGame();
+  var n = 0;
+  while (n < 300 && E.unlockNextCombo(s6)) n++;
+  ok('组合可以一路收满 100 格', E.comboCount(s6) === 100, String(E.comboCount(s6)));
+  ok('收满之后不再发', E.unlockNextCombo(s6) === null);
+
+  /* 解锁顺序会往题材上铺开，不会一路堆同一个题材 */
+  var s7 = E.newGame();
+  for (var k = 0; k < 40; k++) E.unlockNextCombo(s7);
+  var byTheme = {};
+  s7.combos.forEach(function (key) {
+    var th = key.split(':')[1];
+    byTheme[th] = (byTheme[th] || 0) + 1;
+  });
+  var spread = Object.keys(byTheme).length;
+  ok('解锁会铺开到多个题材', spread >= 10, spread + ' 个题材');
+
+  /* 老存档没有 combos 字段 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.combos; delete obj.found; delete obj.comboNews;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档读回来仍有 20 格', E.comboCount(back) === 20, String(E.comboCount(back)));
+  ok('老存档读回来收藏面板能算', E.comboStats(back).have === 20);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

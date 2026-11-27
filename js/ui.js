@@ -323,6 +323,8 @@
       if (planAttr) {
         var parts = planAttr.split(':');
         s.plan[parts[0]] = parts[1];
+        /* 换类型后原来选的题材可能没解锁，落到该类型里相性最高的已解锁题材 */
+        if (parts[0] === 'genre') E.ensurePlanCombo(s);
         GD.SFX.click();
         UI.render();
         return;
@@ -462,6 +464,22 @@
       ui.rulesPaidN = paidN;
     }
 
+    /* 组合收藏：新解锁 / 王牌达成 */
+    var news = E.drainComboNews(s);
+    for (var ni = 0; ni < news.length; ni++) {
+      var it = news[ni];
+      var gn = E.genre(it.genre).name, tn = E.theme(it.theme).name;
+      if (it.type === 'found') {
+        UI.toast('★ 王牌组合达成：' + gn + ' × ' + tn + '（×' + it.aff.toFixed(2) + '）');
+        GD.SFX.award();
+      } else {
+        UI.toast('🧩 解锁组合：' + gn + ' × ' + tn + '（×' + it.aff.toFixed(2) + ' · ' +
+          E.comboCount(s) + '/100）');
+        GD.SFX.click();
+      }
+    }
+    if (news.length && el.archive && !el.archive.hidden) renderArchive();
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -522,6 +540,8 @@
 
   function updateStage() {
     if (s.phase === 'planning') {
+      /* 老存档 / 换类型后题材可能还锁着，先纠正再算签名，避免多重建一帧 */
+      E.ensurePlanCombo(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
       var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform;
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
@@ -616,10 +636,16 @@
     });
     html += '</div></div>';
 
-    html += '<div class="plan-group"><div class="plan-label">题材</div><div class="chips">';
+    html += '<div class="plan-group"><div class="plan-label">题材' +
+      '<span class="plan-label-hint">已解锁 ' + E.comboThemes(s, s.plan.genre).length + ' / ' + GD.THEMES.length + '</span>' +
+      '</div><div class="chips">';
     GD.THEMES.forEach(function (x) {
-      html += '<button class="chip' + (x.id === s.plan.theme ? ' on' : '') + '" data-plan="theme:' + x.id + '">' +
-        '<span class="ci">' + x.icon + '</span>' + esc(x.name) + '</button>';
+      var open = E.comboUnlocked(s, s.plan.genre, x.id);
+      var cls = 'chip' + (x.id === s.plan.theme ? ' on' : '') + (open ? '' : ' lock');
+      var tip = open ? '' : ' title="还没解锁：多开发几部作品、完成研究或收购对手"';
+      html += '<button class="' + cls + '"' + tip + (open ? '' : ' disabled') +
+        ' data-plan="theme:' + x.id + '">' +
+        '<span class="ci">' + (open ? x.icon : '🔒') + '</span>' + esc(x.name) + '</button>';
     });
     html += '</div></div>';
 
@@ -840,7 +866,43 @@
       html += '</div>';
     }
 
+    /* 组合收藏：类型 × 题材 100 格 */
+    var cst = E.comboStats(s);
+    html += '<div class="cm-box">' +
+      '<div class="cm-head">' +
+      '<div><b>组合收藏</b><span class="cm-sub">类型 × 题材</span></div>' +
+      '<div class="cm-stat">已解锁 <b>' + cst.have + '</b> / ' + cst.total +
+      ' · 王牌 <b>' + cst.found + '</b> / ' + cst.legend + '</div>' +
+      '</div>' +
+      '<div class="cm-grid">' +
+      '<div class="cm-row cm-top"><span class="cm-lbl"></span>';
+    GD.THEMES.forEach(function (t) {
+      html += '<span class="cm-th" title="' + esc(t.name) + '">' + t.icon + '</span>';
+    });
+    html += '</div>';
+    GD.GENRES.forEach(function (g) {
+      html += '<div class="cm-row"><span class="cm-lbl" title="' + esc(g.name) + '">' +
+        g.icon + '</span>';
+      GD.THEMES.forEach(function (t) {
+        var open = E.comboUnlocked(s, g.id, t.id);
+        var won = E.comboFound(s, g.id, t.id);
+        var aff = E.affinity(g.id, t.id);
+        var cls = !open ? 'lock' : won ? 'won' : aff >= 1.3 ? 'top' : aff >= 1.1 ? 'good' : '';
+        var txt = !open ? '·' : won ? '★' : t.icon;
+        var tip = g.name + ' × ' + t.name + (open ? '（相性 ×' + aff.toFixed(2) + '）' : '（未解锁）');
+        html += '<span class="cm-cell ' + cls + '" title="' + esc(tip) + '">' + txt + '</span>';
+      });
+      html += '</div>';
+    });
+    html += '</div>' +
+      '<div class="cm-legend"><span class="cm-cell lock">·</span> 未解锁　' +
+      '<span class="cm-cell">' + GD.THEMES[0].icon + '</span> 已解锁　' +
+      '<span class="cm-cell top">' + GD.THEMES[2].icon + '</span> 王牌格　' +
+      '<span class="cm-cell won">★</span> 王牌达成</div>' +
+      '</div>';
+
     html += '</div></div>';
+
     el.archive.innerHTML = html;
   }
 
