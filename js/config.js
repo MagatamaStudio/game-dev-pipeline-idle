@@ -461,9 +461,53 @@
     }
   ];
 
-  /* 破产后重新开公司时的宣言（和开局那 4 条不是一套） */
-  GD.DECLARATIONS_RETRY = [
-    {
+  /* ---------------- 自定时代（2075 之后） ----------------
+ * 最后一条固定规则是 2075 的「跨殖民地」。之后每 8 年开启一个自定时代，
+ * 玩家从 3 张随机规则卡里选一张（花影响力），或者直接随机（免费，10% 范式跃迁）。
+ * 卡片内容由模板生成 —— 这是无尽模式的引擎，不用再逐条写内容。 */
+GD.CUSTOM = {
+  startYear: 2083,
+  everyYears: 8,
+  cards: 3,
+  pickCost: 50,      // 自选一张
+  rerollCost: 20,    // 重抽一批
+  paradigmChance: 0.10,   // 随机时的范式跃迁概率
+  paradigmBoost: 1.3,     // 跃迁里那条规则的强度
+  codes: ['AR', 'NX', 'VT', 'KD', 'ZN', 'HB', 'CV', 'LX']
+};
+
+/* 规则卡模板。eff 里的键和 GD.RULES 完全一样，所以引擎出口不用改。
+ * tier 随机决定强度：0.8 / 1.0 / 1.25 倍（对「偏离中性值」的幅度做缩放）。 */
+GD.CUSTOM_TEMPLATES = [
+  { id: 'burst', names: ['瞬时工期', '并行宇宙', '编译即完成'], desc: '开发周期大幅缩短',
+    eff: { speed: 0.70 }, learn: '时间被压成可交易的东西' },
+  { id: 'craft', names: ['匠人时代', '手工复兴', '慢工出细活'], desc: '品质大涨，但周期变长',
+    eff: { quality: 1.16, speed: 1.25 }, learn: '慢下来才做得细' },
+  { id: 'cheap', names: ['算力白菜价', '工具平权', '全民开发'], desc: '人力成本大降',
+    eff: { salary: 0.65 }, learn: '人便宜了，想法更贵' },
+  { id: 'labor', names: ['人才荒', '工会崛起', '抢人大战'], desc: '人力成本大涨',
+    eff: { salary: 1.42 }, learn: '人是最贵的资产' },
+  { id: 'sub', names: ['订阅制', '会员时代', '包月江湖'], desc: '首发抽成更低，长尾翻倍',
+    eff: { cut: -0.10, tail: 2.1 }, learn: '活得久比卖得快重要' },
+  { id: 'fandom', names: ['粉丝共同体', '同人纪元', '社区即渠道'], desc: '销量几乎由粉丝盘决定',
+    eff: { fanSales: 0.0022 }, learn: '平台不重要，社区才重要' },
+  { id: 'prestige', names: ['声望经济', '署名时代', '大师崇拜'], desc: '声望直接换销量',
+    eff: { repSales: 0.45 }, learn: '你的名字就是招牌' },
+  { id: 'chaos', names: ['众评时代', '口碑地震', '评分狂欢'], desc: '评分波动翻倍，不再吃偏科',
+    eff: { reviewNoise: 2.1, noBias: true }, learn: '品质不可控，要学会挑选' },
+  { id: 'heavy', names: ['重资产时代', '硬件竞赛', '自建产线'], desc: '需要一次性重投入，换来品质上限',
+    eff: { cost: 3200000, quality: 1.18 }, learn: '轻资产的日子结束了' },
+  { id: 'dump', names: ['倾销时代', '价格战', '薄利多销'], desc: '销量大涨，品质受损',
+    eff: { sales: 1.30, quality: 0.95 }, learn: '先占住市场再说' },
+  { id: 'boutique', names: ['小而美', '独立浪潮', '精品主义'], desc: '品质大涨，但销量下滑',
+    eff: { quality: 1.20, sales: 0.88 }, learn: '少卖点，卖精一点' },
+  { id: 'open', names: ['开源盛世', '工具共享', '引擎公有'], desc: '开发变快，但大家都会做了',
+    eff: { speed: 0.82, sales: 0.94 }, learn: '门槛消失了，优势也没了' }
+];
+
+/* 破产后重新开公司时的宣言（和开局那 4 条不是一套） */
+GD.DECLARATIONS_RETRY = [
+  {
       id: 'makewhat', name: '只做我想做的', desc: '品质 +6%',
       tip: '反正已经死过一次了，这次至少做点自己认的。', eff: { quality: 1.06 }
     },

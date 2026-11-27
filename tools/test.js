@@ -2184,5 +2184,128 @@ function playOne(s, plan, choice) {
   ok('老存档没平台记录就不给移植', E.portBlock(s5, 0) === 'no-platform', String(E.portBlock(s5, 0)));
 })();
 
+/* ---------- 自定时代（2075 之后） ---------- */
+(function () {
+  var s = E.newGame();
+  ok('开局没有影响力', (s.influence || 0) === 0);
+  ok('2075 之前没有自定时代', E.customEraIndex(2075) < 0 && E.customEraIndex(2082) < 0);
+  ok('2083 年是第一个自定时代', E.customEraIndex(2083) === 0 && E.customEraFrom(0) === 2083,
+    String(E.customEraIndex(2083)));
+  ok('每 8 年开一代', E.customEraIndex(2091) === 1 && E.customEraFrom(1) === 2091);
+  ok('2075 之前没有待选', E.customPendingFrom(s) === null);
+
+  /* 出片和拿奖给影响力 */
+  var s2 = E.newGame();
+  E.addInfluence(s2, E.influenceGain(34));
+  ok('高分作品给 2 点影响力', s2.influence === 2, String(s2.influence));
+  E.addInfluence(s2, E.influenceGain(22));
+  ok('低分作品给 1 点', s2.influence === 3, String(s2.influence));
+  ok('影响力不会变成负数', (function () {
+    E.addInfluence(s2, -999);
+    return s2.influence === 0;
+  })(), String(s2.influence));
+
+  /* 到了 2083 就该选卡 */
+  var s3 = E.newGame();
+  s3.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  ok('到年份就有待选', E.customPendingFrom(s3) === 2083, String(E.customPendingFrom(s3)));
+  ok('还没选就没有自定规则', E.customRuleOf(s3) === null);
+
+  var offer = E.rollCustomCards(s3);
+  ok('发 3 张卡', offer && offer.cards.length === 3, offer ? String(offer.cards.length) : '空');
+  ok('三张卡模板不重复', (function () {
+    var ids = offer.cards.map(function (c) { return c.tpl; });
+    return ids.length === 3 && ids[0] !== ids[1] && ids[1] !== ids[2] && ids[0] !== ids[2];
+  })(), offer.cards.map(function (c) { return c.tpl; }).join(','));
+  ok('卡有代号和说明',
+    offer.cards.every(function (c) { return c.code && c.name && c.desc && c.eff; }),
+    JSON.stringify(offer.cards[0]));
+  ok('代号是 厂商码-序号 形式', /^[A-Z]{2}-\d+$/.test(offer.cards[0].code), offer.cards[0].code);
+  ok('重复取同一批不会变', E.rollCustomCards(s3) === offer);
+
+  /* 影响力不够选不了 */
+  s3.influence = 10;
+  ok('影响力不够选不了卡', E.pickCustomCard(s3, 0).reason === 'influence');
+  s3.influence = 200;
+  ok('影响力不够也重抽不了', (function () {
+    var t = E.newGame();
+    t.day = s3.day;
+    t.influence = 5;
+    E.rollCustomCards(t);
+    return E.rerollCustomCards(t).reason === 'influence';
+  })());
+
+  /* 选卡：花 50，规则生效 */
+  var before = s3.influence;
+  var pick = E.pickCustomCard(s3, 0);
+  ok('能选定一张卡', pick.ok === true && s3.customRules.length === 1, JSON.stringify(pick.ok));
+  ok('选卡扣影响力', s3.influence === before - GD.CUSTOM.pickCost,
+    before + ' → ' + s3.influence);
+  ok('选完就不再待选', E.customPendingFrom(s3) === null);
+  ok('选定的规则会生效', !!E.customRuleOf(s3), JSON.stringify(E.customRuleOf(s3).name));
+  ok('offer 清空', s3.customOffer === null);
+
+  /* 规则真的叠进乘数出口 */
+  var s4 = E.newGame();
+  s4.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s4.customRules = [{
+    from: 2083, code: 'AR-9', name: '测试规则', desc: 'x', learn: 'x', tier: '中',
+    eff: { quality: 1.20, sales: 1.25, reviewNoise: 1.5, noBias: true, cut: -0.05 }
+  }];
+  var base = E.ruleOf(s4);
+  ok('自定规则和固定规则叠乘',
+    Math.abs(E.ruleMul(s4, 'quality') - base.eff.quality * 1.20) < 1e-9,
+    E.ruleMul(s4, 'quality').toFixed(4));
+  ok('自定规则的销量也生效',
+    E.ruleSalesMul(s4) > (base.eff.sales || 1),
+    E.ruleSalesMul(s4).toFixed(3));
+  ok('自定规则的抽成叠加', Math.abs(E.ruleDelta(s4, 'cut') - (-0.05)) < 1e-9,
+    String(E.ruleDelta(s4, 'cut')));
+  ok('自定规则的开关类生效', E.ruleFlag(s4, 'noBias') === true);
+
+  /* 没选过的时代不生效，但选过的会一直生效 */
+  var s5 = E.newGame();
+  s5.customRules = [{ from: 2083, eff: { quality: 1.2 }, name: 'A', code: 'A-1', desc: '', learn: '' }];
+  s5.day = (2100 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  ok('选过的规则跨代继续生效', !!E.customRuleOf(s5) && E.customRuleOf(s5).name === 'A');
+  s5.customRules.push({ from: 2091, eff: { quality: 1.3 }, name: 'B', code: 'B-2', desc: '', learn: '' });
+  ok('新一代的规则覆盖旧的', E.customRuleOf(s5).name === 'B');
+
+  /* 随机：免费，范式跃迁概率交给种子 */
+  var s6 = E.newGame();
+  s6.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  E.rollCustomCards(s6);
+  var savedRandom = Math.random;
+  Math.random = function () { return 0.5; };
+  var rnd = E.randomCustomCard(s6);
+  Math.random = savedRandom;
+  ok('随机是免费的', rnd.ok === true && rnd.cost === 0);
+  ok('随机也拿到一条规则', s6.customRules.length === 1 && E.customPendingFrom(s6) === null);
+  ok('0.5 不触发跃迁', rnd.paradigm === false && s6.customRules.length === 1);
+
+  /* 范式跃迁：10% 概率一次两条，第二条强度 ×1.3 */
+  var s7 = E.newGame();
+  s7.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  E.rollCustomCards(s7);
+  var savedR2 = Math.random;
+  /* 常驻 0.05：既能让 makeCustomCard 正常取到第 0 个模板/档位/名字，
+   * 又让后面的 `Math.random() < 0.10` 必然成立 */
+  Math.random = function () { return 0.05; };
+  var jump = E.randomCustomCard(s7);
+  Math.random = savedR2;
+  ok('范式跃迁一次给两条', jump.paradigm === true && jump.rules.length === 2 && s7.customRules.length === 2,
+    'paradigm=' + jump.paradigm + ' rules=' + s7.customRules.length);
+  ok('跃迁那条标了跃迁', s7.customRules[1].tier === '跃迁', s7.customRules[1].tier);
+
+  /* 老存档没有自定字段：不影响，也不会崩 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.influence; delete obj.customRules; delete obj.customOffer; delete obj.customCodeN;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档读回来影响力是 0', (back.influence || 0) === 0);
+  ok('老存档读回来没有自定规则', Array.isArray(back.customRules) && back.customRules.length === 0);
+  ok('老存档读回来不会待选', E.customPendingFrom(back) === null);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

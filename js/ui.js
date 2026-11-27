@@ -134,7 +134,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -381,6 +381,50 @@
         } else { GD.SFX.bad(); }
         return;
       }
+      /* 自定时代：选卡 / 重抽 / 随机 */
+      var customIdx = t.getAttribute('data-custom');
+      if (customIdx != null) {
+        var cr = E.pickCustomCard(s, Number(customIdx));
+        if (cr.ok) {
+          GD.SFX.award();
+          UI.toast('📜 自定规则生效：' + cr.rule.code + ' ' + cr.rule.name +
+            '（' + effText(cr.rule.eff) + '）· 花 ' + cr.cost + ' 影响力');
+          renderIndustry();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          el.hint.textContent = '影响力不够（要 ' + GD.CUSTOM.pickCost + '）。多出几部高分作品。';
+        }
+        return;
+      }
+      if (panelAct === 'custom-reroll') {
+        var rr = E.rerollCustomCards(s);
+        if (rr.ok) {
+          GD.SFX.click();
+          renderIndustry();
+          if (hooks.onSave) hooks.onSave();
+        } else { GD.SFX.bad(); }
+        return;
+      }
+      if (panelAct === 'custom-random') {
+        var rnd = E.randomCustomCard(s);
+        if (rnd.ok) {
+          if (rnd.paradigm) {
+            GD.SFX.award();
+            UI.toast('🌌 范式跃迁！一次拿到两条规则：' +
+              rnd.rules.map(function (x) { return x.code + ' ' + x.name; }).join(' + '));
+          } else {
+            GD.SFX.click();
+            UI.toast('🎲 随机到：' + rnd.rules[0].code + ' ' + rnd.rules[0].name +
+              '（' + effText(rnd.rules[0].eff) + '）');
+          }
+          renderIndustry();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
       if (panelAct === 'teambuild') {
         if (E.teamBuild(s)) {
           GD.SFX.coin();
@@ -571,6 +615,16 @@
       UI.toast('🏗 为了 ' + (era ? era.name : '新世代') + ' 投了一笔重资产，钱已经花了。');
     } else if (paidN < (ui.rulesPaidN || 0)) {
       ui.rulesPaidN = paidN;
+    }
+
+    /* 自定时代：新一代开始时提示一次（选卡在行业面板里） */
+    var ceFrom = E.customPendingFrom(s);
+    if (ceFrom != null && ui.customFrom !== ceFrom) {
+      ui.customFrom = ceFrom;
+      UI.toast('📜 ' + ceFrom + ' 年，自定时代开始了 —— 去行业面板用影响力定一条新规则。');
+      GD.SFX.award();
+    } else if (ceFrom == null) {
+      ui.customFrom = null;
     }
 
     /* 组合收藏：新解锁 / 王牌达成 */
@@ -1325,6 +1379,83 @@
     return html + '</div></div>';
   }
 
+  /* 自定时代：2075 之后每 8 年开一代，用影响力换规则卡 */
+  function customEraBody() {
+    var idx = E.customEraIndex(E.year(s));
+    if (idx < 0) return '';
+    var chosen = E.customRuleOf(s);
+    var pendingFrom = E.customPendingFrom(s);
+    var inf = Math.round(s.influence || 0);
+
+    var html = '<div class="panel-block"><div class="block-title">自定时代' +
+      '<span class="dim"> · 影响力 ' + inf + '</span></div>';
+
+    /* 已经生效的自定规则 */
+    if (chosen) {
+      html += '<div class="ce-active"><b>' + esc(chosen.code) + ' ' + esc(chosen.name) + '</b>' +
+        '<span class="dim">' + esc(chosen.desc) + '（' + esc(chosen.learn) + '）</span></div>';
+    }
+
+    if (!pendingFrom) {
+      if (!chosen) html += '<p class="dim">下一个自定时代还没到。</p>';
+      else {
+        html += '<p class="dim">下一次换代：' + esc(String(E.customEraFrom(idx + 1))) + ' 年。</p>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    /* 待选：发一批卡 */
+    var offer = E.rollCustomCards(s);
+    html += '<div class="ce-hint">新一代开始了（' + pendingFrom + ' 年）。三选一花 ' +
+      GD.CUSTOM.pickCost + ' 影响力，或者免费随机（10% 概率范式跃迁）。</div>';
+    html += '<div class="ce-cards">';
+    (offer ? offer.cards : []).forEach(function (c, i) {
+      html += '<button class="ce-card" data-custom="' + i + '"' +
+        (inf < GD.CUSTOM.pickCost ? ' disabled' : '') + '>' +
+        '<span class="ce-code">' + esc(c.code) + '</span>' +
+        '<span class="ce-name">' + esc(c.name) + '</span>' +
+        '<span class="ce-desc">' + esc(c.desc) + '</span>' +
+        '<span class="ce-eff">' + esc(effText(c.eff)) + '</span>' +
+        '<span class="ce-learn">' + esc(c.learn) + '</span>' +
+        '<span class="ce-tier">' + esc(c.tier) + '</span>' +
+        '</button>';
+    });
+    html += '</div>';
+    html += '<div class="ce-actions">' +
+      '<button class="ghost" data-act="custom-reroll"' +
+      (inf < GD.CUSTOM.rerollCost ? ' disabled' : '') + '>重抽一批 · ' +
+      GD.CUSTOM.rerollCost + '</button>' +
+      '<button class="primary" data-act="custom-random">听天由命 · 免费</button>' +
+      '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  /* 把 eff 翻成人话 */
+  function effText(eff) {
+    var names = {
+      speed: '开发周期', quality: '品质', salary: '日薪', sales: '销量',
+      tail: '长尾', cut: '抽成', fanSales: '粉丝销量', repSales: '声望销量',
+      reviewNoise: '评分波动', noBias: '不吃偏科', cost: '一次性投入'
+    };
+    var out = [];
+    for (var k in eff) {
+      if (!Object.prototype.hasOwnProperty.call(eff, k)) continue;
+      var v = eff[k];
+      var label = names[k] || k;
+      if (v === true) { out.push(label); continue; }
+      if (typeof v !== 'number') continue;
+      if (k === 'cost') { out.push(label + ' ' + money(v)); continue; }
+      if (k === 'cut') { out.push(label + (v < 0 ? ' 降 ' + Math.round(-v * 100) + '%' : ' 加 ' + Math.round(v * 100) + '%')); continue; }
+      if (k === 'reviewNoise' || k === 'fanSales' || k === 'repSales') {
+        out.push(label + ' ×' + v.toFixed(4)); continue;
+      }
+      out.push(label + ' ' + (v >= 1 ? '+' : '−') + Math.round(Math.abs(v - 1) * 100) + '%');
+    }
+    return out.join(' · ');
+  }
+
   function renderIndustry() {
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>行业</h3>' +
@@ -1335,9 +1466,12 @@
         var on = E.ruleOf(s) ? '' : '（未投入，未生效）';
         return r.name + '：' + r.desc + on;
       })() +
-      ' · 你的奖项 ' + s.awards.length + ' 座</div></div>' +
+      ' · 你的奖项 ' + s.awards.length + ' 座 · 影响力 ' + Math.round(s.influence || 0) +
+      '</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
+
+    html += customEraBody();
 
     s.rivals.forEach(function (r) {
       var active = E.year(s) >= r.debut;

@@ -436,6 +436,76 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 
+  /* ---------- 1.99 自定时代（2075 之后） ---------- */
+  var ceUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepInf = s.influence, keepRules = s.customRules, keepOffer = s.customOffer;
+    var out = {};
+    var seen = [];
+    var origToast = GD.UI.toast;
+    GD.UI.toast = function (t) { seen.push(t); return origToast.call(GD.UI, t); };
+    try {
+      s.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.influence = 200;
+      s.customRules = []; s.customOffer = null;
+      document.querySelector('[data-act="industry"]').click();
+      out.open = !document.querySelector('#industry').hidden;
+      out.cards = document.querySelectorAll('#industry [data-custom]').length;
+      out.sub = (document.querySelector('#industry .panel-sub') || {}).textContent || '';
+      out.code = (document.querySelector('#industry .ce-code') || {}).textContent || '';
+      out.eff = (document.querySelector('#industry .ce-eff') || {}).textContent || '';
+      out.reroll = !!document.querySelector('#industry [data-act="custom-reroll"]');
+      out.random = !!document.querySelector('#industry [data-act="custom-random"]');
+      GD.UI.render();
+      out.toast = seen.join(' | ');
+    } catch (e) { out.err = String((e && e.message) || e); }
+    GD.UI.toast = origToast;
+    s.day = keepDay; s.influence = keepInf; s.customRules = keepRules; s.customOffer = keepOffer;
+    document.querySelector('#industry [data-act="close-panel"]').click();
+    GD.UI.render();
+    return out;
+  })()`);
+  check('自定时代面板能打开', !ceUI.err && ceUI.open === true, ceUI.err || 'ok');
+  check('给出 3 张规则卡', ceUI.cards === 3, 'cards=' + ceUI.cards);
+  check('卡片有代号和效果说明', /^[A-Z]{2}-\d+$/.test(ceUI.code || '') && (ceUI.eff || '').length > 0,
+    ceUI.code + ' / ' + ceUI.eff);
+  check('行业面板顶部显示影响力', (ceUI.sub || '').indexOf('影响力') >= 0, ceUI.sub);
+  check('有重抽与随机按钮', ceUI.reroll === true && ceUI.random === true);
+  check('换代会弹提示', (ceUI.toast || '').indexOf('自定时代') >= 0, ceUI.toast);
+
+  /* 选卡真的生效 */
+  var cePick = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepInf = s.influence, keepRules = s.customRules, keepOffer = s.customOffer;
+    var out = {};
+    var seen = [];
+    var origToast = GD.UI.toast;
+    GD.UI.toast = function (t) { seen.push(t); return origToast.call(GD.UI, t); };
+    try {
+      s.day = (2085 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.influence = 200;
+      s.customRules = []; s.customOffer = null;
+      document.querySelector('[data-act="industry"]').click();
+      var inf0 = s.influence;
+      document.querySelector('#industry [data-custom="0"]').click();
+      out.used = inf0 - s.influence;
+      out.pickCost = GD.CUSTOM.pickCost;
+      out.rules = (s.customRules || []).length;
+      out.name = (s.customRules[0] || {}).name || '';
+      out.stillPending = GD.Engine.customPendingFrom(s) !== null;
+      out.toast = seen.join(' | ');
+    } catch (e) { out.err = String((e && e.message) || e); }
+    GD.UI.toast = origToast;
+    s.day = keepDay; s.influence = keepInf; s.customRules = keepRules; s.customOffer = keepOffer;
+    document.querySelector('#industry [data-act="close-panel"]').click();
+    GD.UI.render();
+    return out;
+  })()`);
+  check('选卡扣影响力', !cePick.err && cePick.used === cePick.pickCost, 'used=' + cePick.used);
+  check('选卡后规则生效', cePick.rules === 1 && cePick.name.length > 0, cePick.name);
+  check('选卡后不再待选', cePick.stillPending === false);
+  check('选卡会弹提示', (cePick.toast || '').indexOf('自定规则生效') >= 0, cePick.toast);
+
   /* ---------- 1.9 研究面板 ---------- */
   await evalJs(`document.querySelector('[data-act="research"]').click()`);
   await sleep(220);

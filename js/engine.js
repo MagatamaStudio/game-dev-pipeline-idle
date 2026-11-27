@@ -686,6 +686,10 @@
       brands: [],
       myPlatform: null,
       rulesPaid: [],
+      influence: 0,
+      customRules: [],
+      customOffer: null,
+      customCodeN: 0,
       brokeMonths: 0,
       bankrupts: 0,
       seatCap: 6,
@@ -756,26 +760,208 @@
   };
 
   E.ruleMul = function (s, key) {
+    var m = 1;
     var r = E.ruleOf(s);
-    return (r && r.eff[key] != null) ? r.eff[key] : 1;
+    if (r && r.eff[key] != null) m *= r.eff[key];
+    var c = E.customRuleOf(s);
+    if (c && c.eff[key] != null) m *= c.eff[key];
+    return m;
   };
 
   E.ruleDelta = function (s, key) {
+    var d = 0;
     var r = E.ruleOf(s);
-    return (r && r.eff[key] != null) ? r.eff[key] : 0;
+    if (r && r.eff[key] != null) d += r.eff[key];
+    var c = E.customRuleOf(s);
+    if (c && c.eff[key] != null) d += c.eff[key];
+    return d;
   };
 
   E.ruleFlag = function (s, key) {
     var r = E.ruleOf(s);
-    return !!(r && r.eff[key]);
+    if (r && r.eff[key]) return true;
+    var c = E.customRuleOf(s);
+    return !!(c && c.eff[key]);
+  };
+
+  /* ---------------- 自定时代（2075 之后） ----------------
+   * 最后一条固定规则是 2075 的「跨殖民地」。之后每 8 年开一个自定时代：
+   * 从 3 张随机规则卡里选一张（花影响力），或者直接随机（免费，10% 范式跃迁）。
+   * 选定的规则会一直生效，和固定规则叠乘。 */
+
+  /* 行业影响力：一部作品 +1，拿奖加更多。够不够花，全看你这几年出了什么货。 */
+  E.influenceGain = function (total) {
+    return (total >= 30 ? 2 : 1);
+  };
+
+  E.addInfluence = function (s, n) {
+    s.influence = Math.max(0, Math.round((s.influence || 0) + n));
+    return s.influence;
+  };
+
+  /* 当前处在第几个自定时代；还没开始返回 -1 */
+  E.customEraIndex = function (year) {
+    var c = GD.CUSTOM;
+    if (!c || year < c.startYear) return -1;
+    return Math.floor((year - c.startYear) / c.everyYears);
+  };
+
+  /* 某个自定时代的起始年 */
+  E.customEraFrom = function (i) {
+    var c = GD.CUSTOM;
+    return c.startYear + i * c.everyYears;
+  };
+
+  /* 当前该生效的自定规则（已选的、from <= 今年里最晚那条） */
+  E.customRuleOf = function (s) {
+    var list = Array.isArray(s.customRules) ? s.customRules : [];
+    var yr = E.year(s);
+    var hit = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].from <= yr) hit = list[i];
+    }
+    return hit;
+  };
+
+  /* 该选规则了但还没选：返回待选的 era from，否则 null */
+  E.customPendingFrom = function (s) {
+    var idx = E.customEraIndex(E.year(s));
+    if (idx < 0) return null;
+    var from = E.customEraFrom(idx);
+    var list = Array.isArray(s.customRules) ? s.customRules : [];
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].from >= from) return null;
+    return from;
+  };
+
+  /* 强度缩放：乘数类按「偏离 1 的幅度」缩放，加减类直接缩放 */
+  var CUSTOM_MUL_KEYS = { speed: 1, quality: 1, salary: 1, sales: 1, tail: 1 };
+  function scaleEff(eff, k) {
+    var out = {};
+    for (var key in eff) {
+      if (!Object.prototype.hasOwnProperty.call(eff, key)) continue;
+      var v = eff[key];
+      if (typeof v !== 'number') { out[key] = v; continue; }
+      if (CUSTOM_MUL_KEYS[key]) out[key] = Math.round((1 + (v - 1) * k) * 1000) / 1000;
+      else out[key] = Math.round(v * k * 1000) / 1000;
+    }
+    return out;
+  }
+
+  var CUSTOM_TIERS = [
+    { k: 0.8, label: '弱' },
+    { k: 1.0, label: '中' },
+    { k: 1.25, label: '强' }
+  ];
+
+  function nextCode(s) {
+    s.customCodeN = (s.customCodeN || 0) + 1;
+    var codes = (GD.CUSTOM && GD.CUSTOM.codes) || ['NX'];
+    var head = codes[(s.customCodeN - 1) % codes.length];
+    return head + '-' + s.customCodeN;
+  }
+
+  /* 生成一张卡 */
+  E.makeCustomCard = function (s, tierK) {
+    var pool = GD.CUSTOM_TEMPLATES;
+    var t = pool[Math.floor(Math.random() * pool.length)];
+    var tier = CUSTOM_TIERS[Math.floor(Math.random() * CUSTOM_TIERS.length)];
+    var k = (tierK || tier.k) * (tierK ? 1 : 1);
+    var name = t.names[Math.floor(Math.random() * t.names.length)];
+    return {
+      code: nextCode(s),
+      tpl: t.id,
+      name: name,
+      desc: t.desc,
+      learn: t.learn,
+      tier: tierK ? '跃迁' : tier.label,
+      eff: scaleEff(t.eff, k)
+    };
+  };
+
+  /* 给待选时代发一批卡 */
+  E.rollCustomCards = function (s) {
+    var from = E.customPendingFrom(s);
+    if (from == null) return null;
+    if (!s.customOffer || s.customOffer.from !== from) {
+      var cards = [];
+      var used = {};
+      var guard = 0;
+      while (cards.length < GD.CUSTOM.cards && guard++ < 60) {
+        var c = E.makeCustomCard(s, 0);
+        if (used[c.tpl]) continue;
+        used[c.tpl] = 1;
+        cards.push(c);
+      }
+      s.customOffer = { from: from, cards: cards };
+    }
+    return s.customOffer;
+  };
+
+  /* 重抽一批（花钱） */
+  E.rerollCustomCards = function (s) {
+    var cost = GD.CUSTOM.rerollCost;
+    if ((s.influence || 0) < cost) return { ok: false, reason: 'influence', cost: cost };
+    if (!s.customOffer) E.rollCustomCards(s);
+    if (!s.customOffer) return { ok: false, reason: 'none' };
+    s.influence -= cost;
+    s.customOffer = null;
+    E.rollCustomCards(s);
+    return { ok: true, cost: cost };
+  };
+
+  /* 选定一张卡 */
+  E.pickCustomCard = function (s, idx) {
+    if (!s.customOffer) return { ok: false, reason: 'none' };
+    var card = s.customOffer.cards[idx];
+    if (!card) return { ok: false, reason: 'bad' };
+    var cost = GD.CUSTOM.pickCost;
+    if ((s.influence || 0) < cost) return { ok: false, reason: 'influence', cost: cost };
+    s.influence -= cost;
+    if (!Array.isArray(s.customRules)) s.customRules = [];
+    s.customRules.push({
+      from: s.customOffer.from, code: card.code, name: card.name,
+      desc: card.desc, learn: card.learn, tier: card.tier, eff: card.eff
+    });
+    s.customOffer = null;
+    return { ok: true, cost: cost, rule: s.customRules[s.customRules.length - 1] };
+  };
+
+  /* 随机：免费，10% 概率范式跃迁（一次得两条，第二条强度 ×1.3） */
+  E.randomCustomCard = function (s) {
+    if (!s.customOffer) return { ok: false, reason: 'none' };
+    var from = s.customOffer.from;
+    var card = E.makeCustomCard(s, 0);
+    if (!Array.isArray(s.customRules)) s.customRules = [];
+    var got = [card];
+    s.customRules.push({
+      from: from, code: card.code, name: card.name,
+      desc: card.desc, learn: card.learn, tier: card.tier, eff: card.eff
+    });
+
+    var shifted = false;
+    if (Math.random() < GD.CUSTOM.paradigmChance) {
+      shifted = true;
+      var extra = E.makeCustomCard(s, GD.CUSTOM.paradigmBoost);
+      s.customRules.push({
+        from: from, code: extra.code, name: extra.name,
+        desc: extra.desc, learn: extra.learn, tier: '跃迁', eff: extra.eff
+      });
+      got.push(extra);
+    }
+    s.customOffer = null;
+    return { ok: true, cost: 0, rules: got, paradigm: shifted };
   };
 
   E.ruleSalesMul = function (s) {
-    var r = E.ruleOf(s);
-    if (!r) return 1;
-    var m = r.eff.sales || 1;
-    if (r.eff.fanSales) m *= 1 + Math.min(0.8, Math.sqrt(Math.max(0, s.fans)) * r.eff.fanSales);
-    if (r.eff.repSales) m *= 1 + (s.rep || 0) / 100 * r.eff.repSales;
+    var m = 1;
+    var list = [E.ruleOf(s), E.customRuleOf(s)];
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i] && list[i].eff;
+      if (!e) continue;
+      if (e.sales != null) m *= e.sales;
+      if (e.fanSales) m *= 1 + Math.min(0.8, Math.sqrt(Math.max(0, s.fans)) * e.fanSales);
+      if (e.repSales) m *= 1 + (s.rep || 0) / 100 * e.repSales;
+    }
     return m;
   };
 
@@ -1843,6 +2029,8 @@
         if (s.yearWorks.length > 60) s.yearWorks.shift();
         /* 士气 / 体力：做完一部结算一次 */
         E.settleMood(s);
+        /* 行业影响力：出片就有，分高的多给一点。2075 之后靠它选规则 */
+        E.addInfluence(s, E.influenceGain(s.review.total));
         /* 做完一部：解锁 2 个新组合（NG+ 多给 1 个）；如果这次用的是传说组合，记一笔 */
         var unlockN = 2 + ((s.ng || 0) > 0 ? (BAL.ngComboBonus || 0) : 0);
         for (var ui2 = 0; ui2 < unlockN; ui2++) E.unlockNextCombo(s);
@@ -2232,6 +2420,8 @@
         E.addRep(s, prize.rep);
         s.money += prize.money;
         s.fans += prize.fans;
+        /* 拿奖换影响力：年度游戏给得最多 */
+        E.addInfluence(s, cat.id === 'goty' ? 20 : 8);
         s.awards.push(aw);
         got.push(aw);
         fresh.push(aw);
