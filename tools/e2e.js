@@ -567,6 +567,7 @@ function connect(wsUrl) {
   await sleep(200);
   var arch1 = await evalJs(`({ rows: document.querySelectorAll('#archive .arch-row').length, text: (document.querySelector('.arch-name') || {}).textContent || '' })`);
   check('作品集记录了这一部', arch1.rows === 1, arch1.text);
+  check('作品集显示自定义作品名', arch1.text.indexOf('星海列车') >= 0, arch1.text);
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 

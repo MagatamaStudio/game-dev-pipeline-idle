@@ -788,8 +788,14 @@
       html += '<div class="arch-list">';
       s.history.slice().reverse().forEach(function (h) {
         var cls = h.total >= 26 ? 'good' : h.total >= 20 ? '' : 'bad';
+        /* 名字存的是 h.name；自动名才回退成「类型·题材」 */
+        var autoName = E.genre(h.genre).name + '·' + E.theme(h.theme).name;
+        var title = (h.name && String(h.name).trim()) || autoName;
+        var isCustom = title !== autoName;
         html += '<div class="arch-row">' +
-          '<div class="arch-name">' + esc(E.genre(h.genre).name) + ' · ' + esc(E.theme(h.theme).name) + '</div>' +
+          '<div class="arch-name">' + esc(title) +
+          (isCustom ? '<span class="arch-genre">' + esc(autoName) + '</span>' : '') +
+          '</div>' +
           '<div class="arch-meta">' + esc(h.date || '') + ' · ' + esc(h.window || '普通档期') + '</div>' +
           '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
           '<div class="arch-sales">' + num(h.copies) + ' 份<br>' + money(h.revenue) + '</div>' +

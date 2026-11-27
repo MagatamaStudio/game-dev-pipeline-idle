@@ -815,6 +815,13 @@ function playOne(s, plan, choice) {
   ok('下一部会清空上一部的名字', s.plan.name === '' && E.gameName(s).indexOf('·') > 0,
     '[' + s.plan.name + '] ' + E.gameName(s));
 
+  /* 完整跑一部，确认历史记录里存的是自定义名 */
+  var s5 = E.newGame();
+  playOne(s5, { genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'arc72', name: '星海列车' });
+  ok('作品集历史里保留自定义名字',
+    s5.history.length === 1 && s5.history[0].name === '星海列车',
+    s5.history.length ? String(s5.history[0].name) : 'no-history');
+
   var rnd = E.randomGameName();
   ok('随机名不是空的', typeof rnd === 'string' && rnd.length >= 2, rnd);
 })();
