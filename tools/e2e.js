@@ -1060,6 +1060,88 @@ function connect(wsUrl) {
   check('行业面板顶部改成「奖项 N 座」', awardUI.sub.indexOf('奖项') >= 0, awardUI.sub);
   await sleep(120);
 
+  /* ---------- 10.3 平台退市 ---------- */
+  var retireUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepDay = s.day, keepPlan = s.plan.platform;
+    var out = {};
+    try {
+      s.day = (1980 - GD.BAL.startYear) * GD.BAL.daysPerYear;   // ARC-72 进入退市预警
+      if (s.phase !== 'planning') s.phase = 'planning';
+      GD.UI.render();
+      out.warnChip = document.querySelectorAll('#stage .chip.dying').length;
+      out.warnTag = [].map.call(document.querySelectorAll('#stage .chip.dying .dying-tag'),
+        function (x) { return x.textContent; }).join(' | ');
+
+      s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;   // ARC-72 已退市
+      GD.UI.render();
+      out.retiredGone = !GD.Engine.availablePlatforms(s).some(function (p) { return p.id === 'arc72'; });
+      out.planFixed = s.plan.platform !== 'arc72';
+      out.chipsOn = document.querySelectorAll('#stage .chip.on').length;
+      out.platOn = document.querySelectorAll('#stage [data-plan^="platform:"].on').length;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.day = keepDay;
+    s.plan.platform = keepPlan;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('平台退市前有预警标记', !retireUI.err && retireUI.warnChip >= 1,
+    retireUI.err || ('预警 chip=' + retireUI.warnChip));
+  check('预警标签写明退市年份', (retireUI.warnTag || '').indexOf('退市') >= 0, retireUI.warnTag);
+  check('退市后平台不可选', retireUI.retiredGone === true);
+  check('退市后企划平台被自动换掉', retireUI.planFixed === true);
+  check('换平台后企划仍然完整', retireUI.chipsOn >= 4 && retireUI.platOn === 1,
+    'on=' + retireUI.chipsOn + ' platOn=' + retireUI.platOn);
+
+  /* ---------- 10.4 移植 ---------- */
+  var portUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keepHist = s.history, keepMoney = s.money, keepDay = s.day, keepPhase = s.phase;
+    var out = {};
+    try {
+      s.money = 5000000;
+      s.phase = 'planning';
+      s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+      s.history = [{
+        name: '移植测试作', genre: 'rpg', theme: 'fantasy',
+        platform: 'arc72', platformLabel: '雅达瑞 街机板',
+        total: 32, copies: 60000, revenue: 900000, cost: 300000,
+        date: '1975 年 6 月', window: '普通档期'
+      }];
+      document.querySelector('[data-act="archive"]').click();
+      out.btn = document.querySelectorAll('#archive [data-port]').length;
+      out.label = (document.querySelector('#archive [data-port]') || {}).textContent || '';
+
+      /* 展开目标列表 */
+      document.querySelector('#archive [data-port]').click();
+      out.opts = document.querySelectorAll('#archive [data-portto]').length;
+      out.optText = [].map.call(document.querySelectorAll('#archive .port-opt small'),
+        function (x) { return x.textContent; }).join(' | ');
+
+      var beforeMoney = s.money;
+      var target = document.querySelector('#archive [data-portto]');
+      target.click();
+      out.moved = s.history[0].platform !== 'arc72';
+      out.ports = JSON.stringify(s.history[0].ports || null);
+      out.moneyGrew = s.money > beforeMoney;
+      out.toast = [].map.call(document.querySelectorAll('#toasts .toast'),
+        function (x) { return x.textContent; }).join(' | ');
+      out.meta = (document.querySelector('#archive .arch-meta') || {}).textContent || '';
+      document.querySelector('#archive [data-act="close-panel"]').click();
+    } catch (e) { out.err = String((e && e.message) || e); }
+    s.history = keepHist; s.money = keepMoney; s.day = keepDay; s.phase = keepPhase;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('作品集里有移植按钮', !portUI.err && portUI.btn === 1 && portUI.label.indexOf('移植') >= 0,
+    portUI.err || (portUI.btn + ' / ' + portUI.label));
+  check('点移植能展开平台列表', portUI.opts >= 1, 'opts=' + portUI.opts);
+  check('每个目标显示成本与预估销量', (portUI.optText || '').indexOf('$') >= 0, portUI.optText);
+  check('移植真的换了平台', portUI.moved === true && portUI.ports !== 'null', portUI.ports);
+  check('移植进账并弹提示', portUI.moneyGrew === true && (portUI.toast || '').indexOf('移植到') >= 0,
+    portUI.toast);
+  check('作品集里显示移植次数', (portUI.meta || '').indexOf('移植 ×1') >= 0, portUI.meta);
+
   /* ---------- 10.5 破产与新公司 ---------- */
   var bankUI = await evalJs(`(function () {
     var s = GD.getState();

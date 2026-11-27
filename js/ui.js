@@ -12,7 +12,8 @@
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
     weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
-    researchCount: 0, bound: false, lastError: '', mpPick: null, bankStep: 1
+    researchCount: 0, bound: false, lastError: '', mpPick: null, bankStep: 1,
+  portIdx: null
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -65,6 +66,8 @@
     ui.researchCount = (s.research && s.research.done) ? s.research.done.length : 0;
     ui.ruleFrom = (E.ruleFor(E.year(s)) || {}).from || 0;
     ui.rulesPaidN = (s.rulesPaid || []).length;
+  ui.platSeen = {};
+  ui.platSeenInit = 0;
     el.money = byId('money');
     el.fans = byId('fans');
     el.rep = byId('rep');
@@ -131,7 +134,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -250,8 +253,42 @@
         return;
       }
 
-      if (researchId) {
-        if (E.startResearch(s, researchId)) {
+      /* 移植：先点「移植」展开平台列表，再选目标平台 */
+      var portIdxAttr = t.getAttribute('data-port');
+      if (portIdxAttr != null) {
+        var pi = Number(portIdxAttr);
+        ui.portIdx = (ui.portIdx === pi) ? null : pi;
+        GD.SFX.click();
+        renderArchive();
+        return;
+      }
+      var portToAttr = t.getAttribute('data-portto');
+      if (portToAttr) {
+        var parts2 = portToAttr.split(':');
+        var pr = E.port(s, Number(parts2[0]), parts2[1]);
+        if (pr.ok) {
+          GD.SFX.coin();
+          ui.portIdx = null;
+          UI.toast('📦 《' + pr.title + '》移植到 ' + E.platformLabel(pr.to) +
+            '：卖 ' + num(pr.copies) + ' 份，进账 ' + money(pr.revenue) +
+            '（花了 ' + money(pr.cost) + '）');
+          renderArchive();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          ui.portIdx = null;
+          renderArchive();
+          var msg = pr.reason === 'money' ? '钱不够（要 ' + money(pr.cost) + '）。'
+            : pr.reason === 'too-new' ? '这部作品还太新，先在原平台放几年。'
+              : pr.reason === 'phase' ? '只能在企划阶段移植。'
+                : '这个平台不行。';
+          el.hint.textContent = msg;
+        }
+        return;
+      }
+
+      if (researchId) {        if (E.startResearch(s, researchId)) {
           GD.SFX.research();
           renderResearch();
           if (hooks.onSave) hooks.onSave();
@@ -574,6 +611,33 @@
     }
     ui.nostKey = nostKey;
 
+    /* 平台退市 / 快退市提示（每条只弹一次；读档进来不补弹历史） */
+    if (!ui.platSeen) ui.platSeen = {};
+    var curYear = E.year(s);
+    GD.PLATFORMS.forEach(function (p) {
+      if (!p.retire) return;
+      var goneKey = 'g:' + p.id, warnKey = 'w:' + p.id;
+      if (curYear > p.retire) {
+        if (!ui.platSeen[goneKey]) {
+          ui.platSeen[goneKey] = 1;
+          if (ui.platSeenInit) {
+            UI.toast('📉 ' + E.platformLabel(p) + ' 退市了 —— 上面的作品长尾只剩零星，' +
+              '去作品集把它们移植到新平台。');
+            GD.SFX.bad();
+            if (el.archive && !el.archive.hidden) renderArchive();
+          }
+        }
+      } else if (curYear >= p.retire - (GD.BAL.platformWarnYears || 2)) {
+        if (!ui.platSeen[warnKey]) {
+          ui.platSeen[warnKey] = 1;
+          if (ui.platSeenInit) {
+            UI.toast('⚠ ' + E.platformLabel(p) + ' 将在 ' + p.retire + ' 年退市。');
+          }
+        }
+      }
+    });
+    ui.platSeenInit = 1;
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -636,6 +700,8 @@
     if (s.phase === 'planning') {
       /* 老存档 / 换类型后题材可能还锁着，先纠正再算签名，避免多重建一帧 */
       E.ensurePlanCombo(s);
+      /* 选中的平台可能已经退市了，换到最新可用平台 */
+      E.ensurePlanPlatform(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
       var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform +
         '|' + (s.plan.sequel == null ? '' : s.plan.sequel) + '|' + E.year(s);
@@ -807,9 +873,13 @@
     E.availablePlatforms(s).forEach(function (x) {
       var pop = E.popMult(x, E.year(s));
       var mark = pop >= 1.1 ? '▲' : pop >= 0.8 ? '●' : '▼';
-      html += '<button class="chip' + (x.id === s.plan.platform ? ' on' : '') + '" data-plan="platform:' + x.id + '">' +
+      var dying = E.retiringSoon(s, x);
+      html += '<button class="chip' + (x.id === s.plan.platform ? ' on' : '') + (dying ? ' dying' : '') +
+        '" data-plan="platform:' + x.id + '"' +
+        (dying ? ' title="' + esc(x.retire + ' 年退市，之后不能再立项') + '"' : '') + '>' +
         esc(E.platformLabel(x)) +
-        '<span class="ci">' + mark + '</span></button>';
+        '<span class="ci">' + mark + '</span>' +
+        (dying ? '<span class="hot-tag dying-tag">' + x.retire + ' 退市</span>' : '') + '</button>';
     });
     html += '</div></div>';
 
@@ -1029,6 +1099,34 @@
 
   function openArchive() { renderArchive(); el.archive.hidden = false; }
 
+  /* 作品集里一行的「移植」格子：能搬就给按钮，展开后选平台 */
+  function portCell(idx) {
+    var h = s.history[idx];
+    if (!h) return '<div class="arch-port"></div>';
+    if (ui.portIdx === idx) {
+      var targets = E.portTargets(s, idx);
+      var body = '';
+      targets.forEach(function (p) {
+        var pv = E.portPreview(s, idx, p.id);
+        body += '<button class="port-opt" data-portto="' + idx + ':' + p.id + '"' +
+          (s.money < pv.cost ? ' disabled' : '') + '>' +
+          esc(E.platformLabel(p)) +
+          '<small>' + money(pv.cost) + ' → ' + num(pv.copies) + ' 份 · ' + money(pv.revenue) + '</small></button>';
+      });
+      return '<div class="arch-port open">' +
+        '<div class="port-head">搬到：<button class="ghost tiny" data-port="' + idx + '">取消</button></div>' +
+        body + '</div>';
+    }
+    var block = E.portBlock(s, idx);
+    if (block === 'missing' || block === 'no-target' || block === 'no-platform') {
+      return '<div class="arch-port"></div>';
+    }
+    var label = block === 'too-new' ? '太新' : block === 'money' ? '钱不够' : '移植';
+    return '<div class="arch-port">' +
+      '<button class="ghost tiny' + (block ? ' dimbtn' : '') + '" data-port="' + idx + '"' +
+      (block ? ' disabled' : '') + '>' + label + '</button></div>';
+  }
+
   function renderArchive() {
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>作品集</h3>' +
@@ -1040,7 +1138,8 @@
       html += '<p class="dim">还没有作品。去立项吧。</p>';
     } else {
       html += '<div class="arch-list">';
-      s.history.slice().reverse().forEach(function (h) {
+      s.history.slice().reverse().forEach(function (h, ri) {
+        var idx = s.history.length - 1 - ri;   // 真实下标（列表是倒序的）
         var cls = h.total >= 26 ? 'good' : h.total >= 20 ? '' : 'bad';
         /* 名字存的是 h.name；自动名才回退成「类型·题材」 */
         var autoName = E.genre(h.genre).name + '·' + E.theme(h.theme).name;
@@ -1054,9 +1153,14 @@
             ? '<span class="arch-awards">🏆 ' + h.awards.map(function (a) { return esc(a); }).join(' · ') + '</span>'
             : '') +
           '</div>' +
-          '<div class="arch-meta">' + esc(h.date || '') + ' · ' + esc(h.window || '普通档期') + '</div>' +
+          '<div class="arch-meta">' +
+          (h.platformLabel ? esc(h.platformLabel) + ' · ' : '') +
+          esc(h.date || '') + ' · ' + esc(h.window || '普通档期') +
+          (h.ported ? ' · 移植 ×' + h.ported : '') +
+          '</div>' +
           '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
           '<div class="arch-sales">' + num(h.copies) + ' 份<br>' + money(h.revenue) + '</div>' +
+          portCell(idx) +
           '</div>';
       });
       html += '</div>';

@@ -182,9 +182,59 @@
     var all = E.allPlatforms(s);
     var out = [];
     for (var i = 0; i < all.length; i++) {
-      if (all[i].year <= year) out.push(all[i]);
+      if (all[i].year <= year && !E.isRetired(s, all[i])) out.push(all[i]);
+    }
+    /* 极端情况（所有平台都退市了也不会发生，自研平台永不退市） */
+    return out.length ? out : [all[all.length - 1]];
+  };
+
+  /* 平台是否已经退市：过了 retire 那一年就不能再做新作品 */
+  E.isRetired = function (s, p) {
+    if (!p) return false;
+    if (p.own) return false;                 // 自研平台永不退市
+    var retire = p.retire || 9999;
+    return E.year(s) > retire;
+  };
+
+  /* 快退市了：给企划界面打预警 */
+  E.retiringSoon = function (s, p) {
+    if (!p || E.isRetired(s, p)) return false;
+    var retire = p.retire || 9999;
+    return retire - E.year(s) <= (BAL.platformWarnYears || 2);
+  };
+
+  E.retiredPlatforms = function (s) {
+    var all = E.allPlatforms(s), out = [];
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].year <= E.year(s) && E.isRetired(s, all[i])) out.push(all[i]);
     }
     return out;
+  };
+
+  /* 当前企划的平台如果退市了，自动换到最新可用平台 */
+  /* 当前企划的平台如果不在可用列表里（还没上市 / 已退市），换到最新可用的那个。
+   * 注意：只判断「没退市」不够 —— 存档里可能留着一个还没上市的平台 id。 */
+  E.ensurePlanPlatform = function (s) {
+    if (!s || !s.plan) return null;
+    var yr = E.year(s);
+    var p = E.platformById(s.plan.platform, s);
+    if (p && p.year <= yr && !E.isRetired(s, p)) return null;
+    var avail = E.availablePlatforms(s);
+    if (!avail.length) return null;
+    var from = s.plan.platform;
+    s.plan.platform = avail[avail.length - 1].id;
+    return { from: from, to: s.plan.platform };
+  };
+
+  /* 解析「这次企划用哪个平台」：给的那个不合法就退回当前可用平台 */
+  E.planPlatform = function (s, plan) {
+    var yr = E.year(s);
+    var id = (plan && plan.platform) || (s.plan && s.plan.platform) || null;
+    if (id) {
+      var p = E.platformById(id, s);
+      if (p && p.id === id && p.year <= yr && !E.isRetired(s, p)) return p;
+    }
+    return E.platform(s);
   };
 
   E.platformAge = function (p, year) { return year - p.year; };
@@ -258,8 +308,9 @@
     var sq = E.planSequelOf(s, plan);
     var affMul = sq ? BAL.sequelAffinity : 1;
     var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul);
-    /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据 */
-    var p = E.platformById(plan.platform || (s.plan && s.plan.platform) || E.platform(s).id, s);
+    /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据。
+     * 指定平台不合法（未上市/已退市）时退回当前可用平台。 */
+    var p = E.planPlatform(s, plan);
     var cap = E.capOf(p);
     var duration = E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1);
     var days = duration * BAL.daysPerSecond;
@@ -1318,7 +1369,7 @@
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
-    var plat = E.platformById(plan.platform || E.platform(s).id, s);
+    var plat = E.planPlatform(s, plan);
     var lic = plat.license * E.bonusMul(s, 'license');
     if (s.money < lic) return false;
 
@@ -1761,6 +1812,8 @@
           name: E.gameName(s),
           genre: s.plan.genre,
           theme: s.plan.theme,
+          platform: s.plan.platform,
+          platformLabel: E.platformLabel(E.platform(s)),
           quality: s.project.quality,
           total: s.review.total,
           copies: s.sales.sold,
@@ -1809,6 +1862,7 @@
     E.tickRivals(s);
     E.tickBrands(s);
     E.tickPlatform(s);
+    /* 平台退市 / 快退市：各推一次提示 */
     var ruleEv = E.tickRules(s);
     if (ruleEv) out.push({ type: ruleEv.type === 'paid' ? 'rulePaid' : 'ruleMissed', rule: ruleEv.rule, cost: ruleEv.cost });
     var got = E.settleAwards(s);
@@ -2260,8 +2314,119 @@
 
   E.monthIncome = function (s) {
     var sum = 0;
-    for (var i = 0; i < s.history.length; i++) sum += (s.history[i].revenue || 0) * BAL.tailPerMonth * E.ruleMul(s, 'tail');
-    return sum;
+    var retired = BAL.retiredTailMult != null ? BAL.retiredTailMult : 0;
+    for (var i = 0; i < s.history.length; i++) {
+      var h = s.history[i];
+      var mult = 1;
+      /* 平台退市的作品只剩零星长尾；移植到新平台就恢复 */
+      if (h && h.platform) {
+        var p = E.platformById(h.platform, s);
+        if (p && E.isRetired(s, p)) mult = retired;
+      }
+      sum += (h.revenue || 0) * BAL.tailPerMonth * mult;
+    }
+    return sum * E.ruleMul(s, 'tail');
+  };
+
+  /* ---------------- 移植 ----------------
+   * 把旧作搬到新平台：成本 = 原开发成本 × 25%，
+   * 一次买断的销量 = 原销量 × (新装机 / 原装机) × 0.6，
+   * 搬过去之后这部作品的长尾在新平台上重新算（平台退市不再扣）。
+   * 同一部作品可以搬多次，但不能搬回已经搬过的平台，也不能搬去就快退市的平台。 */
+
+  E.historyPlatformId = function (s, h) {
+    if (!h) return null;
+    if (h.platform) return h.platform;
+    /* 老存档没记平台：按发售年份猜最近上市的那个 */
+    var all = GD.PLATFORMS, year = BAL.startYear + Math.floor((h.date ? 0 : 0));
+    for (var i = all.length - 1; i >= 0; i--) if (all[i].year <= year + 1972) return all[i].id;
+    return GD.PLATFORMS[0].id;
+  };
+
+  E.portTargets = function (s, idx) {
+    var h = (s.history || [])[idx];
+    if (!h) return [];
+    var from = E.platformById(h.platform, s);
+    var out = [];
+    var avail = E.availablePlatforms(s);
+    var ports = Array.isArray(h.ports) ? h.ports : [];
+    for (var i = 0; i < avail.length; i++) {
+      var p = avail[i];
+      if (from && p.id === from.id) continue;
+      if (ports.indexOf(p.id) >= 0) continue;
+      if (E.isRetired(s, p) || E.retiringSoon(s, p)) continue;
+      out.push(p);
+    }
+    return out;
+  };
+
+  /* 这部作品现在能不能移植（平台太新就不让搬） */
+  E.portBlock = function (s, idx) {
+    var h = (s.history || [])[idx];
+    if (!h) return 'missing';
+    /* 老存档没记平台：不提供移植，避免把几十年前的作品凭空搬过来 */
+    if (!h.platform) return 'no-platform';
+    var from = E.platformById(h.platform, s);
+    if (from && !E.isRetired(s, from) &&
+      (E.year(s) - from.year) < (BAL.portMinAge || 4)) return 'too-new';
+    var cost = E.portCost(s, idx);
+    if (s.money < cost) return 'money';
+    if (!E.portTargets(s, idx).length) return 'no-target';
+    return null;
+  };
+
+  E.portCost = function (s, idx) {
+    var h = (s.history || [])[idx];
+    if (!h) return 0;
+    return Math.round((h.cost || 0) * (BAL.portCostRate || 0.25));
+  };
+
+  E.portPreview = function (s, idx, targetId) {
+    var h = (s.history || [])[idx];
+    if (!h) return null;
+    var from = E.platformById(h.platform, s);
+    var to = E.platformById(targetId, s);
+    if (!to) return null;
+    /* 用平台原始装机算比值，不用 effInstall ——
+     * 老平台的人气衰减会让比值失真（实测能到 9 倍，等于白捡钱）。 */
+    var fromInst = Math.max(0.8, (from && from.install) || 1);
+    var toInst = Math.max(0.8, to.install || 1);
+    var ratio = Math.max(0.25, Math.min(3, toInst / fromInst));
+    var copies = Math.round((h.copies || 0) * ratio * (BAL.portSalesRate || 0.6));
+    var price = to.price || 0;
+    var revenue = Math.round(copies * price * (BAL.publisherCut + E.ruleDelta(s, 'cut')));
+    return {
+      copies: copies, revenue: revenue,
+      cost: E.portCost(s, idx),
+      profit: revenue - E.portCost(s, idx),
+      ratio: ratio,
+      from: from, to: to
+    };
+  };
+
+  E.port = function (s, idx, targetId) {
+    if (s.phase !== 'planning') return { ok: false, reason: 'phase' };
+    var block = E.portBlock(s, idx);
+    if (block) return { ok: false, reason: block };
+    var targets = E.portTargets(s, idx);
+    var ok = false;
+    for (var i = 0; i < targets.length; i++) if (targets[i].id === targetId) ok = true;
+    if (!ok) return { ok: false, reason: 'bad-target' };
+
+    var pv = E.portPreview(s, idx, targetId);
+    var cost = pv.cost;
+    if (s.money < cost) return { ok: false, reason: 'money', cost: cost };
+
+    var h = s.history[idx];
+    s.money -= cost;
+    s.money += pv.revenue;
+    s.totalEarned += pv.revenue;
+    s.fans += pv.copies * BAL.fanPerCopy * E.traitFansMul(s) * E.bonusMul(s, 'fans');
+    if (!Array.isArray(h.ports)) h.ports = [];
+    h.ports.push(targetId);
+    h.platform = targetId;
+    h.ported = (h.ported || 0) + 1;
+    return { ok: true, cost: cost, revenue: pv.revenue, copies: pv.copies, to: pv.to, title: E.historyTitle(h) };
   };
 
   E.settleMonths = function (s) {

@@ -1092,6 +1092,14 @@
     capBase: 1.10,
     capGrowth: 0.054,
 
+    /* 平台退市：到 retire 那年不能再立项，上面的作品长尾也基本停掉。
+     * 提前 warnYears 年预警；退市后可把老作品「移植」到新平台复活。 */
+    platformWarnYears: 2,
+    retiredTailMult: 0.08,
+    portCostRate: 0.25,       // 移植成本 = 原开发成本 × 25%
+    portSalesRate: 0.45,      // 移植销量 = 原销量 × 装机比 × 0.45
+    portMinAge: 4,            // 平台至少用了 4 年才能往外移植（不让人刚发完就搬）
+
     /* 对手强度：跟着年代抬，1990 年代后期要能真的压住你 */
     rivalBase: 27,
     rivalYearSlope: 0.44,
