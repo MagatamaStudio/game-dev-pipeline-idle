@@ -449,9 +449,55 @@
     return 'idle';
   }
 
+  /* ---- 房间等级：工位数 3/4/5/6 → 车库/街边/写字楼/独栋 ---- */
+  function roomTag(seats) { return Math.max(1, Math.min(4, (seats || 3) - 2)); }
+
+  function shade(hex, f) {
+    if (typeof hex !== 'string' || hex.charAt(0) !== '#' || hex.length < 7) return hex;
+    var n = parseInt(hex.slice(1, 7), 16);
+    var r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * f)));
+    var g = Math.max(0, Math.min(255, Math.round(((n >> 8) & 255) * f)));
+    var b = Math.max(0, Math.min(255, Math.round((n & 255) * f)));
+    return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  }
+
+  /* 房间越大越亮；车库压暗一点，独栋提亮一点 */
+  var ROOM_TINT = [0.88, 0.96, 1.03, 1.08];
+
+  function roomPalette(pal, lv) {
+    var p = {};
+    for (var k in pal) p[k] = pal[k];
+    var f = ROOM_TINT[lv - 1] || 1;
+    var keys = ['wall', 'wallLo', 'wallHi', 'ceil', 'floor', 'floor2', 'sky', 'desk'];
+    for (var i = 0; i < keys.length; i++) {
+      var kk = keys[i];
+      if (Array.isArray(p[kk])) {
+        p[kk] = p[kk].map(function (c) { return shade(c, f); });
+      } else if (typeof p[kk] === 'string' && p[kk].charAt(0) === '#') {
+        p[kk] = shade(p[kk], f);
+      }
+    }
+    /* 车库永远是水泥地，之后才是木地板 / 地毯 */
+    p.floorStyle = lv === 1 ? 'concrete' : lv === 2 ? 'wood' : 'carpet';
+    return p;
+  }
+
+  /* 车库卷帘门：替代窗户 */
+  function drawGarageDoor(c, x, y, w, h, pal) {
+    px(c, x - 1, y - 1, w + 2, h + 2, pal.wallLo);
+    var slat = shade(pal.wallHi, 0.94);
+    for (var yy = y; yy < y + h; yy += 3) {
+      px(c, x, yy, w, 2, slat);
+      px(c, x, yy + 2, w, 1, pal.wallLo);
+    }
+    for (var xx = x + 2; xx < x + w; xx += 7) px(c, xx, y, 1, h, shade(pal.wallLo, 0.9));
+    px(c, x + Math.floor(w / 2) - 3, y + h - 4, 7, 2, pal.desk);
+  }
+
   function render() {
     if (!ctx || !state) return;
-    var pal = eraFor(GD.Engine.year(state));
+    var roomLv = roomTag(state.seats || 3);
+    var pal = roomPalette(eraFor(GD.Engine.year(state)), roomLv);
     var dark = isDark();
     var year = GD.Engine.year(state);
     var frac = (((state.day % 360) + 360) % 360) / 360;
@@ -467,7 +513,7 @@
     var gear = state.furniture || [];
 
     drawShell(pal);
-    drawWallDecor(pal, year, frac, gear);
+    drawWallDecor(pal, year, frac, gear, roomLv);
     drawFloor(pal);
     if (gearHas(gear, 'rug')) drawRug(ctx);
 
@@ -513,7 +559,8 @@
     px(ctx, 0, WALL_Y - 1, W, 1, pal.wallHi);
   }
 
-  function drawWallDecor(pal, year, frac, gear) {
+  function drawWallDecor(pal, year, frac, gear, roomLv) {
+    var lv = roomLv || 1;
     var pad = Math.round(W * 0.035);
     var props = pal.props;
     var cursor = pad;
@@ -523,9 +570,17 @@
     for (var i = 0; i < props.length; i++) {
       var p = props[i];
       if (p === 'window') {
-        var ww = Math.min(38, Math.round(W * 0.18));
-        drawWindow(ctx, pad, top, ww, wh, pal);
-        cursor = pad + ww + 6;
+        if (lv === 1) {
+          /* 车库：窗户位置是一扇卷帘门 */
+          var gw = Math.min(44, Math.round(W * 0.21));
+          drawGarageDoor(ctx, pad, top - 1, gw, wh + 2, pal);
+          cursor = pad + gw + 6;
+        } else {
+          /* 楼越好，窗越大 */
+          var ww = Math.min(20 + lv * 10, Math.round(W * (0.10 + lv * 0.055)));
+          drawWindow(ctx, pad, top, ww, wh, pal);
+          cursor = pad + ww + 6;
+        }
       } else if (p === 'bulb') {
         drawBulb(ctx, Math.round(W * pal.lampX), pal);
         cursor = Math.round(W * pal.lampX) + 8;

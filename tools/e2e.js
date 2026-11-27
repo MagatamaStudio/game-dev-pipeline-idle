@@ -221,6 +221,31 @@ function connect(wsUrl) {
   check('团队面板显示候选人', team.cands >= 1, 'cands=' + team.cands);
   check('团队面板显示日薪', team.salary.indexOf('日薪') > 0, team.salary);
 
+  /* ---------- 1.55 办公室：车库 → 街边 ---------- */
+  var room0 = await evalJs(`({
+    name: (document.querySelector('#team .room-head b') || {}).textContent || '',
+    desc: (document.querySelector('#team .room-desc') || {}).textContent || '',
+    next: (document.querySelector('#team .room-next b') || {}).textContent || '',
+    seats: GD.getState().seats
+  })`);
+  check('团队面板显示当前办公室', room0.name === '车库' && room0.desc.length > 4,
+    room0.name + ' / ' + room0.desc);
+  check('团队面板显示下一间办公室', room0.next.indexOf('街边') >= 0, room0.next);
+
+  var moved = await evalJs(`(() => {
+    GD.getState().money = 5000000;
+    document.querySelector('#team [data-act="expand"]').click();
+    const st = GD.getState();
+    return {
+      seats: st.seats,
+      name: (document.querySelector('#team .room-head b') || {}).textContent || '',
+      toast: [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ')
+    };
+  })()`);
+  check('能搬进街边二层', moved.seats === 4 && moved.name === '街边二层',
+    moved.name + ' seats=' + moved.seats);
+  check('搬家会弹提示', moved.toast.indexOf('搬进') >= 0, moved.toast);
+
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
   check('团队面板可以关闭', await evalJs(`document.querySelector('#team').hidden`) === true);
@@ -620,6 +645,51 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-plan="genre:rpg"]').click()`);
   await sleep(150);
 
+  /* ---------- 8.45 续作 ---------- */
+  var seqUI = await evalJs(`(() => {
+    const st = GD.getState();
+    st.history[0].copies = 120000;
+    /* 点同类型不会触发重建，先切走再切回来 */
+    document.querySelector('[data-plan="genre:rhythm"]').click();
+    document.querySelector('[data-plan="genre:rpg"]').click();
+    const chips = [...document.querySelectorAll('[data-plan^="sequel:"]')];
+    return {
+      chips: chips.length,
+      labels: chips.map(c => c.textContent),
+      hasNew: chips.some(c => c.getAttribute('data-plan') === 'sequel:')
+    };
+  })()`);
+  check('企划里出现续作组', seqUI.chips >= 2 && seqUI.hasNew === true, seqUI.labels.join(' / '));
+
+  var seqPick = await evalJs(`(() => {
+    const chip = [...document.querySelectorAll('[data-plan^="sequel:"]')]
+      .find(c => c.getAttribute('data-plan') !== 'sequel:');
+    chip.click();
+    const st = GD.getState();
+    const pv = [...document.querySelectorAll('.preview .pv')].map(p => p.textContent).join(' | ');
+    return {
+      sequel: st.plan.sequel,
+      genre: st.plan.genre,
+      theme: st.plan.theme,
+      preview: pv,
+      placeholder: (document.getElementById('plan-name') || {}).placeholder || '',
+      engineOk: !!GD.Engine.planSequel(st)
+    };
+  })()`);
+  check('选续作会记住它', String(seqPick.sequel) === '0' && seqPick.engineOk === true,
+    String(seqPick.sequel));
+  check('续作会切回原作的类型', seqPick.genre === 'rpg', seqPick.genre);
+  check('预览里显示续作与销量加成',
+    seqPick.preview.indexOf('续作') >= 0 && seqPick.preview.indexOf('1.40') >= 0, seqPick.preview);
+  check('作品名占位符带系列编号', / 2$/.test(seqPick.placeholder), seqPick.placeholder);
+
+  /* 清掉续作，别影响后面的流程 */
+  await evalJs(`(() => {
+    GD.getState().plan.sequel = null;
+    document.querySelector('[data-plan="genre:rpg"]').click();
+  })()`);
+  await sleep(150);
+
   /* ---------- 8.5 作品集与存档 ---------- */
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);
   await sleep(200);
@@ -754,13 +824,24 @@ function connect(wsUrl) {
   var mobile = await evalJs(`(() => {
     const q = s => document.querySelector(s);
     const r = el => { const b = el.getBoundingClientRect(); return { y: Math.round(b.y), h: Math.round(b.height) }; };
+    const W = document.documentElement.clientWidth;
+    const over = [];
+    document.querySelectorAll('body *').forEach(el => {
+      const b = el.getBoundingClientRect();
+      if (b.width && b.right > W + 0.5) {
+        over.push(el.tagName.toLowerCase() + '.' + String(el.className || '').split(' ')[0] +
+          '[' + Math.round(b.right) + '] ' + (el.textContent || '').trim().slice(0, 18));
+      }
+    });
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       office: r(q('.office')), stage: r(q('#stage')),
-      chipWrap: getComputedStyle(q('.chips')).flexWrap
+      chipWrap: getComputedStyle(q('.chips')).flexWrap,
+      over: over.slice(0, 3)
     };
   })()`);
-  check('手机端无横向溢出', mobile.overflow <= 0, 'overflow=' + mobile.overflow);
+  check('手机端无横向溢出', mobile.overflow <= 0,
+    'overflow=' + mobile.overflow + (mobile.over.length ? ' ← ' + mobile.over.join(' | ') : ''));
   check('手机端布局纵向排列', mobile.stage.y >= mobile.office.y + mobile.office.h - 2,
     'stage.y=' + mobile.stage.y + ' office.bottom=' + (mobile.office.y + mobile.office.h));
   check('选项会换行', mobile.chipWrap === 'wrap');

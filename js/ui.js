@@ -294,8 +294,13 @@
         return;
       }
       if (panelAct === 'expand') {
-        if (E.expandOffice(s)) { GD.SFX.expand(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
-        else { GD.SFX.bad(); }
+        var roomBefore = E.roomIndex(s);
+        if (E.expandOffice(s)) {
+          GD.SFX.expand(); renderTeam();
+          var roomNow = E.room(s);
+          if (E.roomIndex(s) > roomBefore) UI.toast('🏢 搬进「' + roomNow.name + '」· ' + roomNow.desc);
+          if (hooks.onSave) hooks.onSave();
+        } else { GD.SFX.bad(); }
         return;
       }
       if (panelAct === 'refresh') {
@@ -323,6 +328,13 @@
       if (planAttr) {
         var parts = planAttr.split(':');
         s.plan[parts[0]] = parts[1];
+        /* 选续作：自动切回原作的类型与题材 */
+        if (parts[0] === 'sequel' && parts[1] !== '') {
+          var origH = s.history[Number(parts[1])];
+          if (origH) { s.plan.genre = origH.genre; s.plan.theme = origH.theme; }
+        }
+        /* 换类型/题材就不再是那部续作了 */
+        if (parts[0] === 'genre' || parts[0] === 'theme') s.plan.sequel = null;
         /* 换类型后原来选的题材可能没解锁，落到该类型里相性最高的已解锁题材 */
         if (parts[0] === 'genre') E.ensurePlanCombo(s);
         GD.SFX.click();
@@ -543,7 +555,8 @@
       /* 老存档 / 换类型后题材可能还锁着，先纠正再算签名，避免多重建一帧 */
       E.ensurePlanCombo(s);
       /* 平台必须进签名：否则换平台不会重建企划界面，要再点别的按钮才生效 */
-      var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform;
+      var sig = s.plan.genre + '|' + s.plan.theme + '|' + s.plan.leader + '|' + s.plan.platform +
+        '|' + (s.plan.sequel == null ? '' : s.plan.sequel);
       if (sig !== ui.planSig) { ui.planSig = sig; buildPlanning(); }
     } else if (s.phase === 'developing') {
       var bar = byId('dev-bar');
@@ -649,10 +662,31 @@
     });
     html += '</div></div>';
 
+    /* 续作：销量够高的旧作可以接着做（会自动切回原作的类型与题材） */
+    var seqs = E.sequelCandidates(s);
+    if (seqs.length) {
+      html += '<div class="plan-group"><div class="plan-label">续作' +
+        '<span class="plan-label-hint">销量 ≥ ' + num(GD.BAL.sequelMinCopies) + ' 才能出</span></div>' +
+        '<div class="chips">';
+      html += '<button class="chip' + (s.plan.sequel == null || s.plan.sequel === '' ? ' on' : '') +
+        '" data-plan="sequel:">新作</button>';
+      seqs.forEach(function (q) {
+        html += '<button class="chip' + (String(s.plan.sequel) === String(q.index) ? ' on' : '') +
+          '" data-plan="sequel:' + q.index + '">' + esc(q.seriesTitle) + ' ' + q.seq +
+          '<span class="ci">' + num(q.copies) + '</span></button>';
+      });
+      html += '</div></div>';
+    }
+
+    var seqPlan = E.planSequel(s);
+    var placeholder = seqPlan
+      ? seqPlan.seriesTitle + ' ' + seqPlan.seq
+      : g.name + '·' + t.name;
+
     html += '<div class="plan-group"><div class="plan-label">作品名<span class="plan-label-hint">可以不填</span></div>' +
       '<div class="name-row">' +
       '<input class="plan-name" id="plan-name" maxlength="18" autocomplete="off" spellcheck="false" ' +
-      'placeholder="' + esc(g.name + '·' + t.name) + '" value="' + esc(s.plan.name || '') + '">' +
+      'placeholder="' + esc(placeholder) + '" value="' + esc(s.plan.name || '') + '">' +
       '<button class="ghost tiny" data-act="random-name">随机</button>' +
       '</div></div>';
 
@@ -675,6 +709,10 @@
 
     html += '<div class="preview">' +
       '<div class="pv"><label>作品</label><b>' + esc(g.name) + ' · ' + esc(t.name) + '</b></div>' +
+      (p.sequel
+        ? '<div class="pv"><label>续作</label><b class="good">' + esc(p.sequel.title) + ' 第 ' + p.sequel.seq + ' 作 · 销量 ×' +
+          GD.BAL.sequelSales.toFixed(2) + '</b></div>'
+        : '') +
       '<div class="pv"><label>相性</label><b class="' + (p.affinity >= 1.2 ? 'good' : p.affinity < 0.95 ? 'bad' : '') + '">×' + p.affinity.toFixed(2) + '</b></div>' +
       '<div class="pv"><label>预计评分</label><b>' + p.scoreLow + ' – ' + p.scoreHigh + ' / 40</b></div>' +
       '<div class="pv"><label>开发耗时</label><b>' + p.duration.toFixed(0) + ' 秒</b></div>' +
@@ -772,11 +810,21 @@
 
   function renderTeam() {
     var cost = E.expandCost(s);
+    var room = E.room(s);
+    var next = E.nextRoom(s);
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>团队</h3>' +
-      '<div class="panel-sub">' + s.staff.length + ' / ' + s.seats + ' 个工位 · 日薪 ' + money(E.teamSalary(s)) + ' · 声望 ' + Math.round(s.rep || 0) + '</div></div>' +
+      '<div class="panel-sub">' + esc(room.name) + ' · ' + s.staff.length + ' / ' + s.seats +
+      ' 个工位 · 日薪 ' + money(E.teamSalary(s)) + ' · 声望 ' + Math.round(s.rep || 0) + '</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
+
+    /* 当前办公室 */
+    html += '<div class="room-card">' +
+      '<div class="room-head"><b>' + esc(room.name) + '</b>' +
+      '<span class="dim">' + esc(room.sub) + ' · ' + s.seats + ' 个工位</span></div>' +
+      '<div class="room-desc">' + esc(room.desc) + '</div>' +
+      '</div>';
 
     html += '<div class="staff-list">';
     s.staff.forEach(function (st) {
@@ -795,10 +843,17 @@
     });
     html += '</div>';
 
-    if (cost != null) {
-      html += '<div class="panel-block">' +
+    if (cost != null && next) {
+      html += '<div class="panel-block"><div class="block-title">搬办公室</div>' +
+        '<div class="room-next"><b>搬到「' + esc(next.name) + '」</b>' +
+        '<span class="dim">' + next.seats + ' 个工位 · ' + esc(next.desc) + '</span></div>' +
         '<button class="wide" data-act="expand"' + (s.money < cost ? ' disabled' : '') + '>' +
-        '扩建到 ' + (s.seats + 1) + ' 个工位 · ' + money(cost) + '</button></div>';
+        '搬家 · ' + money(cost) + '</button></div>';
+    } else if (E.roomIndex(s) < (GD.ROOMS || []).length - 1) {
+      html += '<div class="panel-block"><p class="dim">受创业宣言限制，这栋楼最多就 ' +
+        s.seats + ' 个工位。</p></div>';
+    } else {
+      html += '<div class="panel-block"><p class="dim">已经是最大的一栋楼了。</p></div>';
     }
 
     html += '<div class="panel-block"><div class="block-title">候选人<span class="dim"> · 每部作品后刷新</span></div>';
@@ -857,6 +912,7 @@
         html += '<div class="arch-row">' +
           '<div class="arch-name">' + esc(title) +
           (isCustom ? '<span class="arch-genre">' + esc(autoName) + '</span>' : '') +
+          (h.seq > 1 ? '<span class="arch-seq">系列第 ' + h.seq + ' 作</span>' : '') +
           '</div>' +
           '<div class="arch-meta">' + esc(h.date || '') + ' · ' + esc(h.window || '普通档期') + '</div>' +
           '<div class="arch-score ' + cls + '">' + h.total + '</div>' +

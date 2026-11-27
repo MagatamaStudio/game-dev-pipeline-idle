@@ -161,8 +161,9 @@
     return 1 + Math.max(0, s.staff.length - 3) * BAL.teamQualityBonus;
   };
 
-  /* 确定性品质（不含随机与事件），用于企划预告 */
-  E.baseQuality = function (s, genreId, themeId, leaderId) {
+  /* 确定性品质（不含随机与事件），用于企划预告。
+   * affMul：续作的相性折扣（BAL.sequelAffinity），默认 1。 */
+  E.baseQuality = function (s, genreId, themeId, leaderId, affMul) {
     var g = E.genre(genreId);
     var leader = E.staffById(s, leaderId);
     var w = g.weights;
@@ -172,7 +173,8 @@
       teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality');
+    return base * E.affinity(genreId, themeId) * (affMul || 1) * 1.08 *
+      E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality');
   };
 
   E.devDuration = function (s, leaderId) {
@@ -184,14 +186,17 @@
 
   /* 企划面板的预估 */
   E.preview = function (s, plan) {
-    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader);
+    var sq = E.planSequelOf(s, plan);
+    var affMul = sq ? BAL.sequelAffinity : 1;
+    var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul);
     /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据 */
     var p = E.platformById(plan.platform || (s.plan && s.plan.platform) || E.platform(s).id, s);
     var cap = p.cap;
-    var duration = E.devDuration(s, plan.leader);
+    var duration = E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1);
     var days = duration * BAL.daysPerSecond;
     return {
-      affinity: E.affinity(plan.genre, plan.theme),
+      affinity: E.affinity(plan.genre, plan.theme) * affMul,
+      sequel: sq,
       quality: q,
       duration: duration,
       days: days,
@@ -203,11 +208,76 @@
     };
   };
 
+  /* ---------------- 续作 ----------------
+   * 销量 >= BAL.sequelMinCopies 的旧作能出续作：
+   *   销量 ×1.40、开发耗时 ×0.80、相性 ×0.85（同一套组合不能一直吃）。
+   * 续作继承原作的系列编号，作品集里显示「第 n 作」。 */
+
+  E.historyTitle = function (h) {
+    if (!h) return '';
+    var custom = h.name ? String(h.name).trim() : '';
+    if (custom) return custom;
+    return E.genre(h.genre).name + '·' + E.theme(h.theme).name;
+  };
+
+  /* 去掉标题末尾的编号：'古墓丽影 2' / '古墓丽影2' / '古墓丽影 II' 都回到 '古墓丽影'。
+   * 续作的自动名字永远接在「系列第一作」的名字后面，不会出现「古墓丽影2 3」。 */
+  E.stripSeq = function (title) {
+    var t = String(title == null ? '' : title).trim();
+    t = t.replace(/[\s·:：\-—]*第?\s*[0-9０-９]+$/, '');
+    t = t.replace(/[\s·:：\-—]+(?:[IVXLC]+)$/i, '');
+    return t.trim() || String(title || '').trim();
+  };
+
+  /* 系列根名：第一作叫过什么，后面就一直用它 */
+  E.seriesRoot = function (h) {
+    if (!h) return '';
+    var root = h.seriesTitle ? String(h.seriesTitle).trim() : '';
+    return root || E.stripSeq(E.historyTitle(h));
+  };
+
+  /* 能出续作的旧作，最近的排前面，最多 4 个 */
+  E.sequelCandidates = function (s) {
+    var hist = s.history || [], out = [];
+    for (var i = hist.length - 1; i >= 0 && out.length < 4; i--) {
+      var h = hist[i];
+      if (!h || (h.copies || 0) < BAL.sequelMinCopies) continue;
+      out.push({
+        index: i,
+        title: E.historyTitle(h),
+        seriesTitle: E.seriesRoot(h),
+        copies: h.copies || 0,
+        seq: (h.seq || 1) + 1,
+        genre: h.genre, theme: h.theme
+      });
+    }
+    return out;
+  };
+
+  /* plan.sequel 存的是作品集下标（字符串也行）；解析成一份续作信息 */
+  E.planSequelOf = function (s, plan) {
+    if (!plan || plan.sequel == null || plan.sequel === '') return null;
+    var h = (s.history || [])[Number(plan.sequel)];
+    if (!h || (h.copies || 0) < BAL.sequelMinCopies) return null;
+    return {
+      index: Number(plan.sequel),
+      title: E.historyTitle(h),
+      seriesTitle: E.seriesRoot(h),
+      seriesKey: h.seriesKey || ('s' + Number(plan.sequel)),
+      seq: (h.seq || 1) + 1
+    };
+  };
+
+  E.planSequel = function (s) { return E.planSequelOf(s, s.plan); };
+
+  /* 当前企划的相性折扣：续作 ×0.85，其余 1 */
+  E.planAffMul = function (s) { return E.planSequel(s) ? BAL.sequelAffinity : 1; };
+
   /* 开发中的实时品质（不含随机） */
   E.liveQuality = function (s) {
     if (!s.project) return 0;
     var avg = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
-    return E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader) *
+    return E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader, E.planAffMul(s)) *
       (1 + ((s.project.eventQualityPct || 0) + avg) / 100);
   };
 
@@ -243,8 +313,24 @@
     return s.rep;
   };
 
-  /* 办公室等级：目前用工位数当等级（3~6 级） */
-  E.officeLevel = function (s) { return s.seats || 3; };
+  /* 办公室等级：工位数就是房间等级（3 车库 / 4 街边 / 5 写字楼 / 6 独栋） */
+  E.officeLevel = function (s) { return Math.max(3, Math.min(6, s.seats || 3)); };
+
+  E.roomDef = function (idx) {
+    var i = Math.max(0, Math.min((GD.ROOMS || []).length - 1, idx));
+    return GD.ROOMS[i];
+  };
+
+  E.roomIndex = function (s) { return E.officeLevel(s) - 3; };
+
+  E.room = function (s) { return E.roomDef(E.roomIndex(s)); };
+
+  E.nextRoom = function (s) {
+    var i = E.roomIndex(s), n = E.roomDef(i + 1);
+    if (!n || (GD.ROOMS || []).length <= i + 1) return null;
+    if (s.seats >= (s.seatCap || 6)) return null;
+    return n;
+  };
 
   /* 拿过几次年度游戏（提名不算） */
   E.awardWins = function (s) {
@@ -616,7 +702,7 @@
     if (!a) return 0;
     var it = E.researchById(a.id);
     if (!it || !(it.days > 0)) return 1;
-    return Math.max(0, Math.min(1, (s.day - a.start) / it.days));
+    return Math.max(0, Math.min(1, (s.day - a.start) / (it.days / E.bonusMul(s, 'research'))));
   };
 
   E.researchMul = function (s, key) {
@@ -701,6 +787,9 @@
     var m = E.researchMul(s, key) * E.furnitureMul(s, key);
     var d = s.declEff && s.declEff[key];
     if (d) m *= d;
+    /* 办公室等级：quality / research / sales 三类乘数 */
+    var rd = E.room(s);
+    if (rd && rd.eff && rd.eff[key]) m *= rd.eff[key];
     return m;
   };
   E.bonusAdd = function (s, key) { return E.researchAdd(s, key) + E.furnitureAdd(s, key); };
@@ -1007,10 +1096,16 @@
       themeId = best;
     }
 
-    s.plan = { genre: plan.genre, theme: themeId, leader: plan.leader, platform: plat.id, name: plan.name || '' };
+    /* 续作：继承系列编号，开发更快、相性打折 */
+    var sq = E.planSequelOf(s, plan);
+
+    s.plan = {
+      genre: plan.genre, theme: themeId, leader: plan.leader, platform: plat.id,
+      name: plan.name || '', sequel: sq ? sq.index : null
+    };
     s.money -= lic;
     s.project = {
-      baseDuration: E.devDuration(s, plan.leader),
+      baseDuration: E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1),
       elapsed: 0,
       progress: 0,
       mode: 'normal',
@@ -1021,6 +1116,7 @@
       microDone: 0,
       quality: 0,
       cost: lic,
+      sequel: sq,
       log: [],
       logAt: 0
     };
@@ -1106,7 +1202,7 @@
 
   function rollQuality(s) {
     var avgMode = s.project.elapsed > 0 ? s.project.modeQSum / s.project.elapsed : 0;
-    var q = E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader);
+    var q = E.baseQuality(s, s.plan.genre, s.plan.theme, s.plan.leader, E.planAffMul(s));
     q *= 1 + ((s.project.eventQualityPct || 0) + avgMode) / 100;
     q += Math.random() * 6 - 3;
     return Math.max(5, Math.min(100, q));
@@ -1253,7 +1349,8 @@
     var fanF = 1 + Math.min(3, Math.sqrt(Math.max(0, s.fans)) / 160);   // 平方根 + 封顶：打破「粉丝越多卖越多」的滚雪球
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
-    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult *
+    var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
+    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult * sequelMult *
       E.bonusMul(s, 'sales') * E.traitFansMul(s) * E.ruleSalesMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
@@ -1268,7 +1365,8 @@
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
+    var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -1326,7 +1424,7 @@
     var rs = researchState(s);
     if (rs.active) {
       var ra = E.researchById(rs.active.id);
-      if (ra && s.day - rs.active.start >= ra.days) {
+      if (ra && s.day - rs.active.start >= ra.days / E.bonusMul(s, 'research')) {
         rs.done.push(ra.id);
         E.unlockNextCombo(s);
         rs.active = null;
@@ -1425,7 +1523,11 @@
           profit: s.sales.revenue - s.project.cost,
           date: E.dateString(s.day),
           window: s.release ? s.release.name : '普通档期',
-          windowMult: s.release ? s.release.mult : 1
+          windowMult: s.release ? s.release.mult : 1,
+          seriesKey: s.project.sequel ? s.project.sequel.seriesKey : null,
+          seriesTitle: s.project.sequel ? s.project.sequel.seriesTitle : null,
+          seq: s.project.sequel ? s.project.sequel.seq : 1,
+          sequelOf: s.project.sequel ? s.project.sequel.title : ''
         };
         s.history.push(s.lastResult);
         /* 做完一部：解锁 2 个新组合；如果这次用的是传说组合，记一笔 */
@@ -1465,6 +1567,11 @@
     var custom = (s.plan && s.plan.name) ? String(s.plan.name).trim() : '';
     if (custom) return custom.slice(0, 18);
     var g = E.genre(s.plan.genre), t = E.theme(s.plan.theme);
+    var sq = E.planSequel(s);
+    if (sq) {
+      /* 续作没起名就接在系列根名后面：「古墓丽影 2」「古墓丽影 3」，不会堆成「古墓丽影2 3」 */
+      return (sq.seriesTitle + ' ' + sq.seq).slice(0, 18);
+    }
     return g.name + '·' + t.name;
   };
 
@@ -1851,6 +1958,11 @@
     if (!GD.GENRES.some(function (g) { return g.id === s.plan.genre; })) s.plan.genre = 'rpg';
     if (!GD.THEMES.some(function (t) { return t.id === s.plan.theme; })) s.plan.theme = 'fantasy';
     if (!s.plan.platform || !GD.PLATFORMS.some(function (p) { return p.id === s.plan.platform; })) s.plan.platform = 'arc72';
+    /* 续作指向的作品必须还在（破产清算/换公司后可能已经对不上） */
+    if (s.plan.sequel != null) {
+      var sqi = Number(s.plan.sequel);
+      if (!(s.history || [])[sqi] || ((s.history[sqi].copies || 0) < BAL.sequelMinCopies)) s.plan.sequel = null;
+    }
 
     /* 数字与状态 */
     var phases = ['planning', 'developing', 'event', 'review', 'release', 'sales', 'done'];

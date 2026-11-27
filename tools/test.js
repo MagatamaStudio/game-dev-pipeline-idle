@@ -1471,5 +1471,139 @@ function playOne(s, plan, choice) {
   ok('老存档读回来收藏面板能算', E.comboStats(back).have === 20);
 })();
 
+/* ---------- 办公室（4 级） ---------- */
+(function () {
+  var s = E.newGame();
+  ok('开局在车库里', E.room(s).key === 'garage' && E.roomIndex(s) === 0, E.room(s).name);
+  ok('车库 3 个工位', E.officeLevel(s) === 3);
+  ok('车库没有品质加成', E.room(s).eff.quality === 1);
+
+  var q0 = E.baseQuality(s, 'rpg', 'fantasy', s.staff[0].id);
+  s.money = 1e9;
+  ok('能搬第一次', E.expandOffice(s) === true && E.room(s).key === 'street', E.room(s).name);
+  var q1 = E.baseQuality(s, 'rpg', 'fantasy', s.staff[0].id);
+  ok('搬家后品质有加成', q1 > q0, q0.toFixed(2) + ' → ' + q1.toFixed(2));
+  ok('街边 4 个工位', E.officeLevel(s) === 4 && s.seats === 4);
+  ok('搬完能多招一个人', s.staff.length < s.seats);
+
+  var guard = 0;
+  while (E.expandOffice(s) && guard++ < 10) { }
+  ok('一路能搬到独栋', E.room(s).key === 'building' && E.officeLevel(s) === 6,
+    E.room(s).name + ' / ' + s.seats + ' 工位');
+  ok('顶了就没有下一级', E.nextRoom(s) === null && E.expandCost(s) === null);
+  ok('搬不动时不再扣钱', (function () {
+    var m = s.money;
+    var r = E.expandOffice(s);
+    return r === false && s.money === m;
+  })());
+
+  /* 三级（写字楼）起研究更快：日历换算成进度 */
+  ok('写字楼研究加成生效', E.roomDef(2).eff.research > 1);
+  ok('独栋卖得更多', E.roomDef(3).eff.sales > 1);
+
+  /* 老存档只有 seats：房间等级跟着推出来 */
+  var saved = E.serialize(E.newGame());
+  var obj = JSON.parse(saved);
+  obj.seats = 5;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档按工位数推出房间', E.room(back).key === 'floor', E.room(back).name);
+})();
+
+/* ---------- 续作 ---------- */
+(function () {
+  var s = E.newGame();
+  ok('一开始没有可做续作的作品', E.sequelCandidates(s).length === 0);
+
+  var base = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72', name: '' };
+  var r0 = playOne(s, base);
+  ok('第一部是一代', !!r0 && r0.seq === 1, r0 ? String(r0.seq) : '没做完');
+
+  s.history[0].copies = GD.BAL.sequelMinCopies - 1;
+  ok('差一份就不算够格', E.sequelCandidates(s).length === 0,
+    String(s.history[0].copies));
+
+  s.history[0].copies = GD.BAL.sequelMinCopies;
+  var cands = E.sequelCandidates(s);
+  ok('销量够的旧作能出续作', cands.length === 1 && cands[0].seq === 2,
+    cands.length ? cands[0].title + ' 第 ' + cands[0].seq + ' 作' : '空');
+
+  s.phase = 'planning';
+  s.plan = { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72', name: '', sequel: null };
+  var pvNormal = E.preview(s, base);
+  var pvSeq = E.preview(s, { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72', name: '', sequel: 0 });
+
+  ok('续作开发更快', pvSeq.duration < pvNormal.duration,
+    pvNormal.duration.toFixed(1) + ' → ' + pvSeq.duration.toFixed(1) + ' 秒');
+  ok('续作相性打折', Math.abs(pvSeq.affinity - pvNormal.affinity * GD.BAL.sequelAffinity) < 1e-9,
+    pvNormal.affinity.toFixed(2) + ' → ' + pvSeq.affinity.toFixed(2));
+  ok('续作品质更低', pvSeq.quality < pvNormal.quality,
+    pvNormal.quality.toFixed(1) + ' → ' + pvSeq.quality.toFixed(1));
+
+  ok('续作能立项', E.startProject(s, { genre: 'rpg', theme: 'fantasy', leader: s.staff[0].id, platform: 'arc72', name: '', sequel: 0 }) === true);
+  ok('立项后记住是第 2 作', !!s.project.sequel && s.project.sequel.seq === 2);
+  ok('续作自动带编号', E.gameName(s) === E.historyTitle(s.history[0]) + ' 2', E.gameName(s));
+
+  s.review = { total: 30 };
+  var estWith = E.estimateSales(s, 1);
+  var savedSq = s.project.sequel;
+  s.project.sequel = null;
+  var estWithout = E.estimateSales(s, 1);
+  s.project.sequel = savedSq;
+  ok('续作预估销量更高', estWith.mid > estWithout.mid,
+    estWithout.mid + ' → ' + estWith.mid);
+
+  /* 完整做一部续作：历史里记成系列第 2 作，再做第 3 作会接上编号 */
+  var s2 = E.newGame();
+  var g0 = { genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72', name: '' };
+  playOne(s2, g0);
+  s2.history[0].copies = 120000;
+  E.nextRound(s2);
+  var g1 = { genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72', name: '', sequel: 0 };
+  var r1 = playOne(s2, g1);
+  ok('用完的续作记成系列第 2 作', !!r1 && r1.seq === 2, r1 ? String(r1.seq) : '没做完');
+
+  s2.history[1].copies = 120000;
+  E.nextRound(s2);
+  s2.phase = 'planning';
+  s2.plan = { genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72', name: '', sequel: null };
+  var cands2 = E.sequelCandidates(s2);
+  ok('续作自己也能再出续作', cands2.some(function (c) { return c.seq === 3; }),
+    cands2.map(function (c) { return c.title + ' ' + c.seq; }).join(' / '));
+
+  var seq3 = E.sequelCandidates(s2).filter(function (c) { return c.seq === 3; })[0];
+  E.nextRound(s2);
+  var r2 = playOne(s2, {
+    genre: 'rpg', theme: 'fantasy', leader: s2.staff[0].id, platform: 'arc72', name: '', sequel: seq3.index
+  });
+  ok('第三作接上同一个系列', !!r2 && r2.seq === 3 && r2.seriesKey === r1.seriesKey,
+    r2 ? String(r2.seq) + ' / ' + r2.seriesKey : '没做完');
+
+  /* 老存档里指向不存在的续作：读档时清掉，不会崩 */
+  var raw = E.serialize(E.newGame());
+  var obj2 = JSON.parse(raw);
+  obj2.plan.sequel = 99;
+  var back2 = E.deserialize(JSON.stringify(obj2));
+  ok('指向不存在的续作会被清掉', back2.plan.sequel === null, String(back2.plan.sequel));
+})();
+
+/* ---------- 系列命名：不能堆成「古墓丽影2 3」 ---------- */
+(function () {
+  ok('去编号：带空格', E.stripSeq('古墓丽影 2') === '古墓丽影', E.stripSeq('古墓丽影 2'));
+  ok('去编号：不带空格', E.stripSeq('古墓丽影2') === '古墓丽影', E.stripSeq('古墓丽影2'));
+  ok('去编号：罗马数字', E.stripSeq('古墓丽影 II') === '古墓丽影', E.stripSeq('古墓丽影 II'));
+  ok('没有编号的标题不动', E.stripSeq('最终幻想') === '最终幻想');
+
+  var s3 = E.newGame();
+  s3.history = [
+    { name: '古墓丽影', copies: 200000, seq: 1, genre: 'adv', theme: 'modern' },
+    { name: '古墓丽影2', copies: 200000, seq: 2, seriesKey: 's0', seriesTitle: '古墓丽影', genre: 'adv', theme: 'modern' }
+  ];
+  s3.plan = { genre: 'adv', theme: 'modern', leader: s3.staff[0].id, platform: 'arc72', name: '', sequel: 1 };
+  ok('第三代的自动名接根名', E.gameName(s3) === '古墓丽影 3', E.gameName(s3));
+  ok('系列根名沿用第一作', E.seriesRoot(s3.history[1]) === '古墓丽影', E.seriesRoot(s3.history[1]));
+  s3.plan.sequel = 0;
+  ok('第二代还是根名 + 2', E.gameName(s3) === '古墓丽影 2', E.gameName(s3));
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);
