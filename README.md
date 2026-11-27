@@ -7,15 +7,6 @@
 **在线玩**：https://magatamastudio.github.io/game-workshop-story/
 **完整设计**：[docs/DESIGN-GDS.md](docs/DESIGN-GDS.md)
 
-## 跑起来
-
-```bash
-node tools/serve.js
-# 打开 http://127.0.0.1:8765
-```
-
-双击 `index.html` 也能跑（`file://` 下同样工作）。
-
 ## 一局是什么
 
 ```
