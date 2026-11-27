@@ -449,6 +449,182 @@
         { label: '再压一次', cost: 0, quality: 6, progress: -6, tip: '品质 +6%，进度 −6%' },
         { label: '收工', cost: 0, quality: 0, progress: 0, tip: '就这样吧' }
       ]
+    },
+
+    /* ---------- 早期补充 ---------- */
+    {
+      id: 'engine', when: 'early',
+      title: '引擎选型',
+      body: '第一周就卡在这里：自己造轮子、买商业引擎，还是拿开源凑。三条路都能走，代价不一样。',
+      options: [
+        { label: '自己造', cost: 0, quality: 5, progress: -12, tip: '品质 +5%，进度 −12%（后期受益）' },
+        { label: '买商业引擎', cost: 12000, quality: 1, progress: 4, tip: '$12,000，进度 +4%' },
+        { label: '用开源', cost: 0, quality: -2, progress: 6, tip: '品质 −2%，进度 +6%' }
+      ]
+    },
+    {
+      id: 'artstyle', when: 'early',
+      title: '美术风格之争',
+      body: '美术坚持手绘，程序说先用色块占位。两人在会议室吵了四十分钟。',
+      options: [
+        { label: '听美术的', cost: 0, quality: 4, progress: -5, tip: '品质 +4%，进度 −5%' },
+        { label: '先用色块', cost: 0, quality: -3, progress: 6, tip: '品质 −3%，进度 +6%' }
+      ]
+    },
+    {
+      id: 'hardname', when: 'early',
+      title: '名字太难念',
+      body: '测试组反馈：没人记住游戏叫什么。连你自己都得想两秒。',
+      options: [
+        { label: '改名', cost: 8000, quality: 0, progress: 0, sales: 6, tip: '$8,000，销量 +6%' },
+        { label: '不改', cost: 0, quality: 0, progress: 0, sales: -2, tip: '销量 −2%' }
+      ]
+    },
+    {
+      id: 'studio', when: 'early',
+      title: '录音棚',
+      body: '音效师说，现在这套合成音"能听，但没有灵魂"。真乐队已经在楼下等着了。',
+      options: [
+        { label: '请真乐队', cost: 25000, quality: 6, progress: 0, tip: '$25,000，品质 +6%' },
+        { label: '继续合成音', cost: 0, quality: -1, progress: 0, tip: '品质 −1%' }
+      ]
+    },
+    {
+      id: 'scope', when: 'early',
+      title: '功能越加越多',
+      body: '策划的需求列表从 30 条涨到了 80 条。每一条都写着"这个必须有"。',
+      options: [
+        { label: '砍掉一半', cost: 0, quality: 3, progress: 8, tip: '品质 +3%，进度 +8%' },
+        { label: '全都做', cost: 0, quality: 2, progress: -12, tip: '品质 +2%，进度 −12%' }
+      ]
+    },
+    {
+      id: 'burnout', when: 'early',
+      title: '有人撑不住了',
+      body: '主程说他昨天在键盘上睡着了。这是他这周第三次提这件事。',
+      options: [
+        { label: '强制休息两天', cost: 0, quality: 2, progress: -6, tip: '品质 +2%，进度 −6%' },
+        { label: '再顶一周', cost: 0, quality: -4, progress: 5, tip: '品质 −4%，进度 +5%' }
+      ]
+    },
+    {
+      id: 'borrow', when: 'early',
+      title: '隔壁组借人',
+      body: '隔壁项目延期了，两个技术现在闲着。要不要借过来用两周？',
+      options: [
+        { label: '借两个人', cost: 15000, quality: 0, progress: 9, tip: '$15,000，进度 +9%' },
+        { label: '自己扛', cost: 0, quality: -1, progress: 0, tip: '品质 −1%' }
+      ]
+    },
+    {
+      id: 'artout', when: 'early',
+      title: '外包美术',
+      body: '外包报价还行，画风能不能对上就不好说了。',
+      options: [
+        { label: '外包出去', cost: 30000, quality: -3, progress: 10, tip: '$30,000，进度 +10%，品质 −3%' },
+        { label: '自己做', cost: 0, quality: 2, progress: -4, tip: '品质 +2%，进度 −4%' }
+      ]
+    },
+    {
+      id: 'viral', when: 'early',
+      title: '内部 GIF 火了',
+      body: '一段试玩 GIF 在公司群里传开了，连老板都问这是谁做的。',
+      options: [
+        { label: '顺势预热', cost: 5000, quality: 0, progress: 0, sales: 8, tip: '$5,000，销量 +8%' },
+        { label: '保持低调', cost: 0, quality: 0, progress: 0, sales: 2, tip: '销量 +2%' }
+      ]
+    },
+    {
+      id: 'savebug', when: 'early',
+      title: '存档丢失',
+      body: '测试时发现退出游戏会把存档洗掉。概率不高，但只要中一次，玩家会骂一辈子。',
+      options: [
+        { label: '立刻修', cost: 0, quality: 4, progress: -8, tip: '品质 +4%，进度 −8%' },
+        { label: '先记下来', cost: 0, quality: -4, progress: 0, tip: '品质 −4%' }
+      ]
+    },
+    {
+      id: 'meetings', when: 'early',
+      title: '一天四个会',
+      body: '早会、需求评审、进度同步、复盘会。今天一行代码没写。',
+      options: [
+        { label: '取消所有会', cost: 0, quality: -1, progress: 8, tip: '品质 −1%，进度 +8%' },
+        { label: '照常开', cost: 0, quality: 1, progress: -4, tip: '品质 +1%，进度 −4%' }
+      ]
+    },
+
+    /* ---------- 后期补充 ---------- */
+    {
+      id: 'preview', when: 'late',
+      title: '媒体想提前试玩',
+      body: '一家媒体打来电话，说想拿试玩版做一期前瞻。他们也可能会挑毛病。',
+      options: [
+        { label: '给他们试玩', cost: 10000, quality: 0, progress: 0, sales: 10, tip: '$10,000，销量 +10%' },
+        { label: '婉拒', cost: 0, quality: 0, progress: 0, sales: -3, tip: '销量 −3%' }
+      ]
+    },
+    {
+      id: 'crash', when: 'late',
+      title: '某个机型必崩',
+      body: '测试机里有一台，进第二关必黑屏。厂商那边说"不影响主体评分"。',
+      options: [
+        { label: '延期三天修', cost: 0, quality: 5, progress: -10, tip: '品质 +5%，进度 −10%' },
+        { label: '先发补丁', cost: 0, quality: -5, progress: 2, tip: '品质 −5%，进度 +2%' }
+      ]
+    },
+    {
+      id: 'storepage', when: 'late',
+      title: '商店页素材',
+      body: '商店页那五张图决定了多少人点进来。现在的素材是临时拼的。',
+      options: [
+        { label: '花钱认真做', cost: 20000, quality: 0, progress: 0, sales: 9, tip: '$20,000，销量 +9%' },
+        { label: '用截图凑', cost: 0, quality: 0, progress: 0, sales: -4, tip: '销量 −4%' }
+      ]
+    },
+    {
+      id: 'discpress', when: 'late',
+      title: '压盘出错',
+      body: '第一批盘印出来偏色严重，封面像被晒过。工厂说重压要三天。',
+      options: [
+        { label: '重新压', cost: 15000, quality: 2, progress: 0, tip: '$15,000，品质 +2%' },
+        { label: '就这样发', cost: 0, quality: 0, progress: 0, sales: -6, tip: '销量 −6%' }
+      ]
+    },
+    {
+      id: 'streamer', when: 'late',
+      title: '主播找上门',
+      body: '一个挺大的主播说首发想播你的游戏，条件是当天独家。',
+      options: [
+        { label: '给独家', cost: 0, quality: 0, progress: 0, sales: 12, tip: '销量 +12%' },
+        { label: '不给', cost: 0, quality: 0, progress: 0, sales: 1, tip: '销量 +1%' }
+      ]
+    },
+    {
+      id: 'legal', when: 'late',
+      title: '收到法务函',
+      body: '有家公司说你的主角"高度相似"。他们的角色是去年注册的，你有印象。',
+      options: [
+        { label: '庭外和解', cost: 30000, quality: 0, progress: 0, sales: 0, tip: '$30,000，不影响销量' },
+        { label: '硬扛到底', cost: 0, quality: 1, progress: 0, sales: -8, tip: '品质 +1%，销量 −8%' }
+      ]
+    },
+    {
+      id: 'quit', when: 'late',
+      title: '核心成员想走',
+      body: '猎头开了两倍薪水。他说还没答应，但也没说不。',
+      options: [
+        { label: '加薪留人', cost: 25000, quality: 4, progress: 0, tip: '$25,000，品质 +4%' },
+        { label: '让他走', cost: 0, quality: -6, progress: 4, tip: '品质 −6%，进度 +4%' }
+      ]
+    },
+    {
+      id: 'finalbuild', when: 'late',
+      title: '最终构建',
+      body: '打包脚本跑完了。要不要再把全量回归跑一遍？跑一次要六小时。',
+      options: [
+        { label: '全量回归', cost: 0, quality: 5, progress: -6, tip: '品质 +5%，进度 −6%' },
+        { label: '直接打包', cost: 0, quality: -2, progress: 3, tip: '品质 −2%，进度 +3%' }
+      ]
     }
   ];
 
