@@ -321,6 +321,7 @@
       declaration: null,
       research: { done: [], active: null },
       furniture: [],
+      brands: [],
       candidates: []
     };
     E.rollCandidates(s);
@@ -563,6 +564,66 @@
     var st = E.makeCrewStaff(info.member.id);
     s.staff.push(st);
     return { ok: true, member: info.member, cost: info.cost, staff: st };
+  };
+
+  /* ---------------- 收购 / 子品牌 ----------------
+   * 买下一整家对手：他们不再参赛，风格与粉丝归你，
+   * 之后作为子品牌每月贡献一笔分成收入。 */
+
+  E.brands = function (s) {
+    if (!Array.isArray(s.brands)) s.brands = [];
+    return s.brands;
+  };
+
+  E.isAcquired = function (s, rivalId) {
+    var list = E.brands(s);
+    for (var i = 0; i < list.length; i++) if (list[i].id === rivalId) return true;
+    return false;
+  };
+
+  E.acquireCost = function (s, r) {
+    return Math.round(BAL.acquireBase * (0.7 + r.power) * (1 + r.games.length * 0.12) * E.inflation(s));
+  };
+
+  E.acquireFans = function (r) {
+    return Math.round(r.games.length * 600 + r.power * 2000);
+  };
+
+  /* 返回 null 表示可以收购；否则是拦下来的原因 */
+  E.acquireBlock = function (s, r) {
+    if (!r) return 'no-rival';
+    if (E.year(s) < r.debut) return 'not-debut';
+    if (E.isAcquired(s, r.id)) return 'owned';
+    if ((s.fans || 0) < BAL.acquireFansMin) return 'fans';
+    if (s.money < E.acquireCost(s, r)) return 'poor';
+    return null;
+  };
+
+  E.acquire = function (s, rivalId) {
+    var r = null;
+    for (var i = 0; i < s.rivals.length; i++) if (s.rivals[i].id === rivalId) r = s.rivals[i];
+    if (!r) return { ok: false, reason: 'no-rival' };
+    var blocked = E.acquireBlock(s, r);
+    if (blocked) return { ok: false, reason: blocked, cost: E.acquireCost(s, r) };
+
+    var cost = E.acquireCost(s, r);
+    s.money -= cost;
+    r.acquired = true;
+    var fans = E.acquireFans(r);
+    s.fans += fans;
+    var brand = {
+      id: r.id, name: r.name, genre: r.genre, theme: r.theme,
+      since: E.year(s), power: r.power, titles: r.games.length
+    };
+    E.brands(s).push(brand);
+    return { ok: true, cost: cost, fans: fans, brand: brand };
+  };
+
+  /* 子品牌每月的被动收入 */
+  E.brandIncome = function (s) {
+    var list = E.brands(s), sum = 0;
+    for (var i = 0; i < list.length; i++) sum += list[i].power * BAL.brandPerMonth;
+    return sum * E.inflation(s);
   };
 
   /* ---------------- 企划 → 开发 ---------------- */
@@ -1063,6 +1124,7 @@
     var yr = E.year(s);
     for (var i = 0; i < s.rivals.length; i++) {
       var r = s.rivals[i];
+      if (r.acquired) continue;          // 被收购的对手不再参赛
       if (yr < r.debut || r.lastYear >= yr) continue;
       r.lastYear = yr;
       if (Math.random() < 0.12) continue;
@@ -1177,7 +1239,7 @@
     var month = Math.floor(s.day / 30);
     var last = s.tailMonth || 0;
     if (month <= last) return 0;
-    var per = E.monthIncome(s);
+    var per = E.monthIncome(s) + E.brandIncome(s);
     s.tailMonth = month;
     var gained = per * (month - last);
     s.money += gained;

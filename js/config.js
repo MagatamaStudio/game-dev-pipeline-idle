@@ -570,7 +570,12 @@
     adCost: 50000,
     adBoost: 1.4,
     fanPerCopy: 1 / 500,
-    rescue: 200000
+    rescue: 200000,
+
+    /* 收购对手当子品牌：粉丝门槛 + 基础价 */
+    acquireFansMin: 15000,
+    acquireBase: 220000,
+    brandPerMonth: 4200
   };
 
   /* 周销量分布（12 周） */

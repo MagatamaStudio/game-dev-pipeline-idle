@@ -245,22 +245,24 @@ function connect(wsUrl) {
     s.day = (1990 - GD.BAL.startYear) * GD.BAL.daysPerYear;
     s.money = 5000000;
     GD.UI.render();
-    var crews = 0, btns = 0, name = '';
+    var crews = 0, btns = 0, acq = 0, name = '';
     if (document.querySelector('[data-act="industry"]')) {
       document.querySelector('[data-act="industry"]').click();
       crews = document.querySelectorAll('#industry .crew-row').length;
       btns = document.querySelectorAll('#industry [data-poach]').length;
+      acq = document.querySelectorAll('#industry [data-acquire]').length;
       name = ((document.querySelector('#industry .crew-name') || {}).textContent || '').trim();
       document.querySelector('[data-act="close-panel"]').click();
     }
     s.day = keep.day;
     s.money = keep.money;
     GD.UI.render();
-    return { crews: crews, btns: btns, name: name };
+    return { crews: crews, btns: btns, acq: acq, name: name };
   })()`);
   check('行业面板显示对手的可挖员工',
     poachUI.crews >= 6 && poachUI.btns >= 6,
     '员工行=' + poachUI.crews + ' 按钮=' + poachUI.btns + ' 例=' + poachUI.name);
+  check('行业面板提供整家收购入口', poachUI.acq >= 4, '收购按钮=' + poachUI.acq);
 
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);

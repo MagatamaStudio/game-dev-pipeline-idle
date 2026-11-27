@@ -1135,6 +1135,21 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .poach:not([disabled]):hover { border-color: var(--accent); background: var(--accent-soft); }
 .poach[disabled] { opacity: .45; cursor: default; }
 .poach small { font-size: 9.5px; color: var(--dim2); font-family: var(--mono); }
+.poach.wide { flex-direction: row; padding: 5px 14px; }
+
+/* 收购：独占一行，贴在员工表下面 */
+.buyout {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.buyout-cost { font-size: 10.5px; color: var(--dim2); font-family: var(--mono); }
+.rival.owned { border-color: #4ea35e; background: var(--ok-soft); }
 
 .year-row {
   display: flex;

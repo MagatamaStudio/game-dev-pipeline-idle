@@ -641,6 +641,44 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 收购 / 子品牌 ---------------- */
+(function () {
+  var s = E.newGame();
+  var white = s.rivals.filter(function (x) { return x.id === 'white'; })[0];
+
+  ok('新开局没有子品牌', E.brands(s).length === 0);
+  ok('还没出道不能收购', E.acquireBlock(s, white) === 'not-debut');
+
+  s.day = (1985 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  ok('粉丝不够不能收购', E.acquireBlock(s, white) === 'fans', 'fans=' + s.fans);
+
+  s.fans = GD.BAL.acquireFansMin;
+  s.money = 100;
+  ok('钱不够不能收购', E.acquireBlock(s, white) === 'poor');
+
+  s.money = 20000000;
+  ok('条件齐了就能收购', E.acquireBlock(s, white) === null);
+
+  var cost = E.acquireCost(s, white);
+  var moneyBefore = s.money, fansBefore = s.fans;
+  var res = E.acquire(s, 'white');
+  ok('收购成功扣钱并加粉丝',
+    res.ok === true && s.money === moneyBefore - cost &&
+    s.fans === fansBefore + E.acquireFans(white),
+    'cost=' + cost + ' 粉丝+' + (s.fans - fansBefore));
+  ok('收购后对手变成子品牌', E.isAcquired(s, 'white') === true && E.brands(s).length === 1);
+  ok('不能重复收购', E.acquireBlock(s, white) === 'owned');
+  ok('子品牌带来月度分成', E.brandIncome(s) > 0, Math.round(E.brandIncome(s)) + '/月');
+
+  var before = white.games.length;
+  s.day += GD.BAL.daysPerYear * 3;
+  for (var i = 0; i < 24; i++) E.tickRivals(s);
+  ok('被收购后不再发新作品', white.games.length === before, 'games=' + white.games.length);
+
+  var back = E.deserialize(E.serialize(s));
+  ok('存档往返保留子品牌', back.brands.length === 1 && E.isAcquired(back, 'white'));
+})();
+
 /* ---------------- 挖人 ---------------- */
 (function () {
   var s = E.newGame();

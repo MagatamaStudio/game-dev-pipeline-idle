@@ -125,7 +125,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -136,6 +136,24 @@
       var rtab = t.getAttribute('data-rtab');
       var gearId = t.getAttribute('data-gear');
       var poachId = t.getAttribute('data-poach');
+      var acqId = t.getAttribute('data-acquire');
+
+      if (acqId) {
+        var ar = E.acquire(s, acqId);
+        if (ar.ok) {
+          GD.SFX.win();
+          UI.toast('🤝 收购了 ' + ar.brand.name + '：粉丝 +' + num(ar.fans) + '，他们以后不再参赛');
+          if (hooks.onSave) hooks.onSave();
+          renderIndustry();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          UI.toast(ar.reason === 'fans' ? '粉丝太少，对方不卖 —— 需要 ' + num(GD.BAL.acquireFansMin)
+            : ar.reason === 'poor' ? '钱不够，需要 ' + money(ar.cost)
+              : '现在还不能收购');
+        }
+        return;
+      }
 
       if (poachId) {
         var parts = String(poachId).split(':');
@@ -806,6 +824,23 @@
 
     s.rivals.forEach(function (r) {
       var active = E.year(s) >= r.debut;
+      var owned = E.isAcquired(s, r.id);
+
+      if (owned) {
+        var brand = null;
+        E.brands(s).forEach(function (b) { if (b.id === r.id) brand = b; });
+        html += '<div class="rival owned">' +
+          '<div class="rival-main">' +
+          '<div class="rival-name">' + esc(r.name) + '<span class="role">子品牌</span></div>' +
+          '<div class="rival-sub">' + (brand ? brand.since + ' 年收购' : '已收购') +
+          ' · 累计 ' + (brand ? brand.titles : 0) + ' 部 · 月度分成 ' +
+          money((brand ? brand.power : r.power) * GD.BAL.brandPerMonth * E.inflation(s)) + '</div>' +
+          '</div>' +
+          '<div class="rival-latest"><span class="good">已归入旗下</span></div>' +
+          '</div>';
+        return;
+      }
+
       var last = r.games[r.games.length - 1];
       var wins = 0;
       for (var i = 0; i < s.yearResults.length; i++) {
@@ -840,6 +875,16 @@
             '</button></div>';
         });
         html += '</div>';
+
+        /* 收购整家 */
+        var blocked = E.acquireBlock(s, r);
+        html += '<div class="buyout">' +
+          '<span class="buyout-cost">收购整家 · ' + money(E.acquireCost(s, r)) +
+          (blocked === 'fans' ? ' · 需要 ' + num(GD.BAL.acquireFansMin) + ' 粉丝' : '') +
+          '</span>' +
+          '<button class="poach wide" data-acquire="' + r.id + '"' +
+          (blocked ? ' disabled' : '') + '>收购</button>' +
+          '</div>';
       }
 
       html += '</div>';
