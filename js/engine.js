@@ -33,7 +33,7 @@
     for (var i = 0; i < s.staff.length; i++) {
       sum += s.staff[i].salary * E.inflation(s) * (1 + E.traitSum(s.staff[i], 'salaryPct'));
     }
-    return sum * E.researchMul(s, 'salary');
+    return sum * E.bonusMul(s, 'salary');
   };
 
   /* ---------------- 员工特质 ----------------
@@ -163,14 +163,14 @@
       teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.researchMul(s, 'quality');
+    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality');
   };
 
   E.devDuration = function (s, leaderId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
-    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.researchMul(s, 'speed'));
+    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed'));
   };
 
   /* 企划面板的预估 */
@@ -185,7 +185,7 @@
       quality: q,
       duration: duration,
       days: days,
-      cost: p.license * E.researchMul(s, 'license') + E.teamSalary(s) * days * E.prodMult(s),
+      cost: p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMult(s),
       platform: p.id,
       license: p.license,
       scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
@@ -266,7 +266,7 @@
     var gain = BAL.xpBase + score;
     var ups = [];
     s.staff.forEach(function (st) {
-      st.xp += gain * (1 + E.traitSum(st, 'xpPct')) * E.researchMul(s, 'xp');
+      st.xp += gain * (1 + E.traitSum(st, 'xpPct')) * E.bonusMul(s, 'xp');
       while (st.xp >= E.xpNeeded(st.level)) {
         st.xp -= E.xpNeeded(st.level);
         st.level++;
@@ -320,6 +320,7 @@
       seats: 3,
       declaration: null,
       research: { done: [], active: null },
+      furniture: [],
       candidates: []
     };
     E.rollCandidates(s);
@@ -418,12 +419,62 @@
     return true;
   };
 
+  /* ---------------- 设备 / 家具 ----------------
+   * 买断制，一次性花钱，永久加成；部分会在像素办公室里画出来。 */
+
+  E.gearById = function (id) {
+    for (var i = 0; i < GD.GEAR.length; i++) if (GD.GEAR[i].id === id) return GD.GEAR[i];
+    return null;
+  };
+
+  function gearState(s) {
+    if (!Array.isArray(s.furniture)) s.furniture = [];
+    return s.furniture;
+  }
+
+  E.hasGear = function (s, id) { return gearState(s).indexOf(id) >= 0; };
+  E.gearCost = function (s, item) { return Math.round(item.cost * E.inflation(s)); };
+
+  E.buyGear = function (s, id) {
+    var list = gearState(s);
+    if (list.indexOf(id) >= 0) return false;
+    var it = E.gearById(id);
+    if (!it) return false;
+    var cost = E.gearCost(s, it);
+    if (s.money < cost) return false;
+    s.money -= cost;
+    list.push(it.id);
+    return true;
+  };
+
+  E.furnitureMul = function (s, key) {
+    var list = gearState(s), m = 1;
+    for (var i = 0; i < list.length; i++) {
+      var it = E.gearById(list[i]);
+      if (it && it.eff && it.eff[key]) m *= it.eff[key];
+    }
+    return m;
+  };
+
+  E.furnitureAdd = function (s, key) {
+    var list = gearState(s), sum = 0;
+    for (var i = 0; i < list.length; i++) {
+      var it = E.gearById(list[i]);
+      if (it && it.eff && it.eff[key]) sum += it.eff[key];
+    }
+    return sum;
+  };
+
+  /* 研究 + 设备合并成的总加成 —— 挂钩点统一用这两个 */
+  E.bonusMul = function (s, key) { return E.researchMul(s, key) * E.furnitureMul(s, key); };
+  E.bonusAdd = function (s, key) { return E.researchAdd(s, key) + E.furnitureAdd(s, key); };
+
   /* ---------------- 企划 → 开发 ---------------- */
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
     var plat = E.platformById(plan.platform || E.platform(s).id);
-    var lic = plat.license * E.researchMul(s, 'license');
+    var lic = plat.license * E.bonusMul(s, 'license');
     if (s.money < lic) return false;
 
     s.plan = { genre: plan.genre, theme: plan.theme, leader: plan.leader, platform: plat.id };
@@ -535,7 +586,7 @@
     var scores = [];
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
-      var v = 10 * q / cap * 0.85 + E.researchAdd(s, 'review');
+      var v = 10 * q / cap * 0.85 + E.bonusAdd(s, 'review');
       if (c.fav === s.plan.genre) v += c.bias;
       if (c.hate === s.plan.genre) v -= 1.0;
       v += Math.random() * 2 - 1;
@@ -670,7 +721,7 @@
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
     var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult *
-      E.researchMul(s, 'sales') * E.traitFansMul(s);
+      E.bonusMul(s, 'sales') * E.traitFansMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
 
@@ -684,7 +735,7 @@
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.researchMul(s, 'sales'));
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.bonusMul(s, 'sales'));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -708,7 +759,7 @@
 
     s.money += revenue;
     s.totalEarned += revenue;
-    s.fans += copies * BAL.fanPerCopy * E.traitFansMul(s) * E.researchMul(s, 'fans');
+    s.fans += copies * BAL.fanPerCopy * E.traitFansMul(s) * E.bonusMul(s, 'fans');
     s.sales.sold += copies;
     s.sales.revenue += revenue;
     s.sales.index++;

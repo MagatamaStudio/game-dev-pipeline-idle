@@ -125,7 +125,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -133,6 +133,25 @@
       var hireId = t.getAttribute('data-hire');
       var decId = t.getAttribute('data-dec');
       var researchId = t.getAttribute('data-research');
+      var rtab = t.getAttribute('data-rtab');
+      var gearId = t.getAttribute('data-gear');
+
+      if (rtab) {
+        GD.SFX.click();
+        ui.rTab = rtab;
+        ui.researchSig = '';
+        renderResearch();
+        return;
+      }
+      if (gearId) {
+        if (E.buyGear(s, gearId)) {
+          GD.SFX.coin();
+          renderResearch();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
 
       if (researchId) {
         if (E.startResearch(s, researchId)) {
@@ -673,18 +692,32 @@
   /* ---------------- 研究 ---------------- */
 
   function renderResearch() {
+    var tab = ui.rTab || 'research';
     var active = E.researchActive(s);
     var prog = E.researchProgress(s);
     var doneN = (s.research && s.research.done) ? s.research.done.length : 0;
+    var gearN = (s.furniture || []).length;
+
+    var sub = tab === 'research'
+      ? '已完成 ' + doneN + ' / ' + GD.RESEARCH.length + ' · ' +
+        (active ? '进行中：' + esc(E.researchById(active.id).name) + ' ' + Math.round(prog * 100) + '%' : '当前空闲')
+      : '已购置 ' + gearN + ' / ' + GD.GEAR.length;
 
     var html = '<div class="panel-card">' +
-      '<div class="panel-head"><div><h3>研究</h3>' +
-      '<div class="panel-sub">已完成 ' + doneN + ' / ' + GD.RESEARCH.length + ' · ' +
-      (active ? '进行中：' + esc(E.researchById(active.id).name) + ' ' + Math.round(prog * 100) + '%' : '当前空闲') +
-      '</div></div>' +
+      '<div class="panel-head"><div><h3>研发</h3><div class="panel-sub">' + sub + '</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
-      '<div class="panel-scroll">';
+      '<div class="tabs">' +
+      '<button class="tab' + (tab === 'research' ? ' on' : '') + '" data-rtab="research">研究</button>' +
+      '<button class="tab' + (tab === 'gear' ? ' on' : '') + '" data-rtab="gear">设备</button>' +
+      '</div>' +
+      '<div class="panel-scroll">' +
+      (tab === 'research' ? researchBody(active, prog) : gearBody()) +
+      '</div></div>';
+    el.research.innerHTML = html;
+  }
 
+  function researchBody(active, prog) {
+    var html = '';
     GD.RESEARCH_BRANCHES.forEach(function (b) {
       html += '<div class="res-branch">' +
         '<div class="res-branch-head"><span class="res-icon" style="color:' + b.color + '">' + b.icon + '</span>' +
@@ -705,10 +738,33 @@
       });
       html += '</div></div>';
     });
-
     html += '<div class="panel-foot">研发按游戏内日历推进 —— 不开发、不发售，时间就不走。</div>';
-    html += '</div></div>';
-    el.research.innerHTML = html;
+    return html;
+  }
+
+  function gearBody() {
+    var html = '';
+    GD.GEAR_CATS.forEach(function (c) {
+      var all = GD.GEAR.filter(function (g) { return g.cat === c.id; });
+      var own = all.filter(function (g) { return E.hasGear(s, g.id); }).length;
+      html += '<div class="res-branch">' +
+        '<div class="res-branch-head"><span class="res-icon">' + c.icon + '</span>' + esc(c.name) +
+        '<span class="res-count">' + own + '/' + all.length + '</span></div><div class="res-list">';
+      all.forEach(function (g) {
+        var has = E.hasGear(s, g.id);
+        var cost = E.gearCost(s, g);
+        var busy = has || s.money < cost;
+        html += '<button class="res-item gear' + (has ? ' done' : '') + '" data-gear="' + g.id + '"' +
+          (busy ? ' disabled' : '') + '>' +
+          '<span class="res-name">' + esc(g.name) + (has ? ' ✓' : '') + '</span>' +
+          '<span class="res-desc">' + esc(g.desc) + '</span>' +
+          '<span class="res-meta">' + (has ? '已购置' : money(cost)) + '</span>' +
+          '</button>';
+      });
+      html += '</div></div>';
+    });
+    html += '<div class="panel-foot">设备买断制：一次性花钱、永久生效。带家具标记的会真的出现在办公室里。</div>';
+    return html;
   }
 
   function renderIndustry() {

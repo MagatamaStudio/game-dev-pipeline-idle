@@ -641,6 +641,51 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 设备 / 家具 ---------------- */
+(function () {
+  ok('设备一共 24 件', GD.GEAR.length === 24, String(GD.GEAR.length));
+  ok('设备分 4 个品类', GD.GEAR_CATS.length === 4);
+
+  var s = E.newGame();
+  ok('新开局没有任何设备', s.furniture.length === 0);
+
+  var item = E.gearById('dblmon');
+  var cost = E.gearCost(s, item);
+  var m0 = s.money;
+  ok('买设备扣钱并记录',
+    E.buyGear(s, 'dblmon') === true && s.money === m0 - cost && E.hasGear(s, 'dblmon'),
+    'cost=' + cost);
+  ok('不能重复购买同一件', E.buyGear(s, 'dblmon') === false);
+
+  var q0 = E.baseQuality(E.newGame(), 'rpg', 'fantasy', 'zhou');
+  var q1 = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
+  ok('设备加成进了作品品质', Math.abs(q1 / q0 - 1.03) < 1e-9,
+    q0.toFixed(2) + ' → ' + q1.toFixed(2));
+
+  var s2 = E.newGame();
+  s2.research.done.push('autotest');
+  E.buyGear(s2, 'dblmon');
+  ok('研究与设备加成相乘', Math.abs(E.bonusMul(s2, 'quality') - 1.04 * 1.03) < 1e-9,
+    String(E.bonusMul(s2, 'quality')));
+
+  var s3 = E.newGame();
+  var sal0 = E.teamSalary(s3);
+  E.buyGear(s3, 'coffee');
+  ok('咖啡机降低日薪', Math.abs(E.teamSalary(s3) - sal0 * 0.96) < 1,
+    Math.round(sal0) + ' → ' + Math.round(E.teamSalary(s3)));
+
+  var s4 = E.newGame();
+  s4.money = 10;
+  ok('钱不够买不了设备', E.buyGear(s4, 'server') === false);
+
+  var bare = {};
+  ok('对象里没有 furniture 字段也不会崩',
+    E.hasGear(bare, 'rug') === false && E.furnitureMul(bare, 'quality') === 1);
+
+  var back = E.deserialize(E.serialize(s));
+  ok('存档往返保留已购设备', back.furniture.indexOf('dblmon') >= 0);
+})();
+
 /* ---------------- 研究 ---------------- */
 (function () {
   ok('研究项一共 24 个', GD.RESEARCH.length === 24, String(GD.RESEARCH.length));

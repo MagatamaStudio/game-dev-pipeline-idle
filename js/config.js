@@ -179,6 +179,50 @@
     { id: 'headhunt', branch: 'team', name: '猎头网络', desc: '经验 +10%，品质 +2%', cost: 70000, days: 100, eff: { xp: 1.10, quality: 1.02 } }
   ];
 
+  /* 设备 / 家具：24 件，买断制，一次性花钱。每个品类 6 件。
+   * eff 语义与研究系统完全一致（乘数 + review 加数）。
+   * art 非空的会真的出现在像素办公室里。 */
+  GD.GEAR_CATS = [
+    { id: 'desk', name: '工位', icon: '▤' },
+    { id: 'room', name: '环境', icon: '◫' },
+    { id: 'fun', name: '娱乐', icon: '♪' },
+    { id: 'infra', name: '基建', icon: '⚡' }
+  ];
+
+  GD.GEAR = [
+    /* ---- 工位 ---- */
+    { id: 'ergochair', cat: 'desk', name: '人体工学椅', desc: '开发速度 +3%', cost: 80000, eff: { speed: 0.97 }, art: null },
+    { id: 'dblmon', cat: 'desk', name: '双显示器', desc: '品质 +3%', cost: 60000, eff: { quality: 1.03 }, art: null },
+    { id: 'bigdesk', cat: 'desk', name: '大工作台', desc: '品质 +2%，开发速度 +2%', cost: 100000, eff: { quality: 1.02, speed: 0.98 }, art: null },
+    { id: 'quiet', cat: 'desk', name: '隔音舱', desc: '品质 +4%', cost: 140000, eff: { quality: 1.04 }, art: null },
+    { id: 'tablet', cat: 'desk', name: '数位板', desc: '品质 +2%', cost: 50000, eff: { quality: 1.02 }, art: null },
+    { id: 'second', cat: 'desk', name: '备用开发机', desc: '开发速度 +2%', cost: 70000, eff: { speed: 0.98 }, art: null },
+
+    /* ---- 环境 ---- */
+    { id: 'plantwall', cat: 'room', name: '绿植墙', desc: '粉丝 +3%', cost: 40000, eff: { fans: 1.03 }, art: 'plant' },
+    { id: 'rug', cat: 'room', name: '地毯', desc: '日薪 −2%', cost: 30000, eff: { salary: 0.98 }, art: 'rug' },
+    { id: 'aircon', cat: 'room', name: '中央空调', desc: '品质 +2%', cost: 90000, eff: { quality: 1.02 }, art: null },
+    { id: 'neon', cat: 'room', name: '霓虹灯牌', desc: '粉丝 +4%', cost: 60000, eff: { fans: 1.04 }, art: 'neon' },
+    { id: 'sofa', cat: 'room', name: '休息沙发', desc: '日薪 −3%', cost: 80000, eff: { salary: 0.97 }, art: 'sofa' },
+    { id: 'window', cat: 'room', name: '落地窗', desc: '粉丝 +3%，品质 +1%', cost: 120000, eff: { fans: 1.03, quality: 1.01 }, art: null },
+
+    /* ---- 娱乐 ---- */
+    { id: 'arcade', cat: 'fun', name: '街机柜', desc: '粉丝 +5%', cost: 70000, eff: { fans: 1.05 }, art: 'arcade' },
+    { id: 'coffee', cat: 'fun', name: '咖啡机', desc: '日薪 −4%', cost: 50000, eff: { salary: 0.96 }, art: 'coffee' },
+    { id: 'fridge', cat: 'fun', name: '冰箱', desc: '日薪 −2%，经验 +3%', cost: 60000, eff: { salary: 0.98, xp: 1.03 }, art: null },
+    { id: 'pingpong', cat: 'fun', name: '乒乓球台', desc: '经验 +5%', cost: 90000, eff: { xp: 1.05 }, art: null },
+    { id: 'console', cat: 'fun', name: '游戏机', desc: '品质 +2%，粉丝 +2%', cost: 60000, eff: { quality: 1.02, fans: 1.02 }, art: null },
+    { id: 'gym', cat: 'fun', name: '健身房', desc: '日薪 −3%，经验 +4%', cost: 150000, eff: { salary: 0.97, xp: 1.04 }, art: null },
+
+    /* ---- 基建 ---- */
+    { id: 'server', cat: 'infra', name: '服务器', desc: '开发速度 +4%', cost: 160000, eff: { speed: 0.96 }, art: 'server' },
+    { id: 'backup', cat: 'infra', name: '备份系统', desc: '品质 +3%', cost: 80000, eff: { quality: 1.03 }, art: null },
+    { id: 'security', cat: 'infra', name: '安保系统', desc: '日薪 −2%', cost: 70000, eff: { salary: 0.98 }, art: null },
+    { id: 'net', cat: 'infra', name: '专线网络', desc: '开发速度 +3%', cost: 110000, eff: { speed: 0.97 }, art: null },
+    { id: 'workshop', cat: 'infra', name: '维修间', desc: '日薪 −3%', cost: 100000, eff: { salary: 0.97 }, art: null },
+    { id: 'lab', cat: 'infra', name: '测试实验室', desc: '品质 +4%，经验 +4%', cost: 180000, eff: { quality: 1.04, xp: 1.04 }, art: null }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };

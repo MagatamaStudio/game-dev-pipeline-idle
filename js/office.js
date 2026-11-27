@@ -325,6 +325,75 @@
     px(c, x + 9, baseY - 1, 6, 1, '#232020');
   }
 
+  /* ---------------- 买来的设备 / 家具 ---------------- */
+  function gearHas(list, id) { return list && list.indexOf(id) >= 0; }
+
+  function drawRug(c) {
+    var x = Math.round(W * 0.10), w = Math.round(W * 0.80);
+    var y = LEG_BOT - 3;
+    px(c, x, y, w, 4, 'rgba(180,72,66,.42)');
+    px(c, x, y, w, 1, 'rgba(255,255,255,.14)');
+    px(c, x - 1, y + 1, 1, 2, 'rgba(180,72,66,.42)');
+    px(c, x + w, y + 1, 1, 2, 'rgba(180,72,66,.42)');
+  }
+
+  function drawNeon(c, x, y) {
+    px(c, x - 1, y - 1, 24, 11, '#1d1a26');
+    px(c, x + 1, y + 2, 19, 1, '#ff6ea8');
+    px(c, x + 1, y + 5, 13, 1, '#6ee0ff');
+    px(c, x + 16, y + 5, 4, 1, '#ffd166');
+    px(c, x + 1, y + 7, 8, 1, 'rgba(255,110,168,.55)');
+  }
+
+  function drawArcade(c, x, baseY) {
+    px(c, x, baseY - 14, 11, 14, '#2a2d3a');
+    px(c, x + 1, baseY - 13, 9, 6, '#15151f');
+    px(c, x + 2, baseY - 12, 7, 4, '#5fd18a');
+    px(c, x + 2, baseY - 12, 7, 1, '#9be8b8');
+    px(c, x + 1, baseY - 6, 9, 1, '#3a3f52');
+    px(c, x + 2, baseY - 5, 3, 1, '#e05c4a');
+    px(c, x + 6, baseY - 5, 3, 1, '#e8b04b');
+  }
+
+  function drawServer(c, x, baseY) {
+    px(c, x, baseY - 16, 9, 16, '#2c3038');
+    px(c, x, baseY - 16, 9, 1, '#41485a');
+    for (var i = 0; i < 6; i++) {
+      px(c, x + 1, baseY - 15 + i * 2, 7, 1, '#3a404b');
+      px(c, x + 6, baseY - 15 + i * 2, 1, 1, i % 2 ? '#5fd18a' : '#7fb2ff');
+    }
+  }
+
+  function drawCoffee(c, x, baseY) {
+    px(c, x, baseY - 6, 10, 6, '#6b6459');
+    px(c, x, baseY - 6, 10, 1, '#8d8578');
+    px(c, x + 3, baseY - 12, 5, 6, '#3a3a42');
+    px(c, x + 4, baseY - 11, 3, 2, '#e8b04b');
+    px(c, x + 5, baseY - 7, 1, 1, '#c9bfa6');
+  }
+
+  function drawSofa(c, x, baseY) {
+    px(c, x, baseY - 7, 16, 7, '#5d6b8a');
+    px(c, x, baseY - 9, 16, 3, '#6f7d9c');
+    px(c, x + 1, baseY - 6, 6, 4, '#7a88a8');
+    px(c, x + 9, baseY - 6, 6, 4, '#7a88a8');
+    px(c, x + 1, baseY - 1, 3, 1, '#3a3f52');
+    px(c, x + 13, baseY - 1, 3, 1, '#3a3f52');
+  }
+
+  /* 前景道具：摆在桌子前面那一条空地上 */
+  function drawFrontGear(gear) {
+    var fy = ROWS - 1;
+    var l = Math.round(W * 0.02);
+    if (gearHas(gear, 'arcade')) { drawArcade(ctx, l, fy); l += 15; }
+    if (gearHas(gear, 'plantwall')) { drawPlant(ctx, l + 2, fy - 1); l += 13; }
+
+    var r = W - Math.round(W * 0.02);
+    if (gearHas(gear, 'server')) { drawServer(ctx, r - 9, fy); r -= 13; }
+    if (gearHas(gear, 'sofa')) { drawSofa(ctx, r - 16, fy); r -= 20; }
+    if (gearHas(gear, 'coffee')) { drawCoffee(ctx, r - 10, fy); r -= 16; }
+  }
+
   /* ---------------- 桌子 / 显示器 ---------------- */
   function drawDesk(c, deskL, deskW, pal, occupied) {
     var deskR = deskL + deskW;
@@ -395,10 +464,12 @@
       ? Math.max(0, Math.min(1, state.project.progress || 0))
       : null;
     var leaderId = state.plan && state.plan.leader;
+    var gear = state.furniture || [];
 
     drawShell(pal);
-    drawWallDecor(pal, year, frac);
+    drawWallDecor(pal, year, frac, gear);
     drawFloor(pal);
+    if (gearHas(gear, 'rug')) drawRug(ctx);
 
     /* ---- 工位 ---- */
     var slotW = W / seats;
@@ -427,6 +498,8 @@
       else if (st) px(ctx, gL, DESK_TOP - 5, 8, 5, pal.case);
     }
 
+    drawFrontGear(gear);
+
     light(pal, dark);
     grade(dark);
   }
@@ -440,7 +513,7 @@
     px(ctx, 0, WALL_Y - 1, W, 1, pal.wallHi);
   }
 
-  function drawWallDecor(pal, year, frac) {
+  function drawWallDecor(pal, year, frac, gear) {
     var pad = Math.round(W * 0.035);
     var props = pal.props;
     var cursor = pad;
@@ -470,6 +543,9 @@
         cursor += 32;
       }
     }
+
+    /* 买了霓虹灯牌就挂在墙上 */
+    if (gearHas(gear, 'neon')) drawNeon(ctx, Math.round(W * 0.40), CEIL_H + 1);
   }
 
   function drawFloor(pal) {

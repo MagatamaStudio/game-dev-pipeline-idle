@@ -270,6 +270,36 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('#research [data-act="close-panel"]').click()`);
   await sleep(150);
 
+  /* ---------- 1.95 设备标签页 ---------- */
+  await evalJs(`document.querySelector('[data-act="research"]').click()`);
+  await sleep(200);
+  await evalJs(`document.querySelector('#research [data-rtab="gear"]').click()`);
+  await sleep(220);
+  var gearPanel = await evalJs(`({
+    items: document.querySelectorAll('#research [data-gear]').length,
+    cats: document.querySelectorAll('#research .res-branch').length,
+    tabOn: (document.querySelector('#research .tab.on') || {}).textContent || ''
+  })`);
+  check('设备页有 4 个品类 24 件',
+    gearPanel.items === 24 && gearPanel.cats === 4 && gearPanel.tabOn === '设备',
+    'items=' + gearPanel.items + ' cats=' + gearPanel.cats);
+
+  var moneyBeforeGear = await evalJs(`GD.getState().money`);
+  await evalJs(`document.querySelector('#research [data-gear="rug"]').click()`);
+  await sleep(220);
+  var gearBuy = await evalJs(`(function () {
+    var s = GD.getState();
+    var canvasErr = null;
+    try { GD.Office.renderNow(); } catch (e) { canvasErr = String((e && e.message) || e); }
+    return { owned: (s.furniture || []).length, money: s.money, canvasErr: canvasErr };
+  })()`);
+  check('可以买设备并扣钱',
+    gearBuy.owned === 1 && moneyBeforeGear - gearBuy.money > 0,
+    'owned=' + gearBuy.owned + ' paid=' + (moneyBeforeGear - gearBuy.money));
+  check('买完设备办公室仍能正常渲染', gearBuy.canvasErr === null, gearBuy.canvasErr || 'ok');
+  await evalJs(`document.querySelector('#research [data-act="close-panel"]').click()`);
+  await sleep(150);
+
   /* ---------- 2. 选择类型/题材 ---------- */
   await evalJs(`document.querySelector('[data-plan="theme:modern"]').click()`);
   await sleep(200);

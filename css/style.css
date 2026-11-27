@@ -632,6 +632,23 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   margin-bottom: 7px;
 }
 .res-icon { font-size: 13px; }
+.res-count { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--dim2); }
+
+/* 研发面板的「研究 / 设备」标签 */
+.tabs { display: flex; gap: 6px; padding: 0 2px 12px; }
+.tab {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color .18s, border-color .18s, background .18s;
+}
+.tab:hover { color: var(--accent); }
+.tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .res-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .res-item {
   display: flex;

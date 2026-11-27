@@ -170,6 +170,16 @@ function connect(wsUrl) {
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(200);
 
+  /* 研发面板（研究 / 设备两页） */
+  await evalJs(`document.querySelector('[data-act="research"]').click()`);
+  await sleep(400);
+  await shot('m0-13-research');
+  await evalJs(`document.querySelector('#research [data-rtab="gear"]').click()`);
+  await sleep(400);
+  await shot('m0-14-gear');
+  await evalJs(`document.querySelector('#research [data-act="close-panel"]').click()`);
+  await sleep(200);
+
   /* 5.9 结局 */
   await evalJs(`(() => { const s = GD.getState(); s.day = (2002 - 1972) * 360; s.phase = 'planning'; s.history = s.history || []; })()`);
   await sleep(700);
