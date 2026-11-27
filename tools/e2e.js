@@ -103,6 +103,26 @@ function connect(wsUrl) {
   await waitFor(async function () { return await evalJs('document.readyState === "complete" && !!window.GD && !!window.GD.UI'); }, 15000, 'load');
   await sleep(500);
 
+  /* ---------- 0. 创业宣言（新开局才有） ---------- */
+  var dec = await evalJs(`(() => ({
+    cards: document.querySelectorAll('[data-dec]').length,
+    planChips: document.querySelectorAll('[data-plan]').length,
+    money: GD.getState().money
+  }))()`);
+  check('开局先出现 4 个创业宣言', dec.cards === 4 && dec.planChips === 0,
+    'cards=' + dec.cards + ' plan=' + dec.planChips);
+  await evalJs(`document.querySelector('[data-dec="garage"]').click()`);
+  await sleep(300);
+  var decAfter = await evalJs(`(() => ({
+    declaration: GD.getState().declaration,
+    money: GD.getState().money,
+    planChips: document.querySelectorAll('[data-plan]').length
+  }))()`);
+  check('选了车库苦干会发 15 万启动金',
+    decAfter.declaration === 'garage' && decAfter.money - dec.money === 150000,
+    '+' + (decAfter.money - dec.money));
+  check('选完宣言后进入企划界面', decAfter.planChips > 0, 'plan=' + decAfter.planChips);
+
   /* ---------- 1. 首屏 ---------- */
   var first = await evalJs(`(() => {
     const q = s => document.querySelector(s);

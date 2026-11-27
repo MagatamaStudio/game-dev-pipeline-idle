@@ -125,6 +125,14 @@
     { id: 'techhead', name: '技术宅', desc: '开发速度 +6%，品质 +3%，粉丝转化 −8%', eff: { speedPct: 0.06, qualityPct: 0.03, fansPct: -0.08 } }
   ];
 
+  /* 创业宣言：开局选一次，只生效一次，不做长期流派 */
+  GD.DECLARATIONS = [
+    { id: 'garage', name: '车库苦干', desc: '起始资金 +$150,000', tip: '先把钱拿到手，前两部的容错就宽了。' },
+    { id: 'network', name: '人脉派', desc: '开局自带 300 粉丝', tip: '起步就有基本盘，首批销量会好看一些。' },
+    { id: 'tech', name: '技术狂人', desc: '三位创始人主属性 +6', tip: '品质和速度的底子更好，但钱一分没多。' },
+    { id: 'thrift', name: '能省则省', desc: '开局就有 4 个工位', tip: '白拿一个工位，早招人早开发。' }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };

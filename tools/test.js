@@ -641,6 +641,53 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 创业宣言 ---------------- */
+(function () {
+  function fresh() { return E.newGame(); }
+
+  var s = fresh();
+  ok('新开局需要选创业宣言', E.needDeclaration(s) === true);
+  ok('没选之前 declaration 是空的', !s.declaration);
+
+  var money0 = s.money;
+  ok('车库苦干发放 15 万启动金',
+    E.chooseDeclaration(s, 'garage') === true && s.money - money0 === 150000,
+    '+' + (s.money - money0));
+  ok('选过之后不再要求选宣言', E.needDeclaration(s) === false);
+  ok('同一局不能重复选', E.chooseDeclaration(s, 'network') === false);
+
+  var s2 = fresh();
+  var fans0 = s2.fans;
+  E.chooseDeclaration(s2, 'network');
+  ok('人脉派给 300 粉丝', s2.fans - fans0 === 300, '+' + (s2.fans - fans0));
+
+  var s3 = fresh();
+  var before = s3.staff.map(function (st) { return st.stats[st.role]; });
+  E.chooseDeclaration(s3, 'tech');
+  var after = s3.staff.map(function (st) { return st.stats[st.role]; });
+  ok('技术狂人给创始人主属性 +6',
+    after.every(function (v, i) { return v - before[i] === 6; }),
+    before.join('/') + ' → ' + after.join('/'));
+
+  var s4 = fresh();
+  E.chooseDeclaration(s4, 'thrift');
+  ok('能省则省开局就有 4 个工位', s4.seats === 4, 'seats=' + s4.seats);
+  ok('第 5 个工位走第二档价格',
+    Math.abs(E.expandCost(s4) - GD.BAL.seatCosts[1] * E.inflation(s4)) < 1,
+    String(E.expandCost(s4)));
+
+  var back = E.deserialize(E.serialize(s));
+  ok('存档往返保留创业宣言', back.declaration === 'garage');
+
+  var old = fresh();
+  old.history.push({ round: 1 });
+  ok('已经做过作品的老局不再要求宣言', E.needDeclaration(old) === false);
+
+  var busy = fresh();
+  busy.phase = 'developing';
+  ok('非企划阶段不要求选宣言', E.needDeclaration(busy) === false);
+})();
+
 /* ---------------- 员工特质 ---------------- */
 (function () {
   var s = E.newGame();

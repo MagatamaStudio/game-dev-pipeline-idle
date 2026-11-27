@@ -121,12 +121,23 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec]');
       if (!t) return;
       GD.SFX.unlock();
 
       var panelAct = t.getAttribute('data-act');
       var hireId = t.getAttribute('data-hire');
+      var decId = t.getAttribute('data-dec');
+
+      if (decId) {
+        if (E.chooseDeclaration(s, decId)) {
+          GD.SFX.win();
+          if (hooks.onSave) hooks.onSave();
+          ui.planSig = '';
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
 
       if (hireId) {
         if (E.hire(s, hireId)) { GD.SFX.coin(); renderTeam(); if (hooks.onSave) hooks.onSave(); UI.render(); }
@@ -357,7 +368,26 @@
 
   /* ---------------- 企划 ---------------- */
 
+  /* 创业宣言：只在全新一局的最开始出现一次 */
+  function buildDeclaration() {
+    var html = '<div class="declare">' +
+      '<div class="declare-title">创业宣言</div>' +
+      '<div class="declare-sub">只生效一次。选一个，然后就开始吧。</div>' +
+      '<div class="declare-list">';
+    GD.DECLARATIONS.forEach(function (d) {
+      html += '<button class="dec" data-dec="' + d.id + '">' +
+        '<b>' + esc(d.name) + '</b>' +
+        '<span class="dec-desc">' + esc(d.desc) + '</span>' +
+        '<span class="dec-tip">' + esc(d.tip) + '</span>' +
+        '</button>';
+    });
+    html += '</div></div>';
+    el.stage.innerHTML = html;
+    el.hint.textContent = '创业宣言只在开局生效一次，之后不会再出现。';
+  }
+
   function buildPlanning() {
+    if (E.needDeclaration(s)) { buildDeclaration(); return; }
     var p = E.preview(s, s.plan);
     var g = E.genre(s.plan.genre), t = E.theme(s.plan.theme);
     var leader = E.staffById(s, s.plan.leader);

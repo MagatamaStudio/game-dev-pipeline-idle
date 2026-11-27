@@ -318,10 +318,44 @@
       ended: false,
       staff: GD.FOUNDERS.map(function (id) { return E.makeStaff(id); }),
       seats: 3,
+      declaration: null,
       candidates: []
     };
     E.rollCandidates(s);
     return s;
+  };
+
+  /* ---------------- 创业宣言 ----------------
+   * 只有全新的一局、还没做完第一部时才需要选；老存档直接跳过。 */
+
+  E.needDeclaration = function (s) {
+    if (!s || s.declaration) return false;
+    if (s.phase !== 'planning') return false;
+    if (s.round !== 1) return false;
+    return !(s.history && s.history.length);
+  };
+
+  E.chooseDeclaration = function (s, id) {
+    if (!E.needDeclaration(s)) return false;
+    var pick = null;
+    for (var i = 0; i < GD.DECLARATIONS.length; i++) {
+      if (GD.DECLARATIONS[i].id === id) pick = GD.DECLARATIONS[i];
+    }
+    if (!pick) return false;
+    s.declaration = pick.id;
+
+    if (pick.id === 'garage') {
+      s.money += 150000;
+    } else if (pick.id === 'network') {
+      s.fans += 300;
+    } else if (pick.id === 'tech') {
+      s.staff.forEach(function (st) {
+        st.stats[st.role] = Math.min(99, st.stats[st.role] + 6);
+      });
+    } else if (pick.id === 'thrift') {
+      s.seats = Math.min(4, s.seats + 1);
+    }
+    return true;
   };
 
   /* ---------------- 企划 → 开发 ---------------- */
