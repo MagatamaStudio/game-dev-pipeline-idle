@@ -12,7 +12,7 @@
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
     weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
-    researchCount: 0, bound: false, lastError: ''
+    researchCount: 0, bound: false, lastError: '', mpPick: null
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -125,9 +125,19 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick]');
       if (!t) return;
       GD.SFX.unlock();
+
+      var mpick = t.getAttribute('data-mpick');
+      if (mpick) {
+        var mparts = String(mpick).split(':');
+        ui.mpPick = ui.mpPick || { budget: 'normal', price: 'mid', cut: 'normal' };
+        ui.mpPick[mparts[0]] = mparts[1];
+        GD.SFX.click();
+        renderIndustry();
+        return;
+      }
 
       var panelAct = t.getAttribute('data-act');
       var hireId = t.getAttribute('data-hire');
@@ -234,6 +244,23 @@
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
       if (panelAct === 'industry') { GD.SFX.click(); renderIndustry(); el.industry.hidden = false; return; }
       if (panelAct === 'research') { GD.SFX.click(); renderResearch(); el.research.hidden = false; return; }
+      if (panelAct === 'launch-platform') {
+        var lp = E.launchPlatform(s, ui.mpPick || { budget: 'normal', price: 'mid', cut: 'normal' });
+        if (lp.ok) {
+          GD.SFX.win();
+          UI.toast('🛰 平台发布：' + lp.mp.name + ' · 装机 ' + lp.mp.install + ' 万，投入 ' + money(lp.cost));
+          ui.planSig = '';
+          if (hooks.onSave) hooks.onSave();
+          renderIndustry();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          UI.toast(lp.reason === 'early' ? '还没到能自研平台的年份'
+            : lp.reason === 'poor' ? '钱不够，需要 ' + money(lp.cost)
+              : '已经有一个平台了');
+        }
+        return;
+      }
       if (panelAct === 'close-panel') {
         GD.SFX.click();
         el.team.hidden = true;
@@ -820,6 +847,16 @@
     return html;
   }
 
+  function mpPickRow(kind, label, list, pick) {
+    var html = '<div class="mp-pick"><div class="mp-pick-label">' + label + '</div><div class="mp-opts">';
+    list.forEach(function (t) {
+      html += '<button class="mp-opt' + (pick[kind] === t.id ? ' on' : '') +
+        '" data-mpick="' + kind + ':' + t.id + '">' +
+        '<b>' + esc(t.name) + '</b><span>' + esc(t.tip) + '</span></button>';
+    });
+    return html + '</div></div>';
+  }
+
   function renderIndustry() {
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>行业</h3>' +
@@ -914,6 +951,39 @@
             '<b class="good">你《' + esc(y.playerAward || '') + '》') +
           '<span class="mono">' + y.winnerScore + '</span></div>';
       });
+    }
+    html += '</div>';
+
+    /* 平台方 */
+    html += '<div class="panel-block"><div class="block-title">平台方</div>';
+    if (s.myPlatform) {
+      var mp = s.myPlatform;
+      html += '<div class="mp-status">' +
+        '<div class="mp-row"><span>平台</span><b>' + esc(mp.name) + '</b>' +
+        '<span class="mono">' + mp.launched + ' 年发布 · ' + esc(mp.budgetName) + ' / ' +
+        esc(mp.priceName) + ' / ' + esc(mp.cutName) + '</span></div>' +
+        '<div class="mp-row"><span>装机</span><b>' + Number(mp.install).toFixed(1) + ' 万</b>' +
+        '<span>售价</span><b>$' + mp.price + '</b>' +
+        '<span>抽成</span><b>' + Math.round(mp.cut * 100) + '%</b></div>' +
+        '<div class="mp-row"><span>去年分成</span><b class="good">' + money(mp.lastRevenue) + '</b>' +
+        '<span class="mono">上架 ' + mp.lastTitles + ' 部 · 累计 ' + mp.thirdParty + ' 部</span></div>' +
+        '</div>';
+    } else if (E.year(s) < GD.MYPLATFORM.minYear) {
+      html += '<p class="dim">到 ' + GD.MYPLATFORM.minYear + ' 年才能自研平台（现在是 ' + E.year(s) + ' 年）。</p>';
+    } else {
+      var pick = ui.mpPick || { budget: 'normal', price: 'mid', cut: 'normal' };
+      var pv = E.launchPreview(s, pick);
+      var mpBlocked = E.launchBlock(s, pick);
+      html += '<p class="dim">自己当平台方：定三个参数，之后每年涨装机、收第三方抽成。' +
+        '自家平台的游戏不用交授权费。</p>';
+      html += mpPickRow('budget', '研发投入', GD.MYPLATFORM.tierBudget, pick);
+      html += mpPickRow('price', '售价', GD.MYPLATFORM.tierPrice, pick);
+      html += mpPickRow('cut', '第三方抽成', GD.MYPLATFORM.tierCut, pick);
+      html += '<div class="mp-summary">初始装机 <b>' + pv.install + '</b> 万 · 售价 <b>$' + pv.price +
+        '</b> · 抽成 <b>' + Math.round(pv.cut * 100) + '%</b> · 投入 <b>' + money(pv.cost) + '</b>' +
+        (mpBlocked === 'poor' ? ' · <span class="bad">资金不足</span>' : '') + '</div>';
+      html += '<button class="wide" data-act="launch-platform"' +
+        (mpBlocked ? ' disabled' : '') + '>发布平台</button>';
     }
     html += '</div>';
 

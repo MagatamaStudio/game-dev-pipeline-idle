@@ -641,6 +641,66 @@ function playOne(s, plan, choice) {
   ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
+/* ---------------- 自研平台 ---------------- */
+(function () {
+  var pick = { budget: 'normal', price: 'mid', cut: 'normal' };
+  var s = E.newGame();
+  ok('2068 年前不能自研平台', E.launchBlock(s, pick) === 'early');
+
+  s.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s.money = 100000000;
+  var pv = E.launchPreview(s, { budget: 'heavy', price: 'cheap', cut: 'lure' });
+  ok('平台预览给出装机 / 售价 / 抽成',
+    pv.install > 0 && pv.price > 0 && pv.cut > 0,
+    'install=' + pv.install + ' price=' + pv.price + ' cut=' + pv.cut);
+
+  var moneyBefore = s.money;
+  var res = E.launchPlatform(s, { budget: 'heavy', price: 'cheap', cut: 'lure' });
+  ok('发布平台扣投入并记录状态',
+    res.ok === true && s.money === moneyBefore - pv.cost && !!s.myPlatform,
+    'cost=' + pv.cost);
+  ok('不能重复发布平台', E.launchBlock(s, pick) === 'exists');
+
+  ok('平台立刻进可用平台列表',
+    E.availablePlatforms(s).some(function (p) { return p.id === 'own'; }));
+
+  var ownDef = E.platformById('own', s);
+  ok('自有平台免授权费且装机来自平台状态',
+    ownDef.license === 0 && ownDef.install === pv.install,
+    'install=' + ownDef.install);
+
+  /* 自家平台立项 */
+  var s2 = E.newGame();
+  s2.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s2.money = 100000000;
+  E.launchPlatform(s2, pick);
+  var started = E.startProject(s2, {
+    genre: 'rpg', theme: 'fantasy', leader: 'zhou', platform: 'own'
+  });
+  ok('自家平台立项不花授权费',
+    started === true && s2.project.cost === 0 && s2.plan.platform === 'own',
+    'cost=' + (s2.project ? s2.project.cost : 'n/a'));
+
+  /* 每年涨装机 + 第三方分成 */
+  var s3 = E.newGame();
+  s3.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  s3.money = 100000000;
+  E.launchPlatform(s3, pick);
+  var inst0 = s3.myPlatform.install;
+  var money0 = s3.money;
+  s3.day += GD.BAL.daysPerYear;
+  var tp = E.tickPlatform(s3);
+  ok('平台每年涨装机', s3.myPlatform.install > inst0, inst0 + ' → ' + s3.myPlatform.install);
+  ok('平台产生第三方分成',
+    tp && tp.revenue > 0 && s3.money >= money0,
+    tp ? 'rev=' + tp.revenue + ' 上架=' + tp.titles : 'null');
+
+  var back = E.deserialize(E.serialize(s3));
+  ok('存档往返保留自研平台',
+    !!back.myPlatform && typeof back.myPlatform.install === 'number',
+    String(back.myPlatform && back.myPlatform.install));
+})();
+
 /* ---------------- 子品牌产出线 ---------------- */
 (function () {
   var s = E.newGame();

@@ -81,9 +81,10 @@
     return GD.ROSTER[0];
   };
 
-  E.platformById = function (id) {
-    for (var i = 0; i < GD.PLATFORMS.length; i++) if (GD.PLATFORMS[i].id === id) return GD.PLATFORMS[i];
-    return GD.PLATFORMS[0];
+  E.platformById = function (id, s) {
+    var list = s ? E.allPlatforms(s) : GD.PLATFORMS;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return list[0] || GD.PLATFORMS[0];
   };
 
   E.platformLabel = function (p) {
@@ -105,9 +106,10 @@
 
   E.availablePlatforms = function (s) {
     var year = E.year(s);
+    var all = E.allPlatforms(s);
     var out = [];
-    for (var i = 0; i < GD.PLATFORMS.length; i++) {
-      if (GD.PLATFORMS[i].year <= year) out.push(GD.PLATFORMS[i]);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].year <= year) out.push(all[i]);
     }
     return out;
   };
@@ -322,6 +324,7 @@
       research: { done: [], active: null },
       furniture: [],
       brands: [],
+      myPlatform: null,
       candidates: []
     };
     E.rollCandidates(s);
@@ -648,11 +651,113 @@
     if (s.yearBrand.length > 200) s.yearBrand.shift();
   };
 
+  /* ---------------- 自研平台 ----------------
+   * 2068 起可以自己开平台：定三个参数，之后每年涨装机、收第三方抽成。
+   * 平台本身作为一个动态平台对象混进 GD.PLATFORMS 的序列里，
+   * 这样企划界面和其它平台逻辑完全不用改。 */
+
+  function mpTier(kind, id) {
+    var list = GD.MYPLATFORM[kind];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return list[0];
+  }
+
+  E.myPlatformDef = function (s) {
+    var mp = s && s.myPlatform;
+    if (!mp) return null;
+    return {
+      id: 'own', code: GD.MYPLATFORM.code, brand: GD.MYPLATFORM.brand, name: mp.name,
+      year: mp.launched, retire: 9999,
+      install: mp.install, license: 0, price: mp.price,
+      cap: GD.MYPLATFORM.cap, fav: null, own: true
+    };
+  };
+
+  E.allPlatforms = function (s) {
+    var def = E.myPlatformDef(s);
+    return def ? GD.PLATFORMS.concat([def]) : GD.PLATFORMS;
+  };
+
+  E.launchBlock = function (s, pick) {
+    if (s.myPlatform) return 'exists';
+    if (E.year(s) < GD.MYPLATFORM.minYear) return 'early';
+    var cost = Math.round(mpTier('tierBudget', pick && pick.budget).cost * E.inflation(s));
+    if (s.money < cost) return 'poor';
+    return null;
+  };
+
+  E.launchPreview = function (s, pick) {
+    var b = mpTier('tierBudget', pick && pick.budget);
+    var p = mpTier('tierPrice', pick && pick.price);
+    var c = mpTier('tierCut', pick && pick.cut);
+    return {
+      cost: Math.round(b.cost * E.inflation(s)),
+      install: Math.round(b.installBase * p.installMul * 10) / 10,
+      price: p.price,
+      cut: c.cut,
+      budgetName: b.name, priceName: p.name, cutName: c.name,
+      b: b, p: p, c: c
+    };
+  };
+
+  E.launchPlatform = function (s, pick) {
+    var blocked = E.launchBlock(s, pick);
+    if (blocked) return { ok: false, reason: blocked, cost: E.launchPreview(s, pick).cost };
+    var pv = E.launchPreview(s, pick);
+    s.money -= pv.cost;
+    s.myPlatform = {
+      name: 'M-' + String(E.year(s)).slice(-2),
+      launched: E.year(s),
+      install: pv.install,
+      price: pv.price,
+      unitMul: pv.p.unitMul,
+      cut: pv.cut,
+      thirdMul: pv.c.thirdMul,
+      budgetName: pv.budgetName,
+      priceName: pv.priceName,
+      cutName: pv.cutName,
+      lastYear: E.year(s),
+      thirdParty: 0,
+      revenue: 0,
+      lastRevenue: 0,
+      lastTitles: 0
+    };
+    return { ok: true, cost: pv.cost, mp: s.myPlatform };
+  };
+
+  /* 每年：装机增长 + 第三方上架与抽成 */
+  E.tickPlatform = function (s) {
+    var mp = s.myPlatform;
+    if (!mp) return null;
+    var yr = E.year(s);
+    if (mp.lastYear >= yr) return null;
+    mp.lastYear = yr;
+
+    /* 装机：投入越大涨得越多，但基数越大越难涨 */
+    var grow = 1.6 * (mp.install > 0 ? 1 : 0) - 0.055 * mp.install;
+    mp.install = Math.max(0.5, Math.round((mp.install + grow) * 10) / 10);
+
+    var rivals = 0;
+    for (var i = 0; i < s.rivals.length; i++) {
+      if (!s.rivals[i].acquired && yr >= s.rivals[i].debut) rivals++;
+    }
+    var titles = Math.max(0, Math.round((rivals + 1) * mp.thirdMul * (0.4 + mp.install / 22)));
+
+    var rev = Math.round(titles * mp.install * mp.price * 900 * mp.cut * E.inflation(s));
+    mp.lastTitles = titles;
+    mp.lastRevenue = rev;
+    mp.thirdParty += titles;
+    mp.revenue += rev;
+    s.money += rev;
+    s.totalEarned += rev;
+    return { titles: titles, revenue: rev, install: mp.install };
+  };
+
   /* ---------------- 企划 → 开发 ---------------- */
 
   E.startProject = function (s, plan) {
     if (s.phase !== 'planning') return false;
-    var plat = E.platformById(plan.platform || E.platform(s).id);
+    var plat = E.platformById(plan.platform || E.platform(s).id, s);
     var lic = plat.license * E.bonusMul(s, 'license');
     if (s.money < lic) return false;
 
@@ -1087,6 +1192,7 @@
     E.settleMonths(s);
     E.tickRivals(s);
     E.tickBrands(s);
+    E.tickPlatform(s);
     var got = E.settleAwards(s);
     for (var ai = 0; ai < got.length; ai++) out.push({ type: 'award', award: got[ai] });
     if (s.phase === 'planning' && !s.ended && E.year(s) >= BAL.endYear) {

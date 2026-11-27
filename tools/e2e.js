@@ -264,6 +264,31 @@ function connect(wsUrl) {
     '员工行=' + poachUI.crews + ' 按钮=' + poachUI.btns + ' 例=' + poachUI.name);
   check('行业面板提供整家收购入口', poachUI.acq >= 4, '收购按钮=' + poachUI.acq);
 
+  /* 自研平台：2068 之后行业面板底部出现三组参数 */
+  var mpUI = await evalJs(`(function () {
+    var s = GD.getState();
+    var keep = { day: s.day, money: s.money };
+    s.day = (2068 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+    s.money = 50000000;
+    GD.UI.render();
+    document.querySelector('[data-act="industry"]').click();
+    var picks = document.querySelectorAll('#industry .mp-pick').length;
+    var opts = document.querySelectorAll('#industry [data-mpick]').length;
+    var btn = document.querySelectorAll('#industry [data-act="launch-platform"]').length;
+    var on = 0;
+    var heavy = document.querySelector('#industry [data-mpick="budget:heavy"]');
+    if (heavy) { heavy.click(); on = document.querySelectorAll('#industry .mp-opt.on').length; }
+    document.querySelector('[data-act="close-panel"]').click();
+    s.day = keep.day;
+    s.money = keep.money;
+    GD.UI.render();
+    return { picks: picks, opts: opts, btn: btn, on: on };
+  })()`);
+  check('行业面板提供自研平台入口',
+    mpUI.picks === 3 && mpUI.opts === 9 && mpUI.btn === 1,
+    '参数组=' + mpUI.picks + ' 选项=' + mpUI.opts + ' 按钮=' + mpUI.btn);
+  check('平台参数可以切换', mpUI.on >= 3, '选中=' + mpUI.on);
+
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
 

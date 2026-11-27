@@ -223,6 +223,31 @@
     { id: 'lab', cat: 'infra', name: '测试实验室', desc: '品质 +4%，经验 +4%', cost: 180000, eff: { quality: 1.04, xp: 1.04 }, art: null }
   ];
 
+  /* ---------------- 玩家自研平台（2068 起） ----------------
+   * 三个参数各三档：研发投入（决定初始装机）、售价（装机 × 单份收入）、
+   * 第三方抽成（抽成率 × 对第三方的吸引力）。 */
+  GD.MYPLATFORM = {
+    minYear: 2068,
+    code: 'OWN',
+    brand: '自研',
+    cap: 170,
+    tierBudget: [
+      { id: 'lean', name: '轻量投入', cost: 2000000, installBase: 5.0, tip: '便宜，装机少' },
+      { id: 'normal', name: '标准投入', cost: 5000000, installBase: 9.0, tip: '均衡' },
+      { id: 'heavy', name: '重注投入', cost: 9000000, installBase: 14.0, tip: '贵，装机多' }
+    ],
+    tierPrice: [
+      { id: 'cheap', name: '低价铺量', price: 55, installMul: 1.35, unitMul: 0.8, tip: '装机多、单份少' },
+      { id: 'mid', name: '中价', price: 80, installMul: 1.0, unitMul: 1.0, tip: '均衡' },
+      { id: 'premium', name: '高价', price: 130, installMul: 0.72, unitMul: 1.25, tip: '装机少、单份多' }
+    ],
+    tierCut: [
+      { id: 'lure', name: '低抽成', cut: 0.15, thirdMul: 1.5, tip: '吸引更多第三方上架' },
+      { id: 'normal', name: '标准抽成', cut: 0.30, thirdMul: 1.0, tip: '均衡' },
+      { id: 'greedy', name: '高抽成', cut: 0.45, thirdMul: 0.6, tip: '抽得多但上架的少' }
+    ]
+  };
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };

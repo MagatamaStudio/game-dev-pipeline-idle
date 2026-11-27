@@ -1151,6 +1151,51 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .buyout-cost { font-size: 10.5px; color: var(--dim2); font-family: var(--mono); }
 .rival.owned { border-color: #4ea35e; background: var(--ok-soft); }
 
+/* 平台方：参数三选一 */
+.mp-pick { margin: 10px 0; }
+.mp-pick-label { font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+.mp-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.mp-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.mp-opt:hover { border-color: var(--accent); }
+.mp-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.mp-opt b { font-size: 11.5px; }
+.mp-opt span { font-size: 9.5px; color: var(--dim2); line-height: 1.4; }
+.mp-summary {
+  font-size: 10.5px;
+  color: var(--dim2);
+  font-family: var(--mono);
+  margin: 10px 0;
+  line-height: 1.6;
+}
+.mp-summary .bad { color: #e05c4a; }
+.mp-status { display: flex; flex-direction: column; gap: 6px; }
+.mp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--dim);
+  flex-wrap: wrap;
+}
+.mp-row b { color: var(--text); font-family: var(--mono); }
+.mp-row .good { color: #4ea35e; }
+@media (max-width: 640px) {
+  .mp-opts { grid-template-columns: minmax(0, 1fr); }
+}
+
 .year-row {
   display: flex;
   gap: 10px;
