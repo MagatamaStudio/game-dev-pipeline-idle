@@ -297,6 +297,67 @@
       '实验室', '回廊', '残响', '航线']
   };
 
+  /* ---------------- 世代规则（无尽时代 2021–2075） ----------------
+   * 每条规则从某一年开始生效，直到下一条生效为止。
+   * 效果键（都能挂在引擎已有的出口上）：
+   *   speed      开发时长乘数（>1 更慢）
+   *   quality    品质乘数
+   *   salary     日薪乘数
+   *   sales      销量乘数
+   *   fanSales   销量额外吃粉丝：×(1 + min(0.8, sqrt(fans) × 系数))
+   *   repSales   销量额外吃声望：×(1 + rep/100 × 系数)
+   *   cut        发行抽成增减（加到 publisherCut 上）
+   *   tail       长尾收入乘数
+   *   reviewNoise 评审随机波动倍率；noBias 为 true 时不吃评审偏科
+   *   cost       进入该世代的**一次性**投入（付不起就先不生效，每年重试） */
+  GD.RULES = [
+    {
+      from: 2021, name: '分成制', desc: '不再有一次性回款，平台抽成更高，但长尾更值钱',
+      eff: { cut: -0.12, tail: 2.2 },
+      learn: '首发不重要了，得看一部作品能卖多久'
+    },
+    {
+      from: 2026, name: '沉浸度', desc: '新增沉浸度：(美术+程序) 决定品质上限，开发周期 +50%',
+      eff: { speed: 1.5, quality: 1.12 },
+      learn: '周期变长，硬堆速度不如堆对属性'
+    },
+    {
+      from: 2033, name: 'AI 员工', desc: 'AI 接手了重复劳动，人力成本大降',
+      eff: { salary: 0.62, quality: 1.02 },
+      learn: '人可以少，创意才是稀缺资源'
+    },
+    {
+      from: 2040, name: '粉丝驱动', desc: '销量几乎完全由粉丝盘决定，装机量不再关键',
+      eff: { fanSales: 0.0025 },
+      learn: '从讨好平台变成讨好社区'
+    },
+    {
+      from: 2047, name: '梦境开发', desc: '开发搬进梦境，周期减半，但品质略有损失',
+      eff: { speed: 0.55, quality: 0.94 },
+      learn: '时间变成可交易资源，代价是状态'
+    },
+    {
+      from: 2054, name: '感官舱体', desc: '新增感官维度，需要一次性投入 $5,000,000 建造舱体',
+      eff: { cost: 5000000, quality: 1.18 },
+      learn: '从轻资产转向重资产，现金流风险剧增'
+    },
+    {
+      from: 2061, name: '策展人', desc: '主体由 AI 生成，评分改为玩家众评：波动翻倍、不再吃评审偏科',
+      eff: { reviewNoise: 2.2, noBias: true },
+      learn: '品质不再可控，要学的是「挑选」'
+    },
+    {
+      from: 2068, name: '城市参与', desc: '销量由城市参与人数驱动，声望成了硬通货',
+      eff: { sales: 1.1, repSales: 0.5 },
+      learn: '从商业转向公共事务'
+    },
+    {
+      from: 2075, name: '跨殖民地', desc: '多市场调度，销量大涨但要承受风格错配',
+      eff: { sales: 1.35, quality: 0.96 },
+      learn: '本地化成了核心'
+    }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };

@@ -40,7 +40,7 @@
     for (var i = 0; i < s.staff.length; i++) {
       sum += s.staff[i].salary * E.inflation(s) * (1 + E.traitSum(s.staff[i], 'salaryPct'));
     }
-    return sum * E.bonusMul(s, 'salary');
+    return sum * E.bonusMul(s, 'salary') * E.ruleMul(s, 'salary');
   };
 
   /* ---------------- 员工特质 ----------------
@@ -172,14 +172,14 @@
       teamQ += w[k] * E.teamStat(s, k);
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
-    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality');
+    return base * E.affinity(genreId, themeId) * 1.08 * E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality');
   };
 
   E.devDuration = function (s, leaderId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
-    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed'));
+    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed') * E.ruleMul(s, 'speed'));
   };
 
   /* 企划面板的预估 */
@@ -359,6 +359,7 @@
       furniture: [],
       brands: [],
       myPlatform: null,
+      rulesPaid: [],
       candidates: []
     };
     E.rollCandidates(s);
@@ -398,6 +399,62 @@
     return true;
   };
 
+  /* ---------------- 世代规则 ----------------
+   * 无尽时代每进入一个新世代就换一条规则，效果全部挂在已有的乘数出口上。 */
+
+  E.ruleFor = function (year) {
+    var hit = null;
+    for (var i = 0; i < GD.RULES.length; i++) if (year >= GD.RULES[i].from) hit = GD.RULES[i];
+    return hit;
+  };
+
+  E.rulePaid = function (s, from) {
+    return Array.isArray(s.rulesPaid) && s.rulesPaid.indexOf(from) >= 0;
+  };
+
+  /* 当前真正生效的规则：带一次性投入的，没付钱就先不生效 */
+  E.ruleOf = function (s) {
+    var r = E.ruleFor(E.year(s));
+    if (!r) return null;
+    if (r.eff.cost && !E.rulePaid(s, r.from)) return null;
+    return r;
+  };
+
+  E.ruleMul = function (s, key) {
+    var r = E.ruleOf(s);
+    return (r && r.eff[key] != null) ? r.eff[key] : 1;
+  };
+
+  E.ruleDelta = function (s, key) {
+    var r = E.ruleOf(s);
+    return (r && r.eff[key] != null) ? r.eff[key] : 0;
+  };
+
+  E.ruleFlag = function (s, key) {
+    var r = E.ruleOf(s);
+    return !!(r && r.eff[key]);
+  };
+
+  E.ruleSalesMul = function (s) {
+    var r = E.ruleOf(s);
+    if (!r) return 1;
+    var m = r.eff.sales || 1;
+    if (r.eff.fanSales) m *= 1 + Math.min(0.8, Math.sqrt(Math.max(0, s.fans)) * r.eff.fanSales);
+    if (r.eff.repSales) m *= 1 + (s.rep || 0) / 100 * r.eff.repSales;
+    return m;
+  };
+
+  /* 新世代的一次性投入：付得起就付，付不起明年再试 */
+  E.tickRules = function (s) {
+    if (!Array.isArray(s.rulesPaid)) s.rulesPaid = [];
+    var r = E.ruleFor(E.year(s));
+    if (!r || !r.eff.cost || E.rulePaid(s, r.from)) return null;
+    var cost = Math.round(r.eff.cost * E.inflation(s));
+    if (s.money < cost) return { type: 'missed', rule: r, cost: cost };
+    s.money -= cost;
+    s.rulesPaid.push(r.from);
+    return { type: 'paid', rule: r, cost: cost };
+  };
   /* ---------------- 研究 ----------------
    * 一次只做一个项目，按日历推进：不开发游戏时间就不走。
    * 完成后给公司永久加成，走乘数（quality/speed/salary/xp/fans/sales/license）
@@ -908,9 +965,9 @@
       var c = GD.CRITICS[i];
       /* 次线性：品质超出 cap 越多，边际收益越小，避免「品质一高必打满分」 */
       var v = 10 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 + E.bonusAdd(s, 'review') + (s.rep || 0) / 100 * 0.8;
-      if (c.fav === s.plan.genre) v += c.bias;
-      if (c.hate === s.plan.genre) v -= 1.0;
-      v += Math.random() * 2 - 1;
+      if (!E.ruleFlag(s, 'noBias') && c.fav === s.plan.genre) v += c.bias;
+      if (!E.ruleFlag(s, 'noBias') && c.hate === s.plan.genre) v -= 1.0;
+      v += (Math.random() * 2 - 1) * E.ruleMul(s, 'reviewNoise');
       scores.push(Math.max(1, Math.min(10, Math.round(v))));
     }
     var total = 0;
@@ -1042,7 +1099,7 @@
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
     var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult *
-      E.bonusMul(s, 'sales') * E.traitFansMul(s);
+      E.bonusMul(s, 'sales') * E.traitFansMul(s) * E.ruleSalesMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
 
@@ -1056,7 +1113,7 @@
     var windowMult = s.release ? s.release.mult : 1;
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.bonusMul(s, 'sales'));
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -1076,7 +1133,7 @@
     var i = s.sales.index;
     var frac = GD.SALES_CURVE[i] || 0.011;
     var copies = Math.round(s.sales.total * frac * s.sales.boost);
-    var revenue = copies * E.platform(s).price * BAL.publisherCut;
+    var revenue = copies * E.platform(s).price * (BAL.publisherCut + E.ruleDelta(s, 'cut'));
 
     s.money += revenue;
     s.totalEarned += revenue;
@@ -1230,6 +1287,8 @@
     E.tickRivals(s);
     E.tickBrands(s);
     E.tickPlatform(s);
+    var ruleEv = E.tickRules(s);
+    if (ruleEv) out.push({ type: ruleEv.type === 'paid' ? 'rulePaid' : 'ruleMissed', rule: ruleEv.rule, cost: ruleEv.cost });
     var got = E.settleAwards(s);
     for (var ai = 0; ai < got.length; ai++) out.push({ type: 'award', award: got[ai] });
     if (s.phase === 'planning' && !s.ended && E.year(s) >= BAL.endYear) {
@@ -1431,7 +1490,7 @@
 
   E.monthIncome = function (s) {
     var sum = 0;
-    for (var i = 0; i < s.history.length; i++) sum += (s.history[i].revenue || 0) * BAL.tailPerMonth;
+    for (var i = 0; i < s.history.length; i++) sum += (s.history[i].revenue || 0) * BAL.tailPerMonth * E.ruleMul(s, 'tail');
     return sum;
   };
 

@@ -933,6 +933,75 @@ function playOne(s, plan, choice) {
   ok('随机名不是空的', typeof rnd === 'string' && rnd.length >= 2, rnd);
 })();
 
+/* ---------------- 世代规则 ---------------- */
+(function () {
+  ok('规则表一共 9 条', GD.RULES.length === 9, String(GD.RULES.length));
+
+  var s = E.newGame();
+  ok('1972 年没有世代规则', E.ruleFor(E.year(s)) === null && E.ruleOf(s) === null);
+
+  s.day = (2025 - GD.BAL.startYear) * 360;
+  var r1 = E.ruleFor(E.year(s));
+  ok('2025 年生效的是「分成制」', r1 && r1.name === '分成制', r1 && r1.name);
+  ok('分成制把发行抽成调低', Math.abs(E.ruleDelta(s, 'cut') + 0.12) < 1e-9, String(E.ruleDelta(s, 'cut')));
+  ok('分成制把长尾调高', Math.abs(E.ruleMul(s, 'tail') - 2.2) < 1e-9, String(E.ruleMul(s, 'tail')));
+
+  /* 对比同一局面在「有规则 / 清空规则表」下的结果 */
+  function ratioAt(year, fn) {
+    var st = E.newGame();
+    st.day = (year - GD.BAL.startYear) * 360;
+    var withRule = fn(st);
+    var keep = GD.RULES;
+    GD.RULES = [];
+    var noRule = fn(st);
+    GD.RULES = keep;
+    return noRule ? withRule / noRule : 0;
+  }
+
+  var sp = ratioAt(2030, function (st) { return E.devDuration(st, 'zhou'); });
+  ok('沉浸度让开发周期变为 1.5 倍', Math.abs(sp - 1.5) < 0.05, sp.toFixed(3));
+
+  var sal = ratioAt(2035, function (st) { return E.teamSalary(st); });
+  ok('AI 员工让日薪降到 62%', Math.abs(sal - 0.62) < 0.02, sal.toFixed(3));
+
+  var tail = ratioAt(2025, function (st) { st.history = [{ revenue: 100000 }]; return E.monthIncome(st); });
+  ok('分成制的长尾是 2.2 倍', Math.abs(tail - 2.2) < 0.02, tail.toFixed(3));
+
+  var s2 = E.newGame(); s2.day = (2045 - GD.BAL.startYear) * 360;
+  s2.fans = 0;
+  var m0 = E.ruleSalesMul(s2);
+  s2.fans = 400000;
+  var m1 = E.ruleSalesMul(s2);
+  ok('粉丝驱动时代：粉丝越多销量乘数越高', m1 > m0, m0.toFixed(2) + ' → ' + m1.toFixed(2));
+
+  var s3 = E.newGame(); s3.day = (2070 - GD.BAL.startYear) * 360;
+  s3.rep = 0;
+  var q0 = E.ruleSalesMul(s3);
+  s3.rep = 100;
+  var q1 = E.ruleSalesMul(s3);
+  ok('城市参与时代：声望越高销量乘数越高', q1 > q0, q0.toFixed(2) + ' → ' + q1.toFixed(2));
+
+  var s4 = E.newGame(); s4.day = (2065 - GD.BAL.startYear) * 360;
+  ok('策展人时代不吃评审偏科', E.ruleFlag(s4, 'noBias') === true);
+  ok('策展人时代波动翻倍', Math.abs(E.ruleMul(s4, 'reviewNoise') - 2.2) < 1e-9);
+
+  /* 2054 舱体：没付钱不生效，付了才生效，只付一次 */
+  var s5 = E.newGame();
+  s5.day = (2055 - GD.BAL.startYear) * 360;
+  s5.money = 100000000;
+  ok('舱体没付钱前规则不生效', E.ruleOf(s5) === null);
+  var ev1 = E.tickRules(s5);
+  ok('付得起就自动建造舱体', ev1 && ev1.type === 'paid' && s5.rulesPaid.length === 1, ev1 && ev1.type);
+  ok('付完之后规则生效', E.ruleOf(s5) !== null && E.ruleOf(s5).name === '感官舱体');
+  var moneyAfter = s5.money;
+  ok('舱体只扣一次', E.tickRules(s5) === null && s5.money === moneyAfter, String(moneyAfter));
+
+  var s6 = E.newGame();
+  s6.day = (2055 - GD.BAL.startYear) * 360;
+  s6.money = 100;
+  ok('钱不够时规则保持未生效', E.tickRules(s6).type === 'missed' && E.ruleOf(s6) === null);
+})();
+
 /* ---------------- 挖人 ---------------- */
 (function () {
   var s = E.newGame();

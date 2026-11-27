@@ -63,6 +63,8 @@
     /* 读档进来时已经有年度结果，别在首屏补弹一堆过期提示 */
     ui.yearCount = (s.yearResults || []).length;
     ui.researchCount = (s.research && s.research.done) ? s.research.done.length : 0;
+    ui.ruleFrom = (E.ruleFor(E.year(s)) || {}).from || 0;
+    ui.rulesPaidN = (s.rulesPaid || []).length;
     el.money = byId('money');
     el.fans = byId('fans');
     el.rep = byId('rep');
@@ -427,6 +429,22 @@
     }
 
     if (GD.SFX && GD.SFX.setEra) GD.SFX.setEra(E.year(s));
+
+    /* 世代规则：进入新世代弹提示；带一次性投入的付完也弹一次 */
+    var era = E.ruleFor(E.year(s));
+    if (era && ui.ruleFrom !== era.from) {
+      ui.ruleFrom = era.from;
+      UI.toast('🌐 ' + era.from + ' 世代 · ' + era.name + '：' + era.desc + '（要学的是：' + era.learn + '）');
+      GD.SFX.award();
+    }
+    var paidN = (s.rulesPaid || []).length;
+    if (paidN > (ui.rulesPaidN || 0)) {
+      ui.rulesPaidN = paidN;
+      UI.toast('🏗 为了 ' + (era ? era.name : '新世代') + ' 投了一笔重资产，钱已经花了。');
+    } else if (paidN < (ui.rulesPaidN || 0)) {
+      ui.rulesPaidN = paidN;
+    }
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -901,7 +919,14 @@
   function renderIndustry() {
     var html = '<div class="panel-card">' +
       '<div class="panel-head"><div><h3>行业</h3>' +
-      '<div class="panel-sub">' + E.year(s) + ' 年 · 你的年度奖 ' + s.awards.length + ' 次</div></div>' +
+      '<div class="panel-sub">' + E.year(s) + ' 年 · ' +
+      (function () {
+        var r = E.ruleFor(E.year(s));
+        if (!r) return '主线时代（还没有世代规则）';
+        var on = E.ruleOf(s) ? '' : '（未投入，未生效）';
+        return r.name + '：' + r.desc + on;
+      })() +
+      ' · 你的年度奖 ' + s.awards.length + ' 次</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
 
