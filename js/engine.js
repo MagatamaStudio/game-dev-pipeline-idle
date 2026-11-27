@@ -102,6 +102,42 @@
     return BAL.startYear + Math.floor(s.day / BAL.daysPerYear);
   };
 
+  /* ---------------- 市场流行 ----------------
+   * 每年 2 个题材 + 1 个类型走红。走势由年份哈希推出来，
+   * 同一局每一年都一样，不占存档字段，也不会因为读档而变。 */
+  E.trendFor = function (year) {
+    var y = Math.floor(year == null ? BAL.startYear : year);
+    var themes = [], guard = 0;
+    while (themes.length < (BAL.trendThemes || 2) && guard < 40) {
+      var idx = crewHash('trend-theme:' + y + ':' + guard) % GD.THEMES.length;
+      var id = GD.THEMES[idx].id;
+      if (themes.indexOf(id) === -1) themes.push(id);
+      guard++;
+    }
+    var gi = crewHash('trend-genre:' + y) % GD.GENRES.length;
+    return { year: y, themes: themes, genre: GD.GENRES[gi].id };
+  };
+
+  E.trendSalesMul = function (year, genreId, themeId) {
+    var t = E.trendFor(year), m = 1;
+    if (t.themes.indexOf(themeId) >= 0) m *= BAL.trendThemeSales;
+    if (t.genre === genreId) m *= BAL.trendGenreSales;
+    return m;
+  };
+
+  E.trendIsHotTheme = function (year, themeId) {
+    return E.trendFor(year).themes.indexOf(themeId) >= 0;
+  };
+
+  E.trendIsHotGenre = function (year, genreId) {
+    return E.trendFor(year).genre === genreId;
+  };
+
+  E.trendText = function (year) {
+    var t = E.trendFor(year);
+    return t.themes.map(function (id) { return E.theme(id).name; }).join(' / ');
+  };
+
   /* 当前选中的平台（没选就用最新上市的可用平台） */
   E.platform = function (s) {
     var avail = E.availablePlatforms(s);
@@ -174,14 +210,17 @@
     }
     var base = 0.75 * leaderQ + 0.25 * teamQ;
     return base * E.affinity(genreId, themeId) * (affMul || 1) * 1.08 *
-      E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality');
+      E.teamBonus(s) * E.traitQualityMul(s) * E.bonusMul(s, 'quality') * E.ruleMul(s, 'quality') *
+      E.moodMul(leader).quality;
   };
 
   E.devDuration = function (s, leaderId) {
     var leader = E.staffById(s, leaderId);
     var d = BAL.devSeconds - leader.stats.speed * BAL.speedFactor -
       Math.max(0, s.staff.length - 3) * BAL.teamSpeedBonus;
-    return Math.max(BAL.minDevSeconds, d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed') * E.ruleMul(s, 'speed'));
+    /* 状态倍率是「速度」，耗时要除：疲劳 0.70 的速度 = 耗时 ÷ 0.70 */
+    return Math.max(BAL.minDevSeconds,
+      d * E.traitSpeedMul(s) * E.bonusMul(s, 'speed') * E.ruleMul(s, 'speed') / E.moodMul(leader).speed);
   };
 
   /* 企划面板的预估 */
@@ -197,6 +236,7 @@
     return {
       affinity: E.affinity(plan.genre, plan.theme) * affMul,
       sequel: sq,
+      trend: E.trendSalesMul(E.year(s), plan.genre, plan.theme),
       quality: q,
       duration: duration,
       days: days,
@@ -288,8 +328,97 @@
     return {
       id: r.id, name: r.name, seed: r.seed, role: r.role, salary: r.salary,
       quote: r.quote, level: 1, xp: 0,
+      morale: BAL.moraleStart, stamina: BAL.staminaStart,
       stats: { code: r.stats.code, script: r.stats.script, art: r.stats.art, audio: r.stats.audio, speed: r.stats.speed }
     };
+  };
+
+  /* ---------------- 士气 / 体力 ----------------
+   * 每部作品消耗体力、按成绩涨落士气；作品之间自动回一点。
+   * 低了不是死局，只是掉速度和品质 —— 玩家可以花钱团建救回来。 */
+
+  function clampMood(v) { return Math.max(0, Math.min(100, v)); }
+
+  E.moraleOf = function (st) {
+    return clampMood(st && st.morale != null ? st.morale : BAL.moraleStart);
+  };
+
+  E.staminaOf = function (st) {
+    return clampMood(st && st.stamina != null ? st.stamina : BAL.staminaStart);
+  };
+
+  /* 一个人的状态倍率：疲劳掉速度，低士气掉品质 */
+  E.moodMul = function (st) {
+    var stm = E.staminaOf(st), mo = E.moraleOf(st);
+    var speed = 1;
+    if (stm < BAL.tiredStaminaAt) speed = BAL.tiredStaminaMul;
+    else if (stm < BAL.lowStaminaAt) speed = BAL.lowStaminaMul;
+    return {
+      speed: speed,
+      quality: mo < BAL.lowMoraleAt ? BAL.lowMoraleMul : 1,
+      stamina: stm, morale: mo
+    };
+  };
+
+  E.moodLabel = function (st) {
+    var m = E.moodMul(st);
+    if (m.stamina < BAL.tiredStaminaAt) return '疲劳';
+    if (m.morale < BAL.lowMoraleAt) return '低落';
+    if (m.stamina < BAL.lowStaminaAt) return '有点累';
+    return '正常';
+  };
+
+  /* 团队整体状态（给界面用） */
+  E.teamMood = function (s) {
+    var stm = 0, mo = 0, n = s.staff.length || 1;
+    s.staff.forEach(function (x) {
+      stm += E.staminaOf(x);
+      mo += E.moraleOf(x);
+    });
+    return { stamina: stm / n, morale: mo / n };
+  };
+
+  /* 一部作品做完：全员掉体力、按成绩涨落士气 */
+  E.settleMood = function (s) {
+    if (!s.staff || !s.staff.length) return;
+    var score = (s.review && s.review.total) || 0;
+    var elapsed = (s.project && s.project.elapsed) || 0;
+    var crunch = (s.project && s.project.crunchTime) || 0;
+    var crunching = elapsed > 0 && crunch > elapsed * 0.4;
+    var drain = BAL.staminaDrain + (crunching ? BAL.staminaCrunchExtra : 0);
+    var dMorale = 0;
+    if (score >= 34) dMorale += BAL.moraleGainHit;
+    if (score < 24) dMorale -= BAL.moraleDrainFlop;
+    if (crunching) dMorale -= BAL.moraleDrainCrunch;
+    s.staff.forEach(function (st) {
+      st.stamina = clampMood(E.staminaOf(st) - drain);
+      st.morale = clampMood(E.moraleOf(st) + dMorale);
+    });
+  };
+
+  /* 作品之间恢复 */
+  E.restMood = function (s) {
+    if (!s.staff) return;
+    s.staff.forEach(function (st) {
+      st.stamina = clampMood(E.staminaOf(st) + BAL.staminaRest);
+      st.morale = clampMood(E.moraleOf(st) + BAL.moraleRest);
+    });
+  };
+
+  E.teamBuildCost = function (s) { return Math.round(BAL.teamBuildCost * E.inflation(s)); };
+
+  E.teamBuild = function (s) {
+    if (s.phase !== 'planning') return false;
+    if (s.builtRound === s.round) return false;
+    var cost = E.teamBuildCost(s);
+    if (s.money < cost) return false;
+    s.money -= cost;
+    s.builtRound = s.round;
+    s.staff.forEach(function (st) {
+      st.morale = clampMood(E.moraleOf(st) + BAL.teamBuildMorale);
+      st.stamina = clampMood(E.staminaOf(st) + 10);
+    });
+    return true;
   };
 
   E.rollCandidates = function (s) {
@@ -454,6 +583,7 @@
       combos: E.initialCombos(),
       found: [],
       comboNews: [],
+      builtRound: 0,
       candidates: []
     };
     E.rollCandidates(s);
@@ -1110,6 +1240,7 @@
       progress: 0,
       mode: 'normal',
       modeQSum: 0,
+      crunchTime: 0,
       eventQualityPct: 0,
       salesPct: 0,
       eventsDone: 0,
@@ -1350,7 +1481,8 @@
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
     var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
-    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult * sequelMult *
+    var trendMult = s.plan ? E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme) : 1;
+    var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult * sequelMult * trendMult *
       E.bonusMul(s, 'sales') * E.traitFansMul(s) * E.ruleSalesMul(s);
     return { low: Math.round(mid * 0.85), mid: Math.round(mid), high: Math.round(mid * 1.15) };
   };
@@ -1366,7 +1498,8 @@
     var salesMult = 1 + ((s.project.salesPct || 0) / 100);
     var clashMult = s.release && s.release.collision ? s.release.collision.mult : 1;
     var sequelMult = (s.project && s.project.sequel) ? BAL.sequelSales : 1;
-    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
+    var trendMult = E.trendSalesMul(E.year(s), s.plan.genre, s.plan.theme);
+    var copies = Math.round(BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * rnd * windowMult * salesMult * clashMult * sequelMult * trendMult * E.bonusMul(s, 'sales') * E.ruleSalesMul(s));
 
     s.sales = {
       total: Math.max(300, copies),
@@ -1437,6 +1570,7 @@
 
       s.project.elapsed += dt;
       s.project.modeQSum += mode.quality * dt;
+      if (s.project.mode === 'crunch') s.project.crunchTime = (s.project.crunchTime || 0) + dt;
       s.project.progress += (dt * mode.rate) / s.project.baseDuration;
       s.day += dt * BAL.daysPerSecond;
 
@@ -1530,6 +1664,8 @@
           sequelOf: s.project.sequel ? s.project.sequel.title : ''
         };
         s.history.push(s.lastResult);
+        /* 士气 / 体力：做完一部结算一次 */
+        E.settleMood(s);
         /* 做完一部：解锁 2 个新组合；如果这次用的是传说组合，记一笔 */
         E.unlockNextCombo(s);
         E.unlockNextCombo(s);
@@ -1584,6 +1720,7 @@
     if (s.phase !== 'done') return false;
     s.round++;
     s.phase = 'planning';
+    E.restMood(s);
     if (s.plan) s.plan.name = '';
     s.project = null;
     s.review = null;
@@ -1936,6 +2073,9 @@
             m.stats[k] = Math.round(clampNum(x.stats[k], 1, 99, m.stats[k]));
           }
         });
+        /* 老存档没有士气/体力：按默认值补，不奖励也不惩罚 */
+        m.morale = clampMood(clampNum(x.morale, 0, 100, BAL.moraleStart));
+        m.stamina = clampMood(clampNum(x.stamina, 0, 100, BAL.staminaStart));
         staff.push(m);
       });
     }

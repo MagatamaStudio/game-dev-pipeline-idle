@@ -972,6 +972,31 @@
     endYear: 2002,          // 主线结局年
     daysPerYear: 360,
 
+    /* 市场流行：每年 2 个题材 + 1 个类型走红，命中主题材销量 ×1.30、中类型 ×1.15。
+     * 走势由年份哈希决定（同一局每一年都一样，存档不用多存字段）。 */
+    trendThemes: 2,
+    trendThemeSales: 1.25,
+    trendGenreSales: 1.10,
+
+    /* 士气 / 体力：每部作品消耗，作品之间回一点；低了会掉速度/品质 */
+    moraleStart: 72,
+    staminaStart: 100,
+    staminaDrain: 18,
+    staminaCrunchExtra: 10,   // 赶工时间占比 > 40% 时多掉
+    staminaRest: 26,          // 每部之间恢复
+    moraleRest: 3,
+    moraleGainHit: 5,         // 总分 >= 34
+    moraleDrainFlop: 7,       // 总分 < 24
+    moraleDrainCrunch: 4,
+    lowStaminaAt: 35,
+    lowStaminaMul: 0.88,
+    tiredStaminaAt: 15,
+    tiredStaminaMul: 0.70,
+    lowMoraleAt: 30,
+    lowMoraleMul: 0.94,
+    teamBuildCost: 120000,    // 团建：一次性花钱，全员士气 +15
+    teamBuildMorale: 15,
+
     /* 续作：销量够高的旧作才能出续作。
      * 续作卖得好、做得快，但同一套组合的相性打折（不能一直吃同一招）。 */
     sequelMinCopies: 80000,

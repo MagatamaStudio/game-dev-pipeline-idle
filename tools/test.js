@@ -1605,5 +1605,130 @@ function playOne(s, plan, choice) {
   ok('第二代还是根名 + 2', E.gameName(s3) === '古墓丽影 2', E.gameName(s3));
 })();
 
+/* ---------- 市场流行 ---------- */
+(function () {
+  var y1 = E.trendFor(1985), y2 = E.trendFor(1986);
+  ok('每一年 2 个热门题材', y1.themes.length === 2 && y2.themes.length === 2,
+    y1.themes.join(',') + ' / ' + y2.themes.join(','));
+  ok('同一年结果稳定', JSON.stringify(E.trendFor(1985)) === JSON.stringify(y1));
+  ok('两个热门题材不重复', y1.themes[0] !== y1.themes[1]);
+  ok('热门类型是合法 id', GD.GENRES.some(function (g) { return g.id === y1.genre; }), y1.genre);
+
+  var otherTheme = GD.THEMES.filter(function (t) { return y1.themes.indexOf(t.id) < 0; })[0].id;
+  var otherGenre = GD.GENRES.filter(function (g) { return g.id !== y1.genre; })[0].id;
+
+  ok('两个都不中 = 无加成', E.trendSalesMul(1985, otherGenre, otherTheme) === 1);
+  ok('中热门题材 = ×1.30',
+    near(E.trendSalesMul(1985, otherGenre, y1.themes[0]), GD.BAL.trendThemeSales));
+  ok('中热门类型 = ×1.15',
+    near(E.trendSalesMul(1985, y1.genre, otherTheme), GD.BAL.trendGenreSales));
+  ok('都中 = 两个相乘',
+    near(E.trendSalesMul(1985, y1.genre, y1.themes[0]), GD.BAL.trendThemeSales * GD.BAL.trendGenreSales),
+    E.trendSalesMul(1985, y1.genre, y1.themes[0]).toFixed(3));
+
+  /* 30 年里走势要真的在变，不能年年一样 */
+  var sigs = {};
+  for (var y = GD.BAL.startYear; y <= GD.BAL.endYear; y++) {
+    sigs[E.trendText(y) + '|' + E.trendFor(y).genre] = 1;
+  }
+  ok('30 年里走势确实在变', Object.keys(sigs).length >= 20, Object.keys(sigs).length + ' 种');
+
+  /* 企划预览里带趋势倍率 */
+  var s = E.newGame();
+  var hotT = E.trendFor(E.year(s)).themes[0];
+  var pv = E.preview(s, { genre: 'rpg', theme: hotT, leader: s.staff[0].id, platform: 'arc72' });
+  ok('企划预览显示趋势倍率', near(pv.trend, GD.BAL.trendThemeSales), String(pv.trend));
+
+  /* 趋势真的进销量：同一部作品，热门题材卖得更多 */
+  var sA = E.newGame(), sB = E.newGame();
+  sA.plan = { genre: 'rpg', theme: hotT, leader: sA.staff[0].id, platform: 'arc72' };
+  sB.plan = { genre: 'rpg', theme: otherTheme, leader: sB.staff[0].id, platform: 'arc72' };
+  sA.project = { sequel: null }; sB.project = { sequel: null };
+  sA.review = { total: 30 }; sB.review = { total: 30 };
+  var estA = E.estimateSales(sA, 1), estB = E.estimateSales(sB, 1);
+  ok('热门题材预估卖得更多', estA.mid > estB.mid, estB.mid + ' → ' + estA.mid);
+})();
+
+/* ---------- 士气 / 体力 ---------- */
+(function () {
+  var s = E.newGame();
+  ok('新人默认士气体力', E.moraleOf(s.staff[0]) === GD.BAL.moraleStart &&
+    E.staminaOf(s.staff[0]) === GD.BAL.staminaStart,
+    E.moraleOf(s.staff[0]) + '/' + E.staminaOf(s.staff[0]));
+  ok('默认状态正常', E.moodLabel(s.staff[0]) === '正常');
+
+  /* 体力低 → 开发慢；士气低 → 品质差 */
+  var s2 = E.newGame();
+  s2.staff[0].stamina = 10;
+  var dTired = E.devDuration(s2, s2.staff[0].id);
+  var qTired = E.baseQuality(s2, 'rpg', 'fantasy', s2.staff[0].id);
+  s2.staff[0].stamina = 100;
+  var dFresh = E.devDuration(s2, s2.staff[0].id);
+  ok('体力低时开发更慢', dTired > dFresh, dFresh.toFixed(1) + ' → ' + dTired.toFixed(1));
+  ok('体力低时标签是疲劳', E.moodLabel(s2.staff[0]) === '正常');
+
+  s2.staff[0].morale = 10;
+  var qLow = E.baseQuality(s2, 'rpg', 'fantasy', s2.staff[0].id);
+  s2.staff[0].morale = 90;
+  var qHigh = E.baseQuality(s2, 'rpg', 'fantasy', s2.staff[0].id);
+  ok('士气低时品质更差', qLow < qHigh, qLow.toFixed(1) + ' < ' + qHigh.toFixed(1));
+
+  /* 做完一部：掉体力 */
+  var s3 = E.newGame();
+  playOne(s3, { genre: 'rpg', theme: 'fantasy', leader: s3.staff[0].id, platform: 'arc72' });
+  ok('做完一部体力下降', E.staminaOf(s3.staff[0]) < GD.BAL.staminaStart,
+    String(Math.round(E.staminaOf(s3.staff[0]))));
+  var beforeRest = E.staminaOf(s3.staff[0]);
+  E.nextRound(s3);
+  ok('下一部开始前回一点体力', E.staminaOf(s3.staff[0]) > beforeRest,
+    beforeRest.toFixed(0) + ' → ' + E.staminaOf(s3.staff[0]).toFixed(0));
+
+  /* 分数决定士气涨落 */
+  var s6 = E.newGame();
+  s6.project = { elapsed: 10, crunchTime: 0 };
+  s6.review = { total: 20 };
+  E.settleMood(s6);
+  ok('低分会掉士气', E.moraleOf(s6.staff[0]) < GD.BAL.moraleStart,
+    String(Math.round(E.moraleOf(s6.staff[0]))));
+  var beforeM = E.moraleOf(s6.staff[0]);
+  s6.project = { elapsed: 10, crunchTime: 0 };
+  s6.review = { total: 38 };
+  E.settleMood(s6);
+  ok('高分回士气', E.moraleOf(s6.staff[0]) > beforeM,
+    beforeM.toFixed(0) + ' → ' + E.moraleOf(s6.staff[0]).toFixed(0));
+
+  /* 赶工更累 */
+  var s7 = E.newGame();
+  s7.project = { elapsed: 10, crunchTime: 8 };
+  s7.review = { total: 30 };
+  E.settleMood(s7);
+  ok('赶工掉更多体力',
+    E.staminaOf(s7.staff[0]) < GD.BAL.staminaStart - GD.BAL.staminaDrain,
+    String(Math.round(E.staminaOf(s7.staff[0]))));
+
+  /* 团建 */
+  var s4 = E.newGame();
+  s4.staff.forEach(function (st) { st.morale = 40; });
+  s4.money = 5000000;
+  var m0 = E.moraleOf(s4.staff[0]);
+  ok('团建成功', E.teamBuild(s4) === true);
+  ok('团建涨士气', E.moraleOf(s4.staff[0]) === Math.min(100, m0 + GD.BAL.teamBuildMorale),
+    String(Math.round(E.moraleOf(s4.staff[0]))));
+  ok('一轮只能团建一次', E.teamBuild(s4) === false);
+
+  var s5 = E.newGame();
+  s5.money = 0;
+  ok('没钱团建不了', E.teamBuild(s5) === false);
+
+  /* 老存档补士气体力 */
+  var raw = E.serialize(E.newGame());
+  var obj = JSON.parse(raw);
+  delete obj.staff[0].morale;
+  delete obj.staff[0].stamina;
+  var back = E.deserialize(JSON.stringify(obj));
+  ok('老存档补默认士气体力',
+    E.moraleOf(back.staff[0]) === GD.BAL.moraleStart && E.staminaOf(back.staff[0]) === GD.BAL.staminaStart);
+})();
+
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');
 process.exit(failed ? 1 : 0);

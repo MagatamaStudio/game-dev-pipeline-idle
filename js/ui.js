@@ -303,6 +303,15 @@
         } else { GD.SFX.bad(); }
         return;
       }
+      if (panelAct === 'teambuild') {
+        if (E.teamBuild(s)) {
+          GD.SFX.coin();
+          UI.toast('🍻 团建了一次：全员士气 +' + GD.BAL.teamBuildMorale + '、体力 +10');
+          renderTeam();
+          if (hooks.onSave) hooks.onSave();
+        } else { GD.SFX.bad(); }
+        return;
+      }
       if (panelAct === 'refresh') {
         if (E.refreshCandidates(s)) { GD.SFX.click(); renderTeam(); if (hooks.onSave) hooks.onSave(); }
         else { GD.SFX.bad(); }
@@ -492,6 +501,18 @@
     }
     if (news.length && el.archive && !el.archive.hidden) renderArchive();
 
+    /* 市场流行：换年时提示一次 */
+    var tYear = E.trendFor(E.year(s)).year;
+    if (ui.trendYear !== tYear) {
+      if (ui.trendYear != null) {
+        var tr = E.trendFor(tYear);
+        UI.toast('📈 ' + tYear + ' 年热门：' + E.trendText(tYear) + '（题材销量 ×' +
+          GD.BAL.trendThemeSales.toFixed(2) + '）· ' + E.genre(tr.genre).name +
+          '（×' + GD.BAL.trendGenreSales.toFixed(2) + '）');
+      }
+      ui.trendYear = tYear;
+    }
+
     applyError();
     if (GD.Office) GD.Office.sync(s);
   };
@@ -642,10 +663,25 @@
 
     var html = '<div class="plan">';
 
+    /* 今年什么卖得动 */
+    var trend = E.trendFor(E.year(s));
+    var trNames = trend.themes.map(function (id) { return E.theme(id).name; }).join(' / ');
+    html += '<div class="trend-bar">' +
+      '<span class="trend-k">今年热门</span>' +
+      '<b>' + esc(trNames) + '</b>' +
+      '<span class="dim">题材 · 销量 ×' + GD.BAL.trendThemeSales.toFixed(2) + '</span>' +
+      '<span class="trend-dot">·</span>' +
+      '<b>' + esc(E.genre(trend.genre).name) + '</b>' +
+      '<span class="dim">类型 · 销量 ×' + GD.BAL.trendGenreSales.toFixed(2) + '</span>' +
+      '</div>';
+
     html += '<div class="plan-group"><div class="plan-label">类型</div><div class="chips">';
     GD.GENRES.forEach(function (x) {
-      html += '<button class="chip' + (x.id === s.plan.genre ? ' on' : '') + '" data-plan="genre:' + x.id + '">' +
-        '<span class="ci">' + x.icon + '</span>' + esc(x.name) + '</button>';
+      var hot = E.trendIsHotGenre(E.year(s), x.id);
+      html += '<button class="chip' + (x.id === s.plan.genre ? ' on' : '') + (hot ? ' hot' : '') +
+        '" data-plan="genre:' + x.id + '">' +
+        '<span class="ci">' + x.icon + '</span>' + esc(x.name) +
+        (hot ? '<span class="hot-tag">热</span>' : '') + '</button>';
     });
     html += '</div></div>';
 
@@ -654,11 +690,13 @@
       '</div><div class="chips">';
     GD.THEMES.forEach(function (x) {
       var open = E.comboUnlocked(s, s.plan.genre, x.id);
-      var cls = 'chip' + (x.id === s.plan.theme ? ' on' : '') + (open ? '' : ' lock');
-      var tip = open ? '' : ' title="还没解锁：多开发几部作品、完成研究或收购对手"';
-      html += '<button class="' + cls + '"' + tip + (open ? '' : ' disabled') +
+      var hot = E.trendIsHotTheme(E.year(s), x.id);
+      var cls = 'chip' + (x.id === s.plan.theme ? ' on' : '') + (open ? '' : ' lock') + (hot ? ' hot' : '');
+      var tip = open ? (hot ? '今年热门题材：销量 ×' + GD.BAL.trendThemeSales.toFixed(2) : '') : '还没解锁：多开发几部作品、完成研究或收购对手';
+      html += '<button class="' + cls + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + (open ? '' : ' disabled') +
         ' data-plan="theme:' + x.id + '">' +
-        '<span class="ci">' + (open ? x.icon : '🔒') + '</span>' + esc(x.name) + '</button>';
+        '<span class="ci">' + (open ? x.icon : '🔒') + '</span>' + esc(x.name) +
+        (hot && open ? '<span class="hot-tag">热</span>' : '') + '</button>';
     });
     html += '</div></div>';
 
@@ -714,6 +752,7 @@
           GD.BAL.sequelSales.toFixed(2) + '</b></div>'
         : '') +
       '<div class="pv"><label>相性</label><b class="' + (p.affinity >= 1.2 ? 'good' : p.affinity < 0.95 ? 'bad' : '') + '">×' + p.affinity.toFixed(2) + '</b></div>' +
+      '<div class="pv"><label>趋势</label><b class="' + (p.trend > 1 ? 'good' : '') + '">×' + p.trend.toFixed(2) + '</b></div>' +
       '<div class="pv"><label>预计评分</label><b>' + p.scoreLow + ' – ' + p.scoreHigh + ' / 40</b></div>' +
       '<div class="pv"><label>开发耗时</label><b>' + p.duration.toFixed(0) + ' 秒</b></div>' +
       '<div class="pv"><label>成本</label><b>' + money(p.cost) + '</b></div>' +
@@ -828,13 +867,20 @@
 
     html += '<div class="staff-list">';
     s.staff.forEach(function (st) {
+      var mo = Math.round(E.moraleOf(st)), stm = Math.round(E.staminaOf(st));
+      var mood = E.moodLabel(st);
       html += '<div class="staff-row">' +
         '<div class="avatar sm">' + avatarSvg(st.seed) + '</div>' +
         '<div class="staff-main">' +
         '<div class="staff-name">' + esc(st.name) +
         ' <span class="lv">Lv ' + st.level + '</span>' +
-        ' <span class="role">' + esc(GD.STAT_NAMES[st.role]) + '</span></div>' +
+        ' <span class="role">' + esc(GD.STAT_NAMES[st.role]) + '</span>' +
+        ' <span class="mood-tag' + (mood === '正常' ? '' : ' low') + '">' + mood + '</span></div>' +
         '<div class="staff-stats">' + esc(statLine(st.stats)) + '</div>' +
+        '<div class="moods">' +
+        '<span class="mood-line"><label>士气</label><i class="mood-bar"><b style="width:' + mo + '%"></b></i><em>' + mo + '</em></span>' +
+        '<span class="mood-line"><label>体力</label><i class="mood-bar stam"><b style="width:' + stm + '%"></b></i><em>' + stm + '</em></span>' +
+        '</div>' +
         traitChips(st) +
         xpBar(st) +
         '</div>' +
@@ -842,6 +888,16 @@
         '</div>';
     });
     html += '</div>';
+
+    /* 团建 */
+    var tbCost = E.teamBuildCost(s);
+    var canTB = s.builtRound !== s.round && s.money >= tbCost;
+    html += '<div class="panel-block"><div class="block-title">团建' +
+      '<span class="dim"> · 每部作品一次</span></div>' +
+      '<div class="room-next"><span class="dim">全员士气 +' + GD.BAL.teamBuildMorale +
+      '、体力 +10。连着赶工会掉状态，别等到全员疲劳再想起来。</span></div>' +
+      '<button class="wide" data-act="teambuild"' + (canTB ? '' : ' disabled') + '>' +
+      (s.builtRound === s.round ? '这轮已经聚过餐了' : '团建 · ' + money(tbCost)) + '</button></div>';
 
     if (cost != null && next) {
       html += '<div class="panel-block"><div class="block-title">搬办公室</div>' +

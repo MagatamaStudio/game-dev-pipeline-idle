@@ -152,7 +152,7 @@ function connect(wsUrl) {
     first.genres + '/' + first.themes + '/' + first.leaders);
   check('1972 年只有街机一个平台',
     first.platforms === 1 && first.platformCode.indexOf('雅达瑞') === 0, first.platformCode);
-  check('预告面板 7 项', first.previews === 7, 'pv=' + first.previews);
+  check('预告面板 8 项（含趋势）', first.previews === 8, 'pv=' + first.previews);
   check('初始进入企划阶段', first.phase === 'planning');
   check('舞台与办公室都有高度', first.stage.h > 200 && first.office.h > 120,
     'stage=' + first.stage.h + ' office=' + first.office.h);
@@ -246,9 +246,88 @@ function connect(wsUrl) {
     moved.name + ' seats=' + moved.seats);
   check('搬家会弹提示', moved.toast.indexOf('搬进') >= 0, moved.toast);
 
+  /* ---------- 1.56 士气 / 体力 ---------- */
+  var moodUI = await evalJs(`(() => {
+    const rows = document.querySelectorAll('#team .staff-row');
+    const bars = document.querySelectorAll('#team .mood-bar');
+    return {
+      rows: rows.length,
+      bars: bars.length,
+      tags: [...document.querySelectorAll('#team .mood-tag')].map(x => x.textContent),
+      buildBtn: (document.querySelector('#team [data-act="teambuild"]') || {}).textContent || ''
+    };
+  })()`);
+  check('每人显示士气与体力', moodUI.bars === moodUI.rows * 2, 'bars=' + moodUI.bars);
+  check('每人有状态标签', moodUI.tags.length === moodUI.rows, moodUI.tags.join(','));
+  check('团队面板有团建按钮', moodUI.buildBtn.indexOf('团建') >= 0, moodUI.buildBtn);
+
+  var built = await evalJs(`(() => {
+    const st = GD.getState();
+    st.money = 5000000;
+    const before = Math.round(GD.Engine.moraleOf(st.staff[0]));
+    document.querySelector('#team [data-act="teambuild"]').click();
+    return {
+      before: before,
+      after: Math.round(GD.Engine.moraleOf(st.staff[0])),
+      btn: (document.querySelector('#team [data-act="teambuild"]') || {}).textContent || '',
+      toast: [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ')
+    };
+  })()`);
+  check('团建能涨士气', built.after > built.before, built.before + ' → ' + built.after);
+  check('一轮只能团建一次', built.btn.indexOf('已经') >= 0 && built.toast.indexOf('团建') >= 0,
+    built.btn + ' / ' + built.toast);
+
+  var tiredUI = await evalJs(`(() => {
+    const st = GD.getState();
+    st.staff[0].stamina = 8;
+    document.querySelector('[data-act="close-panel"]').click();
+    document.querySelector('[data-act="team"]').click();
+    return {
+      tags: [...document.querySelectorAll('#team .mood-tag')].map(x => x.textContent),
+      low: document.querySelectorAll('#team .mood-tag.low').length
+    };
+  })()`);
+  check('体力见底会显示疲劳', tiredUI.tags.indexOf('疲劳') >= 0 && tiredUI.low >= 1,
+    tiredUI.tags.join(','));
+
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
   check('团队面板可以关闭', await evalJs(`document.querySelector('#team').hidden`) === true);
+
+  /* ---------- 1.57 市场流行 ---------- */
+  var trendUI = await evalJs(`(() => {
+    const st = GD.getState();
+    const yr = GD.Engine.year(st);
+    const t = GD.Engine.trendFor(yr);
+    const hotChips = [...document.querySelectorAll('.chips .chip.hot')];
+    const bars = document.querySelector('#stage .trend-bar');
+    const pvLabels = [...document.querySelectorAll('#stage .preview .pv label')].map(x => x.textContent);
+    return {
+      bar: !!bars,
+      barText: bars ? bars.textContent : '',
+      hot: hotChips.length,
+      hotGenres: document.querySelectorAll('[data-plan^="genre:"].hot').length,
+      hotThemes: document.querySelectorAll('[data-plan^="theme:"].hot').length,
+      wantGenre: GD.Engine.trendIsHotGenre(yr, st.plan.genre) ? 1 : 0,
+      previewLabels: pvLabels,
+      trend: GD.Engine.trendSalesMul(yr, st.plan.genre, st.plan.theme)
+    };
+  })()`);
+  check('企划顶部显示今年热门', trendUI.bar === true && trendUI.barText.indexOf('今年热门') >= 0,
+    trendUI.barText);
+  check('热门题材 chip 带「热」标', trendUI.hotThemes <= 2 && trendUI.hot === trendUI.hotThemes + trendUI.hotGenres,
+    'themes=' + trendUI.hotThemes + ' all=' + trendUI.hot);
+  check('热门类型 chip 带「热」标', trendUI.hotGenres === 1, 'genres=' + trendUI.hotGenres);
+  check('预览显示趋势倍率', trendUI.previewLabels.indexOf('趋势') >= 0,
+    trendUI.previewLabels.join(','));
+
+  var trendToast = await evalJs(`(() => {
+    const st = GD.getState();
+    st.day += 360;
+    GD.UI.render();
+    return [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ');
+  })()`);
+  check('换年会提示新热门', trendToast.indexOf('年热门') >= 0, trendToast);
 
   await evalJs(`document.querySelector('[data-act="archive"]').click()`);
   await sleep(150);
