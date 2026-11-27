@@ -64,13 +64,14 @@ function manage(s) {
 
   if (!E.researchActive(s)) {
     var pool = GD.RESEARCH.filter(function (it) {
-      return !E.researchDone(s, it.id) && s.money > E.researchCost(s, it) * 2.5;
+      return !E.researchDone(s, it.id) && E.researchYearOk(s, it) &&
+        s.money > E.researchCost(s, it) * 2.5;
     }).sort(function (a, b) { return a.cost - b.cost; });
     if (pool.length) E.startResearch(s, pool[0].id);
   }
 
   var gearPool = GD.GEAR.filter(function (g) {
-    return !E.hasGear(s, g.id) && s.money > E.gearCost(s, g) * 3;
+    return !E.hasGear(s, g.id) && E.gearYearOk(s, g) && s.money > E.gearCost(s, g) * 3;
   }).sort(function (a, b) { return a.cost - b.cost; });
   if (gearPool.length) E.buyGear(s, gearPool[0].id);
 }

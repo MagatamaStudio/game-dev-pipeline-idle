@@ -518,6 +518,31 @@
     return true;
   };
 
+  /* ---------------- 解雇 ----------------
+   * 遣散费 = 日薪 × BAL.fireDays。人会回到候选池，之后还能再招回来。
+   * 最后一个人不能解雇（否则没法开工）。 */
+  E.fireCost = function (s, st) {
+    return Math.round(E.effSalary(s, st) * (BAL.fireDays || 30));
+  };
+
+  E.fireStaff = function (s, id) {
+    if (!s.staff || s.staff.length <= 1) return { ok: false, reason: 'last' };
+    var idx = -1;
+    for (var i = 0; i < s.staff.length; i++) {
+      if (s.staff[i].id === id) { idx = i; break; }
+    }
+    if (idx < 0) return { ok: false, reason: 'missing' };
+    var st = s.staff[idx];
+    var cost = E.fireCost(s, st);
+    if (s.money < cost) return { ok: false, reason: 'money', cost: cost };
+    s.money -= cost;
+    s.staff.splice(idx, 1);
+    if (s.plan && s.plan.leader === id) s.plan.leader = s.staff[0].id;
+    s.firedFee = (s.firedFee || 0) + cost;
+    E.rollCandidates(s);
+    return { ok: true, cost: cost, name: st.name };
+  };
+
   E.expandOffice = function (s) {
     var idx = s.seats - 3;
     if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 6)) return false;
@@ -885,12 +910,22 @@
     return sum;
   };
 
+  /* 研究项目的开放年份（第二轮那 24 项），没列到的开局就能做 */
+  E.researchFrom = function (it) {
+    return (it && GD.RESEARCH_FROM && GD.RESEARCH_FROM[it.id]) || 0;
+  };
+
+  E.researchYearOk = function (s, it) {
+    return E.year(s) >= E.researchFrom(it);
+  };
+
   E.startResearch = function (s, id) {
     var st = researchState(s);
     if (st.active) return false;
     if (st.done.indexOf(id) >= 0) return false;
     var it = E.researchById(id);
     if (!it) return false;
+    if (!E.researchYearOk(s, it)) return false;
     var cost = E.researchCost(s, it);
     if (s.money < cost) return false;
     s.money -= cost;
@@ -919,11 +954,21 @@
     if (list.indexOf(id) >= 0) return false;
     var it = E.gearById(id);
     if (!it) return false;
+    if (!E.gearYearOk(s, it)) return false;
     var cost = E.gearCost(s, it);
     if (s.money < cost) return false;
     s.money -= cost;
     list.push(it.id);
     return true;
+  };
+
+  /* 第二轮设备的开放年份 */
+  E.gearFrom = function (it) {
+    return (it && GD.GEAR_FROM && GD.GEAR_FROM[it.id]) || 0;
+  };
+
+  E.gearYearOk = function (s, it) {
+    return E.year(s) >= E.gearFrom(it);
   };
 
   E.furnitureMul = function (s, key) {

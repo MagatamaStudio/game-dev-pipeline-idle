@@ -131,7 +131,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -163,6 +163,7 @@
 
       var panelAct = t.getAttribute('data-act');
       var hireId = t.getAttribute('data-hire');
+      var fireId = t.getAttribute('data-fire');
       var decId = t.getAttribute('data-dec');
       var researchId = t.getAttribute('data-research');
       var rtab = t.getAttribute('data-rtab');
@@ -170,8 +171,7 @@
       var poachId = t.getAttribute('data-poach');
       var acqId = t.getAttribute('data-acquire');
 
-      if (acqId) {
-        var ar = E.acquire(s, acqId);
+      if (acqId) {        var ar = E.acquire(s, acqId);
         if (ar.ok) {
           GD.SFX.award();
           UI.toast('🤝 收购了 ' + ar.brand.name + '：粉丝 +' + num(ar.fans) + '，他们以后不再参赛');
@@ -233,6 +233,23 @@
         return;
       }
 
+      var roomKey = t.getAttribute('data-room');
+      if (roomKey) {
+        var beforeIdx = E.roomIndex(s);
+        if (E.expandOffice(s)) {
+          GD.SFX.expand();
+          if (E.roomIndex(s) > beforeIdx) {
+            var newRoom = E.room(s);
+            UI.toast('🏢 搬进「' + newRoom.name + '」· ' + newRoom.desc);
+          }
+          if (!el.research.hidden) renderResearch();
+          if (!el.team.hidden) renderTeam();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
+
       if (researchId) {
         if (E.startResearch(s, researchId)) {
           GD.SFX.research();
@@ -256,6 +273,21 @@
       if (hireId) {
         if (E.hire(s, hireId)) { GD.SFX.hire(); renderTeam(); if (hooks.onSave) hooks.onSave(); UI.render(); }
         else { GD.SFX.bad(); }
+        return;
+      }
+      if (fireId) {
+        var fr = E.fireStaff(s, fireId);
+        if (fr.ok) {
+          GD.SFX.bad();
+          UI.toast('👋 ' + fr.name + ' 收拾东西走了，遣散费 ' + money(fr.cost));
+          renderTeam();
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else {
+          GD.SFX.bad();
+          if (fr.reason === 'money') el.hint.textContent = '遣散费不够（要 ' + money(fr.cost) + '）。';
+          else if (fr.reason === 'last') el.hint.textContent = '最后一个人不能解雇，否则没人开工。';
+        }
         return;
       }
       if (panelAct === 'endless') {
@@ -917,7 +949,13 @@
         traitChips(st) +
         xpBar(st) +
         '</div>' +
+        '<div class="staff-side">' +
         '<div class="staff-salary">' + money(E.effSalary(s, st)) + '<small>/天</small></div>' +
+        (s.staff.length > 1
+          ? '<button class="ghost tiny fire" data-fire="' + st.id + '" title="遣散费 ' +
+            money(E.fireCost(s, st)) + '">解雇</button>'
+          : '') +
+        '</div>' +
         '</div>';
     });
     html += '</div>';
@@ -1091,12 +1129,15 @@
         var done = E.researchDone(s, it.id);
         var running = !!active && active.id === it.id;
         var cost = E.researchCost(s, it);
-        var busy = done || running || !!active || s.money < cost;
-        html += '<button class="res-item' + (done ? ' done' : '') + (running ? ' running' : '') + '"' +
+        var from = E.researchFrom(it);
+        var locked = from > E.year(s);
+        var busy = done || running || locked || !!active || s.money < cost;
+        html += '<button class="res-item' + (done ? ' done' : '') + (running ? ' running' : '') +
+          (locked ? ' locked' : '') + '"' +
           ' data-research="' + it.id + '"' + (busy ? ' disabled' : '') + '>' +
           '<span class="res-name">' + esc(it.name) + (done ? ' ✓' : '') + '</span>' +
           '<span class="res-desc">' + esc(it.desc) + '</span>' +
-          '<span class="res-meta">' + money(cost) + ' · ' + it.days + ' 天' +
+          '<span class="res-meta">' + (locked ? from + ' 年起' : money(cost) + ' · ' + it.days + ' 天') +
           (running ? ' · ' + Math.round(prog * 100) + '%' : '') + '</span>' +
           '</button>';
       });
@@ -1108,6 +1149,30 @@
 
   function gearBody() {
     var html = '';
+
+    /* 办公室也在这里买：买工位 = 搬家 */
+    var roomIdx = E.roomIndex(s);
+    var next = E.nextRoom(s);
+    var rcost = E.expandCost(s);
+    html += '<div class="res-branch">' +
+      '<div class="res-branch-head"><span class="res-icon">🏢</span>办公室' +
+      '<span class="res-count">' + (roomIdx + 1) + '/' + GD.ROOMS.length + '</span></div>' +
+      '<div class="res-list">';
+    GD.ROOMS.forEach(function (r, i) {
+      var cur = i === roomIdx;
+      var upnext = !!next && r.key === next.key;
+      var locked = i > roomIdx + 1;
+      var can = upnext && s.money >= rcost;
+      var meta = cur ? '当前所在' : upnext ? money(rcost) : locked ? '先搬前一间' : '已搬过';
+      html += '<button class="res-item room' + (cur ? ' done' : '') + (locked ? ' locked' : '') + '"' +
+        (can ? '' : ' disabled') + ' data-room="' + r.key + '">' +
+        '<span class="res-name">' + esc(r.name) + (cur ? ' ✓' : '') + '</span>' +
+        '<span class="res-desc">' + r.seats + ' 个工位 · ' + esc(r.desc) + '</span>' +
+        '<span class="res-meta">' + meta + '</span>' +
+        '</button>';
+    });
+    html += '</div></div>';
+
     GD.GEAR_CATS.forEach(function (c) {
       var all = GD.GEAR.filter(function (g) { return g.cat === c.id; });
       var own = all.filter(function (g) { return E.hasGear(s, g.id); }).length;
@@ -1117,17 +1182,19 @@
       all.forEach(function (g) {
         var has = E.hasGear(s, g.id);
         var cost = E.gearCost(s, g);
-        var busy = has || s.money < cost;
-        html += '<button class="res-item gear' + (has ? ' done' : '') + '" data-gear="' + g.id + '"' +
-          (busy ? ' disabled' : '') + '>' +
+        var from = E.gearFrom(g);
+        var locked = from > E.year(s);
+        var busy = has || locked || s.money < cost;
+        html += '<button class="res-item gear' + (has ? ' done' : '') + (locked ? ' locked' : '') +
+          '" data-gear="' + g.id + '"' + (busy ? ' disabled' : '') + '>' +
           '<span class="res-name">' + esc(g.name) + (has ? ' ✓' : '') + '</span>' +
           '<span class="res-desc">' + esc(g.desc) + '</span>' +
-          '<span class="res-meta">' + (has ? '已购置' : money(cost)) + '</span>' +
+          '<span class="res-meta">' + (has ? '已购置' : locked ? from + ' 年起' : money(cost)) + '</span>' +
           '</button>';
       });
       html += '</div></div>';
     });
-    html += '<div class="panel-foot">设备买断制：一次性花钱、永久生效。带家具标记的会真的出现在办公室里。</div>';
+    html += '<div class="panel-foot">设备买断制：一次性花钱、永久生效。带家具标记的会真的出现在办公室里。办公室也在这一页买 —— 买工位就是搬家。</div>';
     return html;
   }
 

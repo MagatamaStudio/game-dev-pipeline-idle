@@ -1156,8 +1156,31 @@ function playOne(s, plan, choice) {
 
 /* ---------------- 设备 / 家具 ---------------- */
 (function () {
-  ok('设备一共 24 件', GD.GEAR.length === 24, String(GD.GEAR.length));
+  ok('设备一共 48 件', GD.GEAR.length === 48, String(GD.GEAR.length));
   ok('设备分 4 个品类', GD.GEAR_CATS.length === 4);
+  ok('设备 id 不重复', GD.GEAR.every(function (g, i) {
+    return GD.GEAR.map(function (x) { return x.id; }).indexOf(g.id) === i;
+  }));
+  ok('每个品类都是 12 件', GD.GEAR_CATS.every(function (c) {
+    return GD.GEAR.filter(function (g) { return g.cat === c.id; }).length === 12;
+  }));
+
+  /* 中后期设备要等到年份才上架 */
+  var future = GD.GEAR.filter(function (g) { return E.gearFrom(g) > 1972; });
+  ok('有带年份门槛的设备', future.length >= 20, String(future.length));
+  var sFuture = E.newGame();
+  sFuture.money = 1e9;
+  var f0 = future[0];
+  ok('年份没到买不了设备', E.gearYearOk(sFuture, f0) === false && E.buyGear(sFuture, f0.id) === false,
+    f0.name + ' ' + E.gearFrom(f0));
+  sFuture.day = (E.gearFrom(f0) - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  ok('年份到了就能买', E.gearYearOk(sFuture, f0) === true && E.buyGear(sFuture, f0.id) === true);
+
+  /* 办公桌也在设备页里买：搬一次房间 = 买一档工位 */
+  var sRoom = E.newGame();
+  sRoom.money = 1e9;
+  ok('设备页的办公室能搬', E.expandOffice(sRoom) === true && E.room(sRoom).key === 'street');
+  ok('搬家按房间等级走', E.roomDef(1).seats === 4 && E.roomDef(3).seats === 6);
 
   var s = E.newGame();
   ok('新开局没有任何设备', s.furniture.length === 0);
@@ -1201,7 +1224,16 @@ function playOne(s, plan, choice) {
 
 /* ---------------- 研究 ---------------- */
 (function () {
-  ok('研究项一共 24 个', GD.RESEARCH.length === 24, String(GD.RESEARCH.length));
+  ok('研究项一共 48 个', GD.RESEARCH.length === 48, String(GD.RESEARCH.length));
+  ok('研究项 id 不重复', GD.RESEARCH.every(function (r, i) {
+    return GD.RESEARCH.map(function (x) { return x.id; }).indexOf(r.id) === i;
+  }));
+  ok('每项研究都挂在合法支线上', GD.RESEARCH.every(function (r) {
+    return GD.RESEARCH_BRANCHES.some(function (b) { return b.id === r.branch; });
+  }));
+  ok('每条支线都是 12 项', GD.RESEARCH_BRANCHES.every(function (b) {
+    return GD.RESEARCH.filter(function (r) { return r.branch === b.id; }).length === 12;
+  }));
   ok('研究分 4 条支线', GD.RESEARCH_BRANCHES.length === 4);
 
   var s = E.newGame();
@@ -1818,6 +1850,47 @@ function playOne(s, plan, choice) {
   /* 存档读回来仍然是 NG+ */
   var back = E.deserialize(E.serialize(s));
   ok('读档保住 NG+ 轮次', back.ng === 1 && E.timeSpeed(back) === GD.BAL.ngTimeSpeed);
+})();
+
+/* ---------- 解雇 ---------- */
+(function () {
+  var s = E.newGame();
+  s.money = 1000000;
+  var before = s.staff.length;
+  var cost = E.fireCost(s, s.staff[0]);
+  var name = s.staff[0].name;
+  var r = E.fireStaff(s, s.staff[0].id);
+  ok('能解雇', r.ok === true && r.name === name && s.staff.length === before - 1,
+    r.name + ' / ' + s.staff.length + ' 人');
+  ok('解雇要付遣散费', s.money === 1000000 - cost, String(cost));
+  ok('遣散费进账本', s.firedFee === cost);
+
+  var s2 = E.newGame();
+  s2.money = 1000000;
+  var lead = s2.staff[0].id;
+  s2.plan = { genre: 'rpg', theme: 'fantasy', leader: lead, platform: 'arc72' };
+  E.fireStaff(s2, lead);
+  ok('主创被解雇后自动换人', s2.plan.leader !== lead && s2.staff.length === 2, s2.plan.leader);
+
+  var s3 = E.newGame();
+  s3.money = 1000000;
+  E.fireStaff(s3, s3.staff[0].id);
+  E.fireStaff(s3, s3.staff[1].id);
+  ok('最后一个人不能解雇',
+    s3.staff.length === 1 && E.fireStaff(s3, s3.staff[0].id).reason === 'last');
+
+  var s4 = E.newGame();
+  s4.money = 0;
+  var xr = E.fireStaff(s4, s4.staff[0].id);
+  ok('钱不够解雇不了', xr.reason === 'money' && s4.staff.length === 3, xr.reason);
+
+  var s5 = E.newGame();
+  s5.money = 1000000;
+  var goneId = s5.staff[2].id;
+  E.fireStaff(s5, goneId);
+  s5.candidates = [goneId];
+  ok('解雇的人可以再招回来',
+    E.hire(s5, goneId) === true && s5.staff.some(function (x) { return x.id === goneId; }));
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

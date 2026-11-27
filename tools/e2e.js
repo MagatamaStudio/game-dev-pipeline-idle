@@ -290,6 +290,27 @@ function connect(wsUrl) {
   check('体力见底会显示疲劳', tiredUI.tags.indexOf('疲劳') >= 0 && tiredUI.low >= 1,
     tiredUI.tags.join(','));
 
+  /* 解雇 */
+  var fired = await evalJs(`(() => {
+    const st = GD.getState();
+    st.money = 5000000;
+    const before = st.staff.length;
+    const btn = document.querySelector('#team [data-fire]');
+    const id = btn ? btn.getAttribute('data-fire') : '';
+    if (btn) btn.click();
+    return {
+      before: before,
+      after: GD.getState().staff.length,
+      rows: document.querySelectorAll('#team .staff-row').length,
+      gone: !GD.getState().staff.some(x => x.id === id),
+      toast: [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ')
+    };
+  })()`);
+  check('能解雇员工', fired.after === fired.before - 1 && fired.gone === true,
+    fired.before + ' → ' + fired.after);
+  check('解雇后列表跟着少一行', fired.rows === fired.after, 'rows=' + fired.rows);
+  check('解雇会弹提示', fired.toast.indexOf('遣散费') >= 0, fired.toast);
+
   await evalJs(`document.querySelector('[data-act="close-panel"]').click()`);
   await sleep(150);
   check('团队面板可以关闭', await evalJs(`document.querySelector('#team').hidden`) === true);
@@ -422,11 +443,18 @@ function connect(wsUrl) {
     open: !document.querySelector('#research').hidden,
     items: document.querySelectorAll('#research [data-research]').length,
     branches: document.querySelectorAll('#research .res-branch').length,
-    done: document.querySelectorAll('#research .res-item.done').length
+    done: document.querySelectorAll('#research .res-item.done').length,
+    locked: document.querySelectorAll('#research .res-item.locked').length,
+    lockedMeta: [...document.querySelectorAll('#research .res-item.locked .res-meta')]
+      .slice(0, 2).map(x => x.textContent)
   })`);
-  check('研究面板有 4 条支线 24 项',
-    resPanel.open === true && resPanel.items === 24 && resPanel.branches === 4,
+  check('研究面板有 4 条支线 48 项',
+    resPanel.open === true && resPanel.items === 48 && resPanel.branches === 4,
     'items=' + resPanel.items + ' branches=' + resPanel.branches);
+  check('1972 年有 24 项还没到年份', resPanel.locked === 24, 'locked=' + resPanel.locked);
+  check('未到年份的项显示开放年份',
+    resPanel.lockedMeta.every(function (t) { return /\d{4} 年起/.test(t); }),
+    resPanel.lockedMeta.join(' / '));
 
   var moneyBeforeRes = await evalJs(`GD.getState().money`);
   await evalJs(`document.querySelector('#research [data-research]:not([disabled])').click()`);
@@ -452,12 +480,38 @@ function connect(wsUrl) {
   await sleep(220);
   var gearPanel = await evalJs(`({
     items: document.querySelectorAll('#research [data-gear]').length,
+    rooms: document.querySelectorAll('#research [data-room]').length,
     cats: document.querySelectorAll('#research .res-branch').length,
+    locked: document.querySelectorAll('#research .res-item.locked').length,
+    officeHead: (document.querySelector('#research .res-branch-head') || {}).textContent || '',
     tabOn: (document.querySelector('#research .tab.on') || {}).textContent || ''
   })`);
-  check('设备页有 4 个品类 24 件',
-    gearPanel.items === 24 && gearPanel.cats === 4 && gearPanel.tabOn === '设备',
-    'items=' + gearPanel.items + ' cats=' + gearPanel.cats);
+  check('设备页有 4 个品类 48 件 + 办公室',
+    gearPanel.items === 48 && gearPanel.rooms === 4 && gearPanel.cats === 5 && gearPanel.tabOn === '设备',
+    'items=' + gearPanel.items + ' rooms=' + gearPanel.rooms + ' cats=' + gearPanel.cats);
+  check('办公室排在最前面', gearPanel.officeHead.indexOf('办公室') >= 0, gearPanel.officeHead);
+  check('未到年份的设备也灰着', gearPanel.locked >= 20, 'locked=' + gearPanel.locked);
+
+  /* 设备页里直接搬办公室 */
+  var roomBuy = await evalJs(`(function () {
+    var s = GD.getState();
+    s.money = 5000000;
+    var before = s.seats;
+    var btn = [...document.querySelectorAll('#research [data-room]')]
+      .find(b => !b.disabled);
+    var key = btn ? btn.getAttribute('data-room') : '';
+    if (btn) btn.click();
+    return {
+      key: key,
+      before: before,
+      seats: s.seats,
+      room: GD.Engine.room(s).name,
+      toast: [...document.querySelectorAll('#toasts .toast')].map(x => x.textContent).join(' | ')
+    };
+  })()`);
+  check('设备页能买办公室', roomBuy.key !== '' && roomBuy.seats === roomBuy.before + 1,
+    roomBuy.before + ' → ' + roomBuy.seats + ' · ' + roomBuy.room);
+  check('搬家会弹提示', roomBuy.toast.indexOf('搬进') >= 0, roomBuy.toast);
 
   var moneyBeforeGear = await evalJs(`GD.getState().money`);
   await evalJs(`document.querySelector('#research [data-gear="rug"]').click()`);
@@ -996,6 +1050,26 @@ function connect(wsUrl) {
     JSON.stringify(bankUI.after));
 
   /* ---------- 10.5 NG+ ---------- */
+  var endBg = await evalJs(`(() => {
+    const st = GD.getState();
+    const keep = st.phase;
+    st.phase = 'ending';
+    GD.UI.render();
+    const el = document.querySelector('.ending');
+    const cs = el ? getComputedStyle(el) : null;
+    const out = {
+      has: !!el,
+      image: cs ? cs.backgroundImage : '',
+      color: cs ? cs.backgroundColor : ''
+    };
+    st.phase = keep;
+    GD.UI.render();
+    return out;
+  })()`);
+  check('结局页有卡片', endBg.has === true);
+  check('结局页不再写死深色底',
+    endBg.image.indexOf('33, 26, 19') < 0 && endBg.image.indexOf('20, 16, 13') < 0,
+    (endBg.image || '').slice(0, 80));
   var ngUI = await evalJs(`(() => {
     const st = GD.getState();
     st.phase = 'ending';

@@ -218,7 +218,41 @@
     { id: 'benefits', branch: 'team', name: '福利制度', desc: '日薪 −8%', cost: 100000, days: 140, eff: { salary: 0.92 } },
     { id: 'mentor', branch: 'team', name: '导师制', desc: '经验 +15%，品质 +2%', cost: 90000, days: 130, eff: { xp: 1.15, quality: 1.02 } },
     { id: 'remote', branch: 'team', name: '远程协作', desc: '开发速度 +5%，日薪 −5%', cost: 120000, days: 150, eff: { speed: 0.95, salary: 0.95 } },
-    { id: 'headhunt', branch: 'team', name: '猎头网络', desc: '经验 +10%，品质 +2%', cost: 70000, days: 100, eff: { xp: 1.10, quality: 1.02 } }
+    { id: 'headhunt', branch: 'team', name: '猎头网络', desc: '经验 +10%，品质 +2%', cost: 70000, days: 100, eff: { xp: 1.10, quality: 1.02 } },
+
+  /* ---- 第二轮扩展：中后期项目，价格与天数都往上抬 ---- */
+
+  /* 技术 */
+  { id: 'cloud', branch: 'tech', name: '云构建', desc: '开发速度 +5%，品质 +2%', cost: 240000, days: 200, eff: { speed: 0.95, quality: 1.02 } },
+  { id: 'engine2', branch: 'tech', name: '引擎二代', desc: '品质 +7%，开发速度 +5%', cost: 320000, days: 240, eff: { quality: 1.07, speed: 0.95 } },
+  { id: 'mltune', branch: 'tech', name: '机器学习调优', desc: '品质 +5%', cost: 360000, days: 260, eff: { quality: 1.05 } },
+  { id: 'devops', branch: 'tech', name: '自动化流水线', desc: '开发速度 +8%', cost: 280000, days: 230, eff: { speed: 0.92 } },
+  { id: 'locpipe', branch: 'tech', name: '本地化管线', desc: '品质 +3%，销量 +3%', cost: 260000, days: 210, eff: { quality: 1.03, sales: 1.03 } },
+  { id: 'arsenal', branch: 'tech', name: '工具矩阵', desc: '品质 +8%，开发速度 +6%', cost: 480000, days: 300, eff: { quality: 1.08, speed: 0.94 } },
+
+  /* 内容 */
+  { id: 'casting', branch: 'content', name: '选角与表演', desc: '每位评审 +0.6 分', cost: 220000, days: 190, eff: { review: 0.6 } },
+  { id: 'musicprod', branch: 'content', name: '音乐制作室', desc: '品质 +5%，粉丝 +5%', cost: 260000, days: 220, eff: { quality: 1.05, fans: 1.05 } },
+  { id: 'ipbible', branch: 'content', name: '设定集', desc: '品质 +6%，粉丝 +6%', cost: 300000, days: 240, eff: { quality: 1.06, fans: 1.06 } },
+  { id: 'cinematic', branch: 'content', name: '过场动画组', desc: '品质 +7%', cost: 340000, days: 260, eff: { quality: 1.07 } },
+  { id: 'critique', branch: 'content', name: '内部评审会', desc: '每位评审 +0.8 分', cost: 180000, days: 160, eff: { review: 0.8 } },
+  { id: 'editing', branch: 'content', name: '剪辑与节奏', desc: '品质 +6%，销量 +3%', cost: 400000, days: 280, eff: { quality: 1.06, sales: 1.03 } },
+
+  /* 商业 */
+  { id: 'pr', branch: 'biz', name: '公关团队', desc: '销量 +7%', cost: 200000, days: 180, eff: { sales: 1.07 } },
+  { id: 'live', branch: 'biz', name: '线下活动', desc: '粉丝 +12%，销量 +4%', cost: 260000, days: 220, eff: { fans: 1.12, sales: 1.04 } },
+  { id: 'sub', branch: 'biz', name: '订阅制探索', desc: '销量 +9%', cost: 320000, days: 250, eff: { sales: 1.09 } },
+  { id: 'merch', branch: 'biz', name: '周边授权', desc: '粉丝 +10%，销量 +5%', cost: 300000, days: 240, eff: { fans: 1.10, sales: 1.05 } },
+  { id: 'excl', branch: 'biz', name: '独占谈判', desc: '平台授权费 −20%，销量 +6%', cost: 380000, days: 280, eff: { license: 0.80, sales: 1.06 } },
+  { id: 'empire', branch: 'biz', name: '发行帝国', desc: '销量 +12%，粉丝 +8%', cost: 520000, days: 320, eff: { sales: 1.12, fans: 1.08 } },
+
+  /* 团队 */
+  { id: 'campus', branch: 'team', name: '校招通道', desc: '经验 +12%，日薪 −4%', cost: 160000, days: 150, eff: { xp: 1.12, salary: 0.96 } },
+  { id: 'perfsys', branch: 'team', name: '绩效体系', desc: '经验 +15%，品质 +2%', cost: 220000, days: 200, eff: { xp: 1.15, quality: 1.02 } },
+  { id: 'wellness', branch: 'team', name: '健康计划', desc: '日薪 −6%，经验 +8%', cost: 260000, days: 220, eff: { salary: 0.94, xp: 1.08 } },
+  { id: 'studio', branch: 'team', name: '工作室制', desc: '品质 +4%，开发速度 +3%', cost: 300000, days: 240, eff: { quality: 1.04, speed: 0.97 } },
+  { id: 'retention', branch: 'team', name: '留人计划', desc: '日薪 −10%', cost: 360000, days: 260, eff: { salary: 0.90 } },
+  { id: 'academy', branch: 'team', name: '内部学院', desc: '经验 +25%，品质 +3%', cost: 480000, days: 320, eff: { xp: 1.25, quality: 1.03 } }
   ];
 
   /* 设备 / 家具：24 件，买断制，一次性花钱。每个品类 6 件。
@@ -262,8 +296,51 @@
     { id: 'security', cat: 'infra', name: '安保系统', desc: '日薪 −2%', cost: 70000, eff: { salary: 0.98 }, art: null },
     { id: 'net', cat: 'infra', name: '专线网络', desc: '开发速度 +3%', cost: 110000, eff: { speed: 0.97 }, art: null },
     { id: 'workshop', cat: 'infra', name: '维修间', desc: '日薪 −3%', cost: 100000, eff: { salary: 0.97 }, art: null },
-    { id: 'lab', cat: 'infra', name: '测试实验室', desc: '品质 +4%，经验 +4%', cost: 180000, eff: { quality: 1.04, xp: 1.04 }, art: null }
+    { id: 'lab', cat: 'infra', name: '测试实验室', desc: '品质 +4%，经验 +4%', cost: 180000, eff: { quality: 1.04, xp: 1.04 }, art: null },
+
+  /* ---- 第二轮扩展：中后期设备 ---- */
+
+  /* 工位 */
+  { id: 'dual4k', cat: 'desk', name: '双 4K 屏', desc: '品质 +3%', cost: 180000, eff: { quality: 1.03 }, art: null },
+  { id: 'haptic', cat: 'desk', name: '力反馈外设', desc: '品质 +2%，开发速度 +3%', cost: 220000, eff: { quality: 1.02, speed: 0.97 }, art: null },
+  { id: 'capture', cat: 'desk', name: '采集工作站', desc: '品质 +3%，粉丝 +2%', cost: 260000, eff: { quality: 1.03, fans: 1.02 }, art: null },
+  { id: 'ergopro', cat: 'desk', name: '升降桌', desc: '日薪 −3%，开发速度 +2%', cost: 240000, eff: { salary: 0.97, speed: 0.98 }, art: null },
+  { id: 'soundcard', cat: 'desk', name: '专业声卡', desc: '品质 +3%', cost: 280000, eff: { quality: 1.03 }, art: null },
+  { id: 'renderfarm', cat: 'desk', name: '渲染农场节点', desc: '品质 +4%，开发速度 +4%', cost: 420000, eff: { quality: 1.04, speed: 0.96 }, art: null },
+
+  /* 环境 */
+  { id: 'acoustic', cat: 'room', name: '声学装修', desc: '品质 +3%', cost: 200000, eff: { quality: 1.03 }, art: null },
+  { id: 'lounge', cat: 'room', name: '休闲区', desc: '日薪 −4%', cost: 220000, eff: { salary: 0.96 }, art: 'sofa' },
+  { id: 'greenery', cat: 'room', name: '空中花园', desc: '粉丝 +5%', cost: 260000, eff: { fans: 1.05 }, art: 'plant' },
+  { id: 'skyline', cat: 'room', name: '顶层视野', desc: '粉丝 +6%，品质 +2%', cost: 320000, eff: { fans: 1.06, quality: 1.02 }, art: null },
+  { id: 'smartlight', cat: 'room', name: '智能灯光', desc: '粉丝 +3%，品质 +2%', cost: 240000, eff: { fans: 1.03, quality: 1.02 }, art: 'neon' },
+  { id: 'gallery', cat: 'room', name: '作品陈列墙', desc: '粉丝 +7%', cost: 380000, eff: { fans: 1.07 }, art: null },
+
+  /* 娱乐 */
+  { id: 'billiards', cat: 'fun', name: '台球桌', desc: '经验 +6%', cost: 140000, eff: { xp: 1.06 }, art: null },
+  { id: 'karaoke', cat: 'fun', name: '卡拉 OK', desc: '经验 +5%，日薪 −2%', cost: 160000, eff: { xp: 1.05, salary: 0.98 }, art: null },
+  { id: 'cinema', cat: 'fun', name: '内部影院', desc: '品质 +3%，粉丝 +3%', cost: 220000, eff: { quality: 1.03, fans: 1.03 }, art: null },
+  { id: 'barcorner', cat: 'fun', name: '吧台', desc: '日薪 −5%', cost: 180000, eff: { salary: 0.95 }, art: null },
+  { id: 'esports', cat: 'fun', name: '电竞房', desc: '粉丝 +6%，经验 +4%', cost: 300000, eff: { fans: 1.06, xp: 1.04 }, art: 'arcade' },
+  { id: 'spa', cat: 'fun', name: '按摩室', desc: '日薪 −6%，经验 +5%', cost: 340000, eff: { salary: 0.94, xp: 1.05 }, art: null },
+
+  /* 基建 */
+  { id: 'dc', cat: 'infra', name: '自建机房', desc: '开发速度 +5%，品质 +2%', cost: 380000, eff: { speed: 0.95, quality: 1.02 }, art: 'server' },
+  { id: 'mocap', cat: 'infra', name: '动捕棚', desc: '品质 +6%', cost: 460000, eff: { quality: 1.06 }, art: null },
+  { id: 'rendernode', cat: 'infra', name: '渲染集群', desc: '开发速度 +6%，品质 +3%', cost: 520000, eff: { speed: 0.94, quality: 1.03 }, art: null },
+  { id: 'biobadge', cat: 'infra', name: '生物门禁', desc: '日薪 −3%，品质 +2%', cost: 260000, eff: { salary: 0.97, quality: 1.02 }, art: null },
+  { id: 'cloudstore', cat: 'infra', name: '云端归档', desc: '品质 +3%，开发速度 +3%', cost: 300000, eff: { quality: 1.03, speed: 0.97 }, art: null },
+  { id: 'aifarm', cat: 'infra', name: 'AI 训练集群', desc: '品质 +7%，开发速度 +4%', cost: 600000, eff: { quality: 1.07, speed: 0.96 }, art: 'server' }
   ];
+
+  /* 第二轮设备的解锁年份 */
+  GD.GEAR_FROM = {
+    billiards: 1980, karaoke: 1983, dual4k: 1984, acoustic: 1985, dc: 1986,
+    lounge: 1987, haptic: 1988, cinema: 1989, barcorner: 1990, capture: 1991,
+    greenery: 1992, esports: 1993, ergopro: 1994, smartlight: 1995, biobadge: 1996,
+    soundcard: 1997, mocap: 1998, skyline: 1999, cloudstore: 2000, spa: 2001,
+    renderfarm: 2003, gallery: 2005, rendernode: 2007, aifarm: 2010
+  };
 
   /* ---------------- 办公室（4 级） ----------------
    * 工位数就是房间等级：3/4/5/6 张桌子分别对应车库 → 独栋。
@@ -966,6 +1043,16 @@
   ];
 
   /* ---------------- 数值 ---------- */
+  /* 第二轮项目的解锁年份：研究不再是一张能一口气点完的清单，
+   * 而是一条跨年代的长线。没列到的（第一轮 24 项）开局就能研究。 */
+  GD.RESEARCH_FROM = {
+    campus: 1982, pr: 1983, casting: 1984, cloud: 1985, perfsys: 1987, live: 1988,
+    musicprod: 1989, engine2: 1990, wellness: 1992, sub: 1993, ipbible: 1994,
+    mltune: 1996, studio: 1998, merch: 1999, cinematic: 2000, devops: 2002,
+    retention: 2004, excl: 2005, critique: 2006, locpipe: 2008, academy: 2010,
+    editing: 2012, empire: 2013, arsenal: 2015
+  };
+
   GD.BAL = {
     startMoney: 500000,
     startYear: 1972,
@@ -1021,6 +1108,7 @@
 
     /* 团队 */
     hireFeeDays: 70,          // 签约金 = 日薪 × 70 天
+    fireDays: 30,             // 遣散费 = 日薪 × 30 天
     seatCosts: [120000, 220000, 380000],   // 第 4/5/6 个工位
     refreshCost: 10000,       // 换一批候选人
     teamSpeedBonus: 4,        // 每多一人，开发快 4 秒
@@ -1035,8 +1123,8 @@
     offlineMaxDays: 120,      // 日历最多跳 120 天
     offlineMinSeconds: 60,
     inflationPerYear: 0.06, inflationBase: 1.0,  // 成本每年线性上涨 6%，30 年约 2.8 倍
-    publisherCut: 0.40,        // 发行/制造/渠道抽成后到手比例
-    prodValueDivisor: 27,     // 制作成本 = 平台(装机×单价)/60 × 工资
+    publisherCut: 0.395,        // 发行/制造/渠道抽成后到手比例
+    prodValueDivisor: 26,     // 制作成本 = 平台(装机×单价)/60 × 工资
 
     devSeconds: 58,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,
