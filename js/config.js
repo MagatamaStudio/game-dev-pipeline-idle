@@ -1071,7 +1071,7 @@
   GD.BAL_AWARD = { catScale: 1.10, catJitter: 6 };
 
   GD.BAL = {
-    startMoney: 500000,
+    startMoney: 620000,
     startYear: 1972,
     endYear: 2002,          // 主线结局年
     daysPerYear: 360,
@@ -1081,6 +1081,23 @@
     trendThemes: 2,
     trendThemeSales: 1.25,
     trendGenreSales: 1.10,
+
+    /* 加成收益递减：研究 + 设备 + 家具 + 宣言全部相乘，48 件设备会叠到 5 倍以上，
+     * 一叠上去后期随便一部都满分。这里给「偏离 1 的幅度」设上限，
+     * 再叠只会越来越接近上限，不会指数爆炸。 */
+    mulCap: 1.20,
+
+    /* 平台上限随年代放宽：后期工作室的能力涨得比平台快，
+     * 上限不跟着涨，品质/上限 就会到 7 倍，评分永远封顶。 */
+    capBase: 1.10,
+    capGrowth: 0.054,
+
+    /* 对手强度：跟着年代抬，1990 年代后期要能真的压住你 */
+    rivalBase: 27,
+    rivalYearSlope: 0.44,
+    rivalPower: 2.1,
+    rivalJitter: 2.5,
+    rivalCap: 46,
 
     /* 怀旧潮：每 12 年一次，持续 2 年，某一个类型销量 ×1.30 */
     nostalgiaEvery: 12,
@@ -1141,7 +1158,8 @@
     offlineMinSeconds: 60,
     inflationPerYear: 0.06, inflationBase: 1.0,  // 成本每年线性上涨 6%，30 年约 2.8 倍
     publisherCut: 0.395,        // 发行/制造/渠道抽成后到手比例
-    prodValueDivisor: 26,     // 制作成本 = 平台(装机×单价)/60 × 工资
+    prodValueDivisor: 24,     // 制作成本 = 平台(装机×单价)/24 × 工资
+    prodPenaltyFrom: 2.5,     // 超过这个「平台价值」才开始额外加价
 
     devSeconds: 58,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,

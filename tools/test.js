@@ -788,7 +788,9 @@ function playOne(s, plan, choice) {
   console.log('   24 局 RPG×幻想：评分中位数 ' + median + '/40，回报中位数 ' + medMargin.toFixed(2) + ' 倍成本');
 
   ok('评分中位数在合理区间（1972 年 cap 45）', median >= 18 && median <= 38, 'median=' + median);
-  ok('首时代净回报中位数在 0.15–3 倍之间（车库期本来就薄）', medMargin >= 0.15 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
+  /* 车库期本来就薄：第二轮平衡把首作压到「刚好回本」，要 2–3 部才攒得起来。
+   * 下限放到 0.05，是为了能抓「早期直接亏钱」这种真问题，而不是卡死手感。 */
+  ok('首时代净回报中位数在 0.05–3 倍之间（车库期本来就薄）', medMargin >= 0.05 && medMargin <= 3, 'margin=' + medMargin.toFixed(2));
 })();
 
 /* ---------------- 自研平台 ---------------- */
@@ -1143,13 +1145,14 @@ function playOne(s, plan, choice) {
   s2.seats = 5;
   ok('「从小做起」把工位上限压到 5', E.expandCost(s2) === null && E.expandOffice(s2) === false);
 
-  /* 宣言效果进倍率 */
+  /* 宣言效果进倍率（加成因收益递减被轻微压缩，但方向不变） */
   var s3 = E.newGame();
   s3.phase = 'bankrupt';
   E.newCompany(s3, 'makemoney');
-  ok('「这次要赚钱」让销量 +10%、品质 −5%',
-    Math.abs(E.bonusMul(s3, 'sales') - 1.10) < 1e-9 && Math.abs(E.bonusMul(s3, 'quality') - 0.95) < 1e-9,
-    E.bonusMul(s3, 'sales').toFixed(2) + ' / ' + E.bonusMul(s3, 'quality').toFixed(2));
+  var dSales = E.bonusMul(s3, 'sales'), dQual = E.bonusMul(s3, 'quality');
+  ok('「这次要赚钱」让销量上升、品质下降',
+    dSales > 1.08 && dSales < 1.10 && dQual > 0.94 && dQual < 0.96,
+    dSales.toFixed(3) + ' / ' + dQual.toFixed(3));
 
   var s4 = E.newGame();
   s4.phase = 'bankrupt';
@@ -1276,14 +1279,17 @@ function playOne(s, plan, choice) {
 
   var q0 = E.baseQuality(E.newGame(), 'rpg', 'fantasy', 'zhou');
   var q1 = E.baseQuality(s, 'rpg', 'fantasy', 'zhou');
-  ok('设备加成进了作品品质', Math.abs(q1 / q0 - 1.03) < 1e-9,
-    q0.toFixed(2) + ' → ' + q1.toFixed(2));
+  ok('设备加成进了作品品质',
+    q1 > q0 && Math.abs(q1 / q0 - E.softMul(1.03)) < 1e-9,
+    q0.toFixed(2) + ' → ' + q1.toFixed(2) + '（倍率 ' + (q1 / q0).toFixed(4) + '）');
 
   var s2 = E.newGame();
   s2.research.done.push('autotest');
   E.buyGear(s2, 'dblmon');
-  ok('研究与设备加成相乘', Math.abs(E.bonusMul(s2, 'quality') - 1.04 * 1.03) < 1e-9,
-    String(E.bonusMul(s2, 'quality')));
+  var both = E.bonusMul(s2, 'quality');
+  ok('研究与设备加成相乘（但有递减，不会到 1.04×1.03）',
+    both > E.softMul(1.04) && both < 1.04 * 1.03,
+    both.toFixed(4) + ' 介于 ' + E.softMul(1.04).toFixed(4) + ' 与 ' + (1.04 * 1.03).toFixed(4) + ' 之间');
 
   var s3 = E.newGame();
   var sal0 = E.teamSalary(s3);
@@ -1346,13 +1352,14 @@ function playOne(s, plan, choice) {
     Math.abs(E.researchMul(s, 'quality') - 1.03 * 1.04) < 1e-9,
     String(E.researchMul(s, 'quality')));
 
-  /* 授权费折扣 */
+  /* 授权费折扣（收益递减：省得比 15% 少一点） */
   var s2 = E.newGame();
   var p0 = E.preview(s2, s2.plan).cost;
   s2.research.done.push('publish');
   var p1 = E.preview(s2, s2.plan).cost;
-  ok('发行谈判降低授权费', p1 < p0 && Math.abs((p0 - p1) - 6000 * 0.15) < 2,
-    p0.toFixed(0) + ' → ' + p1.toFixed(0));
+  var licSave = p0 - p1;
+  ok('发行谈判降低授权费', p1 < p0 && licSave > 6000 * 0.10 && licSave < 6000 * 0.15,
+    p0.toFixed(0) + ' → ' + p1.toFixed(0) + '（省 ' + licSave.toFixed(0) + '）');
 
   /* 开发速度 */
   var s3 = E.newGame();
@@ -1361,12 +1368,13 @@ function playOne(s, plan, choice) {
   var d1 = E.devDuration(s3, 'zhou');
   ok('AI 辅助开发缩短开发时长', d1 < d0, d0.toFixed(2) + ' → ' + d1.toFixed(2) + ' 秒');
 
-  /* 日薪 */
+  /* 日薪（收益递减：降得比 8% 少一点） */
   var s4 = E.newGame();
   var sal0 = E.teamSalary(s4);
   s4.research.done.push('benefits');
-  ok('福利制度降低日薪', Math.abs(E.teamSalary(s4) - sal0 * 0.92) < 1,
-    Math.round(sal0) + ' → ' + Math.round(E.teamSalary(s4)));
+  var sal1 = E.teamSalary(s4);
+  ok('福利制度降低日薪', sal1 < sal0 && sal1 > sal0 * 0.92 && sal1 < sal0 * 0.96,
+    Math.round(sal0) + ' → ' + Math.round(sal1));
 
   /* 钱不够不能开 */
   var s5 = E.newGame();
@@ -1972,6 +1980,46 @@ function playOne(s, plan, choice) {
   s5.candidates = [goneId];
   ok('解雇的人可以再招回来',
     E.hire(s5, goneId) === true && s5.staff.some(function (x) { return x.id === goneId; }));
+})();
+
+/* ---------- 加成递减与平台上限（第二轮平衡的两个核心旋钮） ---------- */
+(function () {
+  ok('单件加成几乎不受影响', Math.abs(E.softMul(1.03) - 1.0296) < 0.001, E.softMul(1.03).toFixed(4));
+  ok('叠到 5.59 倍会被压到 2 倍出头', E.softMul(5.59) > 2.0 && E.softMul(5.59) < 2.4,
+    E.softMul(5.59).toFixed(2));
+  ok('递减是单调的', E.softMul(2) < E.softMul(3) && E.softMul(3) < E.softMul(8));
+  ok('小于 1 的倍率也会被抬回来', E.softMul(0.55) > 0.55 && E.softMul(0.55) < 1,
+    E.softMul(0.55).toFixed(3));
+  ok('1 还是 1', E.softMul(1) === 1);
+  ok('递减有上限，不会越叠越离谱', E.softMul(100) < 1 + (GD.BAL.mulCap + 0.01),
+    E.softMul(100).toFixed(2));
+
+  var sA = E.newGame();
+  var p72 = E.platformById('arc72', sA);
+  var sB = E.newGame();
+  sB.day = (2002 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  var p02 = E.platformById('i2', sB);
+  ok('平台上限比原始 cap 宽', E.capOf(p72) > p72.cap && E.capOf(p02) > p02.cap,
+    E.capOf(p72).toFixed(0) + ' / ' + E.capOf(p02).toFixed(0));
+  ok('越晚的平台上限放得越宽',
+    E.capOf(p02) / p02.cap > (E.capOf(p72) / p72.cap) * 1.5,
+    (E.capOf(p72) / p72.cap).toFixed(2) + ' → ' + (E.capOf(p02) / p02.cap).toFixed(2));
+
+  /* 后期品质/上限 要落在 1 附近，不能到 8 倍（那样每部都满分） */
+  var sl = E.newGame();
+  sl.day = (2000 - GD.BAL.startYear) * GD.BAL.daysPerYear;
+  sl.research.done = GD.RESEARCH.slice(0, 30).map(function (r) { return r.id; });
+  sl.furniture = GD.GEAR.slice(0, 30).map(function (g) { return g.id; });
+  sl.staff.forEach(function (st) { for (var k in st.stats) st.stats[k] = 75; });
+  var big = E.availablePlatforms(sl).sort(function (a, b) { return b.install - a.install; })[0];
+  sl.plan.platform = big.id;
+  var ratio = E.baseQuality(sl, 'rpg', 'fantasy', sl.staff[0].id) / E.capOf(big);
+  ok('后期品质/上限 落在合理区间（不该爆到几倍）', ratio > 0.6 && ratio < 2.0, ratio.toFixed(2));
+
+  /* 首作不该直接封顶 */
+  var s1 = E.newGame();
+  var r1 = playOne(s1, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' });
+  ok('第一部作品不会直接 40 分', !!r1 && r1.total < 38, r1 ? String(r1.total) : '没做完');
 })();
 
 console.log('\n' + passed + ' 项通过，' + failed + ' 项失败');

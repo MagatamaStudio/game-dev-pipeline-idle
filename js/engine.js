@@ -26,8 +26,9 @@
    * 指数 1.3 让「大平台」的成本涨得比收入快，否则后期利润会失控。 */
   E.prodMultFor = function (s, p) {
     var raw = (E.effInstall(s, p) * p.price) / BAL.prodValueDivisor;
-    /* 小平台线性、大平台额外加价：早期别把车库压死，后期又能吃掉暴利 */
-    var cost = raw * (1 + Math.max(0, raw - 2.5) * 0.72);
+    /* 小平台线性、大平台额外加价：早期别把车库压死，后期又能吃掉暴利。
+     * 起征点 3.5：1972 年的街机板刚好在线下，做第一部游戏不至于亏。 */
+    var cost = raw * (1 + Math.max(0, raw - (BAL.prodPenaltyFrom || 3.5)) * 0.72);
     return Math.max(0.35, Math.min(320, cost));
   };
 
@@ -259,7 +260,7 @@
     var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader, affMul);
     /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据 */
     var p = E.platformById(plan.platform || (s.plan && s.plan.platform) || E.platform(s).id, s);
-    var cap = p.cap;
+    var cap = E.capOf(p);
     var duration = E.devDuration(s, plan.leader) * (sq ? BAL.sequelSpeed : 1);
     var days = duration * BAL.daysPerSecond;
     return {
@@ -992,6 +993,29 @@
   };
 
   /* 研究 + 设备合并成的总加成 —— 挂钩点统一用这两个 */
+  /* 加成收益递减：把「偏离 1 的幅度」压到一个上限以内。
+   * 加分成因是研究 × 设备 × 家具 × 宣言全部相乘，48 件设备能叠到 5 倍以上，
+   * 直接乘进去会让后期随便一部作品都顶到平台上限。
+   * 这项对「变小」的方向同样生效（比如开发速度 0.55 会被抬回 0.75 左右）。 */
+  E.softMul = function (m) {
+    if (!(m > 0)) return 1;
+    var lim = (BAL && BAL.mulCap) || 1.2;
+    var away = m - 1;
+    if (away === 0) return 1;
+    var mag = Math.abs(away);
+    var out = lim * (1 - Math.exp(-mag / lim));
+    return 1 + (away > 0 ? out : -out);
+  };
+
+  /* 平台的品质上限：越晚的平台能承载的工艺越高 */
+  E.capOf = function (p) {
+    if (!p) return 60;
+    var base = (BAL && BAL.capBase) || 1.9;
+    var growth = (BAL && BAL.capGrowth) || 0.033;
+    var yr = p.year || BAL.startYear;
+    return Math.max(10, p.cap * (base + Math.max(0, yr - BAL.startYear) * growth));
+  };
+
   E.bonusMul = function (s, key) {
     var m = E.researchMul(s, key) * E.furnitureMul(s, key);
     var d = s.declEff && s.declEff[key];
@@ -999,7 +1023,7 @@
     /* 办公室等级：quality / research / sales 三类乘数 */
     var rd = E.room(s);
     if (rd && rd.eff && rd.eff[key]) m *= rd.eff[key];
-    return m;
+    return E.softMul(m);
   };
   E.bonusAdd = function (s, key) { return E.researchAdd(s, key) + E.furnitureAdd(s, key); };
 
@@ -1426,7 +1450,7 @@
 
   function computeReview(s) {
     var q = s.project.quality;
-    var cap = E.platform(s).cap;
+    var cap = E.capOf(E.platform(s));
     var scores = [];
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
@@ -1963,8 +1987,16 @@
 
       /* 对手强度跟着「年代」走，而不是只看自己出道多久 ——
        * 否则 90 年代才出道的新对手永远是弱鸡，奖项后期毫无竞争。 */
-      var score = Math.round(25 + (yr - BAL.startYear) * 0.44 + r.power * 2.2 + (Math.random() * 5 - 2.5));
-      score = Math.max(14, Math.min(46, score));
+      var cfgR = {
+        base: BAL.rivalBase != null ? BAL.rivalBase : 25,
+        slope: BAL.rivalYearSlope != null ? BAL.rivalYearSlope : 0.44,
+        power: BAL.rivalPower != null ? BAL.rivalPower : 2.2,
+        jitter: BAL.rivalJitter != null ? BAL.rivalJitter : 2.5,
+        cap: BAL.rivalCap != null ? BAL.rivalCap : 46
+      };
+      var score = Math.round(cfgR.base + (yr - BAL.startYear) * cfgR.slope +
+        r.power * cfgR.power + (Math.random() * cfgR.jitter * 2 - cfgR.jitter));
+      score = Math.max(14, Math.min(cfgR.cap, score));
 
       var def = E.rivalDef(r.id);
       var title = def.titles[r.games.length % def.titles.length];
