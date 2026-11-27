@@ -567,11 +567,11 @@
     offlineDaysPerHour: 3,    // 每离线 1 小时，日历走 3 天
     offlineMaxDays: 120,      // 日历最多跳 120 天
     offlineMinSeconds: 60,
-    inflationPerYear: 0.0, inflationBase: 1.0,   // 每年成本上涨 6%
-    publisherCut: 0.45,        // 发行/制造/渠道抽成后到手比例
+    inflationPerYear: 0.06, inflationBase: 1.0,  // 成本每年线性上涨 6%，30 年约 2.8 倍
+    publisherCut: 0.40,        // 发行/制造/渠道抽成后到手比例
     prodValueDivisor: 27,     // 制作成本 = 平台(装机×单价)/60 × 工资
 
-    devSeconds: 54,           // 正常速度下的开发时长（会被主创速度削减）
+    devSeconds: 58,           // 正常速度下的开发时长（会被主创速度削减）
     speedFactor: 0.4,
     eventAts: [0.30, 0.72],   // 每部作品两次事件
     microAt: [0.15, 0.52, 0.88],   // 小决定出现的进度点

@@ -22,10 +22,17 @@
 
   E.effSalary = function (s, st) { return st.salary * E.inflation(s); };
 
-  /* 制作成本倍率：平台越大、越贵，制作费越高。移动端便宜，3A 贵。 */
+  /* 制作成本倍率：平台越大、越贵，制作费越高。移动端便宜，3A 贵。
+   * 指数 1.3 让「大平台」的成本涨得比收入快，否则后期利润会失控。 */
+  E.prodMultFor = function (s, p) {
+    var raw = (E.effInstall(s, p) * p.price) / BAL.prodValueDivisor;
+    /* 小平台线性、大平台额外加价：早期别把车库压死，后期又能吃掉暴利 */
+    var cost = raw * (1 + Math.max(0, raw - 2.5) * 0.72);
+    return Math.max(0.35, Math.min(320, cost));
+  };
+
   E.prodMult = function (s) {
-    var p = E.platform(s);
-    return Math.max(0.35, Math.min(24, (E.effInstall(s, p) * p.price) / BAL.prodValueDivisor));
+    return E.prodMultFor(s, E.platform(s));
   };
 
   E.teamSalary = function (s) {
@@ -178,7 +185,8 @@
   /* 企划面板的预估 */
   E.preview = function (s, plan) {
     var q = E.baseQuality(s, plan.genre, plan.theme, plan.leader);
-    var p = E.platform(s);
+    /* 必须用 plan 里指定的平台 —— 以前这里读的是 s.plan，导致「换平台预览」永远是旧平台的数据 */
+    var p = E.platformById(plan.platform || (s.plan && s.plan.platform) || E.platform(s).id, s);
     var cap = p.cap;
     var duration = E.devDuration(s, plan.leader);
     var days = duration * BAL.daysPerSecond;
@@ -187,11 +195,11 @@
       quality: q,
       duration: duration,
       days: days,
-      cost: p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMult(s),
+      cost: p.license * E.bonusMul(s, 'license') + E.teamSalary(s) * days * E.prodMultFor(s, p),
       platform: p.id,
       license: p.license,
-      scoreLow: Math.max(1, Math.round(40 * q * 0.92 / cap)),
-      scoreHigh: Math.min(40, Math.round(40 * q * 1.10 / cap))
+      scoreLow: Math.max(1, Math.min(40, Math.round(40 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 * 0.92))),
+      scoreHigh: Math.max(1, Math.min(40, Math.round(40 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 * 1.10) + 3))
     };
   };
 
@@ -814,7 +822,9 @@
     if (s.phase !== 'event' || !s.event) return false;
     var opt = s.event.options[index];
     if (!opt) return false;
-    if (opt.cost > s.money) return false;
+    /* 只有「要花钱且钱不够」才拦。零成本选项永远可选 ——
+     * 否则现金一旦为负，连免费选项都会被判成买不起，事件永远答不了，游戏软锁。 */
+    if (opt.cost > 0 && s.money < opt.cost) return false;
 
     s.money -= opt.cost;
     s.project.cost += opt.cost;
@@ -870,7 +880,8 @@
     var scores = [];
     for (var i = 0; i < GD.CRITICS.length; i++) {
       var c = GD.CRITICS[i];
-      var v = 10 * q / cap * 0.85 + E.bonusAdd(s, 'review');
+      /* 次线性：品质超出 cap 越多，边际收益越小，避免「品质一高必打满分」 */
+      var v = 10 * Math.pow(Math.max(0.01, q / cap), 0.45) * 0.85 + E.bonusAdd(s, 'review');
       if (c.fav === s.plan.genre) v += c.bias;
       if (c.hate === s.plan.genre) v -= 1.0;
       v += Math.random() * 2 - 1;
@@ -1001,7 +1012,7 @@
   /* 销量预估（给发售决策用） */
   E.estimateSales = function (s, mult) {
     var total = s.review.total;
-    var fanF = 1 + s.fans / 25000;
+    var fanF = 1 + Math.min(3, Math.sqrt(Math.max(0, s.fans)) / 160);   // 平方根 + 封顶：打破「粉丝越多卖越多」的滚雪球
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var salesMult = 1 + (((s.project && s.project.salesPct) || 0) / 100);
     var mid = BAL.salesBase * E.effInstall(s, E.platform(s)) * fanF * scoreF * mult * salesMult *
@@ -1013,7 +1024,7 @@
 
   E.startSales = function (s) {
     var total = s.review.total;
-    var fanF = 1 + s.fans / 25000;
+    var fanF = 1 + Math.min(3, Math.sqrt(Math.max(0, s.fans)) / 160);   // 平方根 + 封顶：打破「粉丝越多卖越多」的滚雪球
     var scoreF = Math.pow(total / 40, 2.5) * 2.2;
     var rnd = 0.85 + Math.random() * 0.3;
     var windowMult = s.release ? s.release.mult : 1;
@@ -1258,8 +1269,10 @@
       r.lastYear = yr;
       if (Math.random() < 0.12) continue;
 
-      var score = Math.round(28 + (yr - r.debut) * 0.25 + r.power * 2.5 + (Math.random() * 6 - 3));
-      score = Math.max(14, Math.min(40, score));
+      /* 对手强度跟着「年代」走，而不是只看自己出道多久 ——
+       * 否则 90 年代才出道的新对手永远是弱鸡，奖项后期毫无竞争。 */
+      var score = Math.round(25 + (yr - BAL.startYear) * 0.44 + r.power * 2.2 + (Math.random() * 5 - 2.5));
+      score = Math.max(14, Math.min(46, score));
 
       var def = E.rivalDef(r.id);
       var title = def.titles[r.games.length % def.titles.length];
@@ -1300,6 +1313,7 @@
 
       var topScore = top ? top.score : 0;
       var best = Math.max(mine, topScore);
+      /* 必须「严格超过」才算拿奖：同分归对手，否则满分玩家会白拿所有年份 */
       var playerWins = mine > 0 && mine >= best && mine >= 26;
       var award = null;
 
