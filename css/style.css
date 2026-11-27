@@ -926,6 +926,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   cursor: help;
 }
 
+/* 破产时标题压成红色 */
+.ending.bankrupt .ending-title { color: var(--bad); }
+
 /* 作品名输入 */.name-row { display: flex; gap: 8px; align-items: center; }
 .plan-name {
   flex: 1;

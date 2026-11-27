@@ -358,6 +358,26 @@
     }
   ];
 
+  /* 破产后重新开公司时的宣言（和开局那 4 条不是一套） */
+  GD.DECLARATIONS_RETRY = [
+    {
+      id: 'makewhat', name: '只做我想做的', desc: '品质 +6%',
+      tip: '反正已经死过一次了，这次至少做点自己认的。', eff: { quality: 1.06 }
+    },
+    {
+      id: 'makemoney', name: '这次要赚钱', desc: '销量 +10%，品质 −5%',
+      tip: '活下去比什么都重要。', eff: { sales: 1.10, quality: 0.95 }
+    },
+    {
+      id: 'small', name: '从小做起', desc: '起始资金翻倍，办公室最多 5 个工位',
+      tip: '先把现金攥在手里，别再铺摊子。', eff: { moneyMul: 2, seatCap: 5 }
+    },
+    {
+      id: 'bigshot', name: '跟着大佬走', desc: '开局粉丝 +50%，声望清零',
+      tip: '借别人的盘子起步，代价是重新证明自己。', eff: { fansMul: 1.5, resetRep: true }
+    }
+  ];
+
   GD.FOUNDERS = ['zhou', 'lin', 'ya'];
 
   GD.STAT_NAMES = { code: '程序', script: '剧本', art: '美术', audio: '音效', speed: '速度' };
@@ -976,6 +996,10 @@
     fanPerCopy: 1 / 500,
     fanDecayPerYear: 0.05,   // 粉丝每年衰减 5%，防止无限滚雪球
     rescue: 200000,
+    brokeMonthsToFail: 2,   // 连续几个月付不出钱就清算
+    newCompanyBase: 200000, // 新公司起始资金 = 基础 + 声望 x 10000
+    newCompanyRepBonus: 10000,
+    newCompanyFansKeep: 0.3,// 破产后保留 30% 粉丝
 
     /* 收购对手当子品牌：粉丝门槛 + 基础价 */
     acquireFansMin: 15000,

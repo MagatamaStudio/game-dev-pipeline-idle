@@ -12,7 +12,7 @@
   var ui = {
     phase: null, planSig: '', revealed: -1, totalShown: false,
     weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
-    researchCount: 0, bound: false, lastError: '', mpPick: null
+    researchCount: 0, bound: false, lastError: '', mpPick: null, bankStep: 1
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -131,9 +131,25 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild]');
       if (!t) return;
       GD.SFX.unlock();
+
+      var rebuildId = t.getAttribute('data-rebuild');
+      if (rebuildId) {
+        var nb = E.newCompany(s, rebuildId);
+        if (nb && nb.ok) {
+          GD.SFX.award();
+          UI.toast('🏢 新公司开张：' + nb.declaration.name + ' · 起始资金 ' + money(nb.money) +
+            ' · 粉丝 ' + num(nb.fans));
+          ui.bankStep = 1;
+          ui.phase = null;
+          ui.planSig = '';
+          if (hooks.onSave) hooks.onSave();
+          UI.render();
+        } else { GD.SFX.bad(); }
+        return;
+      }
 
       var mpick = t.getAttribute('data-mpick');
       if (mpick) {
@@ -249,6 +265,7 @@
       if (panelAct === 'team') { GD.SFX.click(); openTeam(); return; }
       if (panelAct === 'archive') { GD.SFX.click(); openArchive(); return; }
       if (panelAct === 'industry') { GD.SFX.click(); renderIndustry(); el.industry.hidden = false; return; }
+      if (panelAct === 'rebuild') { GD.SFX.click(); ui.bankStep = 2; buildBankrupt(); return; }
       if (panelAct === 'research') { GD.SFX.click(); renderResearch(); el.research.hidden = false; return; }
       if (panelAct === 'launch-platform') {
         var lp = E.launchPlatform(s, ui.mpPick || { budget: 'normal', price: 'mid', cut: 'normal' });
@@ -500,6 +517,7 @@
     else if (s.phase === 'sales') buildSales();
     else if (s.phase === 'done') buildDone();
     else if (s.phase === 'ending') { GD.SFX.ending(); buildEnding(); }
+    else if (s.phase === 'bankrupt') { ui.bankStep = 1; buildBankrupt(); }
   }
 
   function updateStage() {
@@ -1168,6 +1186,43 @@
       }
       GD.SFX.total(s.review.total);
     }
+  }
+
+  /* ---------------- 破产 ---------------- */
+
+  function buildBankrupt() {
+    if (ui.bankStep === 2) {
+      var html = '<div class="declare">' +
+        '<div class="declare-title">重新开始</div>' +
+        '<div class="declare-sub">选一条宣言。这次也只生效一次。</div><div class="declare-list">';
+      GD.DECLARATIONS_RETRY.forEach(function (d) {
+        html += '<button class="dec" data-rebuild="' + d.id + '">' +
+          '<b>' + esc(d.name) + '</b>' +
+          '<span class="dec-desc">' + esc(d.desc) + '</span>' +
+          '<span class="dec-tip">' + esc(d.tip) + '</span>' +
+          '</button>';
+      });
+      html += '</div></div>';
+      el.stage.innerHTML = html;
+      el.hint.textContent = '宣言只在开局生效一次。';
+      return;
+    }
+
+    var rel = E.brands(s).map(function (b) { return b.name; });
+    el.stage.innerHTML = '<div class="ending bankrupt">' +
+      '<div class="ending-tag">公司清算</div>' +
+      '<div class="ending-title">破产了</div>' +
+      '<div class="ending-tone">员工散了，办公室退了。但作品还在卖，名字还在行业里。</div>' +
+      '<div class="ending-stats">' +
+      '<div class="done-row"><span>保留作品</span><b>' + s.history.length + ' 部</b></div>' +
+      '<div class="done-row"><span>保留粉丝</span><b>' + num(Math.round((s.fans || 0) * GD.BAL.newCompanyFansKeep)) + '</b></div>' +
+      '<div class="done-row"><span>保留研究</span><b>' + ((s.research && s.research.done) || []).length + ' 项</b></div>' +
+      '<div class="done-row"><span>新公司起始资金</span><b>' + money(E.newCompanyMoney(s)) + '</b></div>' +
+      (rel.length ? '<div class="done-row"><span>脱离的子品牌</span><b>' + esc(rel.join('、')) + '</b></div>' : '') +
+      '</div>' +
+      '<button class="primary big" data-act="rebuild">重新开一家公司</button>' +
+      '</div>';
+    el.hint.textContent = '公司会死，行业不会。';
   }
 
   /* ---------------- 结局 ---------------- */

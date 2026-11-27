@@ -274,7 +274,7 @@
 
   E.expandOffice = function (s) {
     var idx = s.seats - 3;
-    if (idx >= BAL.seatCosts.length) return false;
+    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 6)) return false;
     var cost = BAL.seatCosts[idx] * E.inflation(s);
     if (s.money < cost) return false;
     s.money -= cost;
@@ -284,7 +284,8 @@
 
   E.expandCost = function (s) {
     var idx = s.seats - 3;
-    return idx < BAL.seatCosts.length ? BAL.seatCosts[idx] * E.inflation(s) : null;
+    if (idx >= BAL.seatCosts.length || s.seats >= (s.seatCap || 6)) return null;
+    return BAL.seatCosts[idx] * E.inflation(s);
   };
 
   E.refreshCandidates = function (s) {
@@ -360,6 +361,10 @@
       brands: [],
       myPlatform: null,
       rulesPaid: [],
+      brokeMonths: 0,
+      bankrupts: 0,
+      seatCap: 6,
+      declEff: null,
       candidates: []
     };
     E.rollCandidates(s);
@@ -561,7 +566,12 @@
   };
 
   /* 研究 + 设备合并成的总加成 —— 挂钩点统一用这两个 */
-  E.bonusMul = function (s, key) { return E.researchMul(s, key) * E.furnitureMul(s, key); };
+  E.bonusMul = function (s, key) {
+    var m = E.researchMul(s, key) * E.furnitureMul(s, key);
+    var d = s.declEff && s.declEff[key];
+    if (d) m *= d;
+    return m;
+  };
   E.bonusAdd = function (s, key) { return E.researchAdd(s, key) + E.furnitureAdd(s, key); };
 
   /* ---------------- 挖人 ----------------
@@ -1347,6 +1357,70 @@
     return true;
   };
 
+  /* ---------------- 破产与新公司 ----------------
+   * 公司会死，行业不会：作品 / 长尾 / 研究 / 30% 粉丝 / 子品牌带来的关系都还留着，
+   * 员工、办公室、设备、平台、现金、奖项清空；子品牌脱离变回独立对手。 */
+
+  E.needRebuild = function (s) { return s.phase === 'bankrupt'; };
+
+  E.declRetryById = function (id) {
+    for (var i = 0; i < GD.DECLARATIONS_RETRY.length; i++) {
+      if (GD.DECLARATIONS_RETRY[i].id === id) return GD.DECLARATIONS_RETRY[i];
+    }
+    return null;
+  };
+
+  E.newCompanyMoney = function (s) {
+    return BAL.newCompanyBase + Math.round((s.rep || 0) * BAL.newCompanyRepBonus);
+  };
+
+  E.newCompany = function (s, declId) {
+    var d = E.declRetryById(declId);
+    if (!d) return false;
+    if (s.phase !== 'bankrupt') return false;
+
+    /* 子品牌脱离，变回独立竞争对手 */
+    var released = [];
+    E.brands(s).forEach(function (b) {
+      for (var i = 0; i < s.rivals.length; i++) {
+        if (s.rivals[i].id !== b.id) continue;
+        s.rivals[i].acquired = false;
+        s.rivals[i].power = Math.max(0.8, b.power);
+        s.rivals[i].lastYear = 0;
+        released.push(s.rivals[i].name);
+      }
+    });
+    s.brands = [];
+
+    s.bankrupts = (s.bankrupts || 0) + 1;
+    s.awards = [];
+    s.myPlatform = null;
+    s.furniture = [];
+    s.staff = GD.FOUNDERS.map(function (id) { return E.makeStaff(id); });
+    s.seats = 3;
+    s.seatCap = d.eff.seatCap || 6;
+    s.fans = Math.round((s.fans || 0) * BAL.newCompanyFansKeep * (d.eff.fansMul || 1));
+    s.money = Math.round(E.newCompanyMoney(s) * (d.eff.moneyMul || 1));
+    if (d.eff.resetRep) s.rep = 0;
+    E.addRep(s, 5);            /* 每破产一次 +5 创始人声望 */
+    s.declaration = d.id;
+    s.declEff = d.eff;
+    s.brokeMonths = 0;
+    s.rescued = 0;
+    s.project = null;
+    s.review = null;
+    s.sales = null;
+    s.event = null;
+    s.micro = null;
+    s.release = null;
+    s.timer = 0;
+    s.lastEvent = null;
+    s.phase = 'planning';
+    s.round = (s.history || []).length + 1;
+    E.rollCandidates(s);
+    return { ok: true, declaration: d, released: released, money: s.money, fans: s.fans };
+  };
+
   /* ---------------- 竞争对手 ---------------- */
 
   E.rivalDef = function (id) {
@@ -1504,6 +1578,19 @@
     s.money += gained;
     s.totalEarned += gained;
     s.tailTotal = (s.tailTotal || 0) + gained;
+
+    /* 破产判定：连续 N 个月付不出钱（现金为负）就清算 */
+    if (s.money < 0) s.brokeMonths = (s.brokeMonths || 0) + 1;
+    else s.brokeMonths = 0;
+    if ((s.brokeMonths || 0) >= BAL.brokeMonthsToFail && s.phase !== 'bankrupt' && s.phase !== 'ending') {
+      s.phase = 'bankrupt';
+      s.project = null;
+      s.review = null;
+      s.sales = null;
+      s.event = null;
+      s.micro = null;
+      s.timer = 0;
+    }
     return gained;
   };
 

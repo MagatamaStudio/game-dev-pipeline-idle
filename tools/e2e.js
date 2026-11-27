@@ -684,6 +684,41 @@ function connect(wsUrl) {
   check('年度结果会弹提示而不是抛异常', !toastRes.err && toastRes.after > toastRes.before,
     'toast ' + toastRes.before + '→' + toastRes.after + ' err=' + toastRes.err);
 
+  /* ---------- 10.5 破产与新公司 ---------- */
+  var bankUI = await evalJs(`(function () {
+    var s = GD.getState();
+    s.history = [];          // 清掉长尾收入，否则每月进账会把现金拉回正数
+    s.brands = [];
+    s.money = -1000;
+    s.day = 360;
+    s.tailMonth = 0;
+    s.brokeMonths = 0;
+    GD.Engine.settleMonths(s);
+    s.day += 30;
+    GD.Engine.settleMonths(s);
+    GD.UI.render();
+    var btn = document.querySelector('[data-act="rebuild"]');
+    var title = (document.querySelector('.ending-title') || {}).textContent || '';
+    var phase = GD.getState().phase;
+    if (btn) btn.click();
+    var cards = document.querySelectorAll('[data-rebuild]').length;
+    var first = document.querySelector('[data-rebuild]');
+    if (first) first.click();
+    var after = {
+      phase: GD.getState().phase,
+      decl: GD.getState().declaration,
+      money: Math.round(GD.getState().money),
+      staff: GD.getState().staff.length
+    };
+    return { phase: phase, title: title, cards: cards, after: after };
+  })()`);
+  check('现金连续两个月为负会进破产界面',
+    bankUI.phase === 'bankrupt' && bankUI.title.indexOf('破产') >= 0, bankUI.phase + ' / ' + bankUI.title);
+  check('破产后能选 4 条新公司宣言', bankUI.cards === 4, 'cards=' + bankUI.cards);
+  check('开新公司回到企划阶段',
+    bankUI.after.phase === 'planning' && bankUI.after.decl === 'makewhat' && bankUI.after.staff === 3,
+    JSON.stringify(bankUI.after));
+
   /* ---------- 11. 错误 ---------- */
   check('无运行时错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 

@@ -1002,6 +1002,84 @@ function playOne(s, plan, choice) {
   ok('钱不够时规则保持未生效', E.tickRules(s6).type === 'missed' && E.ruleOf(s6) === null);
 })();
 
+/* ---------------- 破产与新公司 ---------------- */
+(function () {
+  /* 连续两个月现金为负 -> 清算 */
+  var s = E.newGame();
+  s.money = -1000;
+  s.day = 360;
+  s.tailMonth = 0;
+  s.brokeMonths = 0;
+  E.settleMonths(s);
+  ok('现金为负第一个月还没清算', s.phase !== 'bankrupt', s.phase);
+  s.day += 30;
+  E.settleMonths(s);
+  ok('连续两个月为负就破产', s.phase === 'bankrupt', s.phase);
+  ok('破产状态可以被识别', E.needRebuild(s) === true);
+
+  /* 只差一点不算破产 */
+  var s0 = E.newGame();
+  s0.money = 5000;
+  s0.day = 360;
+  s0.tailMonth = 0;
+  E.settleMonths(s0);
+  ok('现金为正不会破产', s0.phase !== 'bankrupt' && (s0.brokeMonths || 0) === 0);
+
+  /* 开新公司：保留什么、清空什么 */
+  var s2 = E.newGame();
+  s2.phase = 'bankrupt';
+  s2.money = -5000;
+  s2.fans = 100000;
+  s2.rep = 60;
+  s2.awards = [{ year: 1990, title: '年度游戏' }];
+  s2.history = [{ name: '旧作', total: 30, revenue: 100000 }];
+  s2.furniture = ['rug', 'coffee'];
+  s2.research.done = ['toolchain', 'engine'];
+  s2.myPlatform = { name: 'M-1', install: 10 };
+  s2.brands = [{ id: 'white', name: '白噪音', power: 1.2, since: 1995, titles: 3, output: 2 }];
+  s2.rivals.forEach(function (r) { if (r.id === 'white') r.acquired = true; });
+
+  var nb = E.newCompany(s2, 'small');
+  ok('开新公司成功', nb && nb.ok === true);
+  ok('起始资金按「基础 + 声望 × 1 万」算，从小做起翻倍',
+    s2.money === (GD.BAL.newCompanyBase + 60 * GD.BAL.newCompanyRepBonus) * 2, String(s2.money));
+  ok('保留 30% 粉丝', Math.round(s2.fans) === 30000, String(Math.round(s2.fans)));
+  ok('保留作品档案与历史', s2.history.length === 1 && s2.history[0].name === '旧作');
+  ok('保留已解锁研究', s2.research.done.length === 2);
+  ok('清空奖项 / 设备 / 自研平台',
+    s2.awards.length === 0 && s2.furniture.length === 0 && s2.myPlatform === null);
+  ok('员工回到 3 位创始人', s2.staff.length === 3);
+  ok('每破产一次 +5 创始人声望', s2.rep === 65, String(s2.rep));
+  ok('破产次数被记录', s2.bankrupts === 1);
+  ok('回到企划阶段', s2.phase === 'planning');
+
+  /* 子品牌脱离，变回独立竞争对手 */
+  var white = s2.rivals.filter(function (r) { return r.id === 'white'; })[0];
+  ok('子品牌脱离并恢复独立', white.acquired === false && s2.brands.length === 0);
+  ok('脱离的对手实力保留', Math.abs(white.power - 1.2) < 1e-9, String(white.power));
+
+  /* 从小做起：工位上限 5 */
+  s2.seats = 5;
+  ok('「从小做起」把工位上限压到 5', E.expandCost(s2) === null && E.expandOffice(s2) === false);
+
+  /* 宣言效果进倍率 */
+  var s3 = E.newGame();
+  s3.phase = 'bankrupt';
+  E.newCompany(s3, 'makemoney');
+  ok('「这次要赚钱」让销量 +10%、品质 −5%',
+    Math.abs(E.bonusMul(s3, 'sales') - 1.10) < 1e-9 && Math.abs(E.bonusMul(s3, 'quality') - 0.95) < 1e-9,
+    E.bonusMul(s3, 'sales').toFixed(2) + ' / ' + E.bonusMul(s3, 'quality').toFixed(2));
+
+  var s4 = E.newGame();
+  s4.phase = 'bankrupt';
+  s4.rep = 70;
+  s4.fans = 200000;
+  E.newCompany(s4, 'bigshot');
+  ok('「跟着大佬走」粉丝 +50%、声望清零后再加 5',
+    Math.abs(s4.fans - 200000 * 0.3 * 1.5) < 1 && s4.rep === 5,
+    Math.round(s4.fans) + ' / ' + s4.rep);
+})();
+
 /* ---------------- 挖人 ---------------- */
 (function () {
   var s = E.newGame();
