@@ -1795,6 +1795,8 @@
     if (s.phase !== 'planning') return false;
     var plat = E.planPlatform(s, plan);
     var lic = plat.license * E.bonusMul(s, 'license');
+    /* 第一部作品免授权费：新手期的容错空间，别让人第一契约就被押金卡住 */
+    if (!s.history.length) lic = 0;
     if (s.money < lic) return false;
 
     /* 锁着的题材不能立项：落到该类型里相性最高的已解锁题材 */

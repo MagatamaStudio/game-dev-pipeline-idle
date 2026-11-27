@@ -13,7 +13,7 @@
     phase: null, planSig: '', revealed: -1, totalShown: false,
     weekCount: 0, lines: {}, logCount: -1, staffCount: -1, microUid: null, awardCount: 0, yearCount: 0,
     researchCount: 0, bound: false, lastError: '', mpPick: null, bankStep: 1,
-  portIdx: null
+  portIdx: null, aTab: 'works'
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -84,6 +84,7 @@
     el.offline = byId('offline');
     el.industry = byId('industry');
     el.research = byId('research');
+    el.help = byId('help');
     el.sound = byId('sound');
     el.theme = byId('theme');
     if (el.sound && GD.SFX && GD.SFX.icon) {
@@ -134,7 +135,7 @@
     if (ui.bound) return;      /* 只绑一次：界面初始化失败后重挂载不会重复响应 */
     ui.bound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train]');
+      var t = ev.target.closest('[data-act],[data-plan],[data-choice],[data-mode],[data-micro],[data-hire],[data-fire],[data-room],[data-port],[data-portto],[data-custom],[data-dec],[data-research],[data-rtab],[data-gear],[data-poach],[data-acquire],[data-mpick],[data-rebuild],[data-buyback],[data-train],[data-atab]');
       if (!t) return;
       GD.SFX.unlock();
 
@@ -273,6 +274,15 @@
       }
 
       /* 移植：先点「移植」展开平台列表，再选目标平台 */
+      /* 作品集页签：作品 / 组合收藏 */
+      var aTabAttr = t.getAttribute('data-atab');
+      if (aTabAttr) {
+        ui.aTab = aTabAttr;
+        GD.SFX.click();
+        renderArchive();
+        return;
+      }
+
       var portIdxAttr = t.getAttribute('data-port');
       if (portIdxAttr != null) {
         var pi = Number(portIdxAttr);
@@ -365,6 +375,7 @@
         }
         return;
       }
+      if (panelAct === 'help') { GD.SFX.click(); renderHelp(); el.help.hidden = false; return; }
       if (panelAct === 'endless') {
         if (E.continueEndless(s)) { GD.SFX.win(); if (hooks.onSave) hooks.onSave(); }
         return;
@@ -407,6 +418,7 @@
         el.offline.hidden = true;
         el.industry.hidden = true;
         el.research.hidden = true;
+        el.help.hidden = true;
         return;
       }
       if (panelAct === 'expand') {
@@ -1257,48 +1269,89 @@
       (block ? ' disabled' : '') + '>' + label + '</button></div>';
   }
 
-  function renderArchive() {
+  /* 怎么玩：一页说清整个循环 */
+  function renderHelp() {
+    var rows = [
+      ['1、企划', '选类型、题材、规模、平台、主创。相性越高品质越高，预告里能直接看到预计评分与成本。'],
+      ['2、开发', '时间在走、工资在烧。随时切「赶工 / 正常 / 打磨」——赶工快但伤品质。'],
+      ['3、评审', '4 位评审各打 10 分，满分 40。评审有偏好也有讨厌的类型。'],
+      ['4、发售', '盯档期（暑期 ×1.25 / 年末 ×1.40），避开撞档。卖 12 周，之后还有长尾。'],
+      ['5、再来一部', '每部作品都会解锁组合、涨经验、改变行业地位。']
+    ];
     var html = '<div class="panel-card">' +
-      '<div class="panel-head"><div><h3>作品集</h3>' +
-      '<div class="panel-sub">已发行 ' + s.history.length + ' 部</div></div>' +
+      '<div class="panel-head"><div><h3>怎么玩</h3>' +
+      '<div class="panel-sub">一部作品大概 60–90 秒</div></div>' +
       '<button class="ghost" data-act="close-panel">关闭</button></div>' +
       '<div class="panel-scroll">';
+    rows.forEach(function (r) {
+      html += '<div class="help-row"><b>' + esc(r[0]) + '</b><span>' + esc(r[1]) + '</span></div>';
+    });
+    html += '<div class="panel-block"><div class="block-title">几个小提示</div>' +
+      '<div class="help-row"><b>第一部免授权费</b><span>新开局第一部作品不用交平台授权费，先把流程跑一遍。</span></div>' +
+      '<div class="help-row"><b>主创很重要</b><span>探索创作强的人做剧情类，程序强的做动作类。</span></div>' +
+      '<div class="help-row"><b>不要只堆一个类型</b><span>玩家会腻、评审也会。市场流行每年都在换。</span></div>' +
+      '</div>';
+    html += '</div></div>';
+    el.help.innerHTML = html;
+  }
 
-    if (!s.history.length) {
-      html += '<p class="dim">还没有作品。去立项吧。</p>';
-    } else {
-      html += '<div class="arch-list">';
-      s.history.slice().reverse().forEach(function (h, ri) {
-        var idx = s.history.length - 1 - ri;   // 真实下标（列表是倒序的）
-        var cls = h.total >= 26 ? 'good' : h.total >= 20 ? '' : 'bad';
-        /* 名字存的是 h.name；自动名才回退成「类型·题材」 */
-        var autoName = E.genre(h.genre).name + '·' + E.theme(h.theme).name;
-        var title = (h.name && String(h.name).trim()) || autoName;
-        var isCustom = title !== autoName;
-        html += '<div class="arch-row">' +
-          '<div class="arch-name">' + esc(title) +
-          (isCustom ? '<span class="arch-genre">' + esc(autoName) + '</span>' : '') +
-          (h.seq > 1 ? '<span class="arch-seq">系列第 ' + h.seq + ' 作</span>' : '') +
-          (Array.isArray(h.awards) && h.awards.length
-            ? '<span class="arch-awards">🏆 ' + h.awards.map(function (a) { return esc(a); }).join(' · ') + '</span>'
-            : '') +
-          '</div>' +
-          '<div class="arch-meta">' +
-          (h.platformLabel ? esc(h.platformLabel) + ' · ' : '') +
-          esc(h.date || '') + ' · ' + esc(h.window || '普通档期') +
-          (h.ported ? ' · 移植 ×' + h.ported : '') +
-          '</div>' +
-          '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
-          '<div class="arch-sales">' + num(h.copies) + ' 份<br>' + money(h.revenue) + '</div>' +
-          portCell(idx) +
-          '</div>';
-      });
-      html += '</div>';
-    }
-
-    /* 组合收藏：类型 × 题材 100 格 */
+  function renderArchive() {
+    var tab = ui.aTab || 'works';
     var cst = E.comboStats(s);
-    html += '<div class="cm-box">' +
+    var html = '<div class="panel-card">' +
+      '<div class="panel-head"><div><h3>作品集</h3>' +
+      '<div class="panel-sub">已发行 ' + s.history.length + ' 部 · 组合 ' +
+      cst.have + ' / ' + cst.total + '</div></div>' +
+      '<button class="ghost" data-act="close-panel">关闭</button></div>' +
+      '<div class="tabs">' +
+      '<button class="tab' + (tab === 'works' ? ' on' : '') + '" data-atab="works">作品 ' +
+      s.history.length + '</button>' +
+      '<button class="tab' + (tab === 'combo' ? ' on' : '') + '" data-atab="combo">组合收藏 ' +
+      cst.have + ' / ' + cst.total + '</button>' +
+      '</div>' +
+      '<div class="panel-scroll">' +
+      (tab === 'combo' ? archiveComboBody(cst) : archiveWorksBody()) +
+      '</div></div>';
+    el.archive.innerHTML = html;
+  }
+
+  /* 作品列表（只在「作品」页签里渲染，不再被下面的收藏格挤长） */
+  function archiveWorksBody() {
+    if (!s.history.length) return '<p class="dim">还没有作品。去立项吧。</p>';
+    var html = '<div class="arch-list">';
+    s.history.slice().reverse().forEach(function (h, ri) {
+      var idx = s.history.length - 1 - ri;   // 真实下标（列表是倒序的）
+      var cls = h.total >= 26 ? 'good' : h.total >= 20 ? '' : 'bad';
+      /* 名字存的是 h.name；自动名才回退成「类型·题材」 */
+      var autoName = E.genre(h.genre).name + '·' + E.theme(h.theme).name;
+      var title = (h.name && String(h.name).trim()) || autoName;
+      var isCustom = title !== autoName;
+      html += '<div class="arch-row">' +
+        '<div class="arch-name">' + esc(title) +
+        (isCustom ? '<span class="arch-genre">' + esc(autoName) + '</span>' : '') +
+        (h.seq > 1 ? '<span class="arch-seq">系列第 ' + h.seq + ' 作</span>' : '') +
+        (Array.isArray(h.awards) && h.awards.length
+          ? '<span class="arch-awards">🏆 ' + h.awards.map(function (a) { return esc(a); }).join(' · ') + '</span>'
+          : '') +
+        '</div>' +
+        '<div class="arch-meta">' +
+        (h.platformLabel ? esc(h.platformLabel) + ' · ' : '') +
+        esc(h.date || '') + ' · ' + esc(h.window || '普通档期') +
+        (h.ported ? ' · 移植 ×' + h.ported : '') +
+        '</div>' +
+        '<div class="arch-score ' + cls + '">' + h.total + '</div>' +
+        '<div class="arch-sales">' + num(h.copies) + ' 份<br>' + money(h.revenue) + '</div>' +
+        portCell(idx) +
+        '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* 组合收藏：类型 × 题材 100 格 */
+  function archiveComboBody(cst) {
+    cst = cst || E.comboStats(s);
+    var html = '<div class="cm-box">' +
       '<div class="cm-head">' +
       '<div><b>组合收藏</b><span class="cm-sub">类型 × 题材</span></div>' +
       '<div class="cm-stat">已解锁 <b>' + cst.have + '</b> / ' + cst.total +
@@ -1330,10 +1383,7 @@
       '<span class="cm-cell top">' + GD.THEMES[2].icon + '</span> 王牌格　' +
       '<span class="cm-cell won">★</span> 王牌达成</div>' +
       '</div>';
-
-    html += '</div></div>';
-
-    el.archive.innerHTML = html;
+    return html;
   }
 
   /* ---------------- 行业 ---------------- */

@@ -889,6 +889,27 @@ function connect(wsUrl) {
     themePick.before + ' → theme=' + afterPick.theme + ' on=' + afterPick.on +
     ' plat=' + afterPick.platOn + ' coop=' + afterPick.coopOn);
 
+  /* ---------- 2.5 怎么玩（帮助）面板 ---------- */
+  var helpUI = await evalJs(`(function () {
+    var out = {};
+    try {
+      document.querySelector('[data-act="help"]').click();
+      out.open = !document.querySelector('#help').hidden;
+      out.rows = document.querySelectorAll('#help .help-row').length;
+      out.text = (document.querySelector('#help') || {}).textContent || '';
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+  check('帮助面板能打开', !helpUI.err && helpUI.open === true,
+    helpUI.err || 'ok');
+  check('帮助面板讲清了五个步骤与提示', helpUI.rows >= 8,
+    'rows=' + helpUI.rows);
+  check('帮助面板提到首部免授权费',
+    (helpUI.text || '').indexOf('免授权费') >= 0, helpUI.text.slice(0, 60));
+  await evalJs(`document.querySelector('#help [data-act="close-panel"]').click()`);
+  await sleep(120);
+  check('帮助面板可以关闭', await evalJs(`document.querySelector('#help').hidden`) === true);
+
   /* ---------- 3. 立项 ---------- */
   var moneyBefore = await evalJs(`GD.getState().money`);
   await evalJs(`document.querySelector('[data-act="go"]').click()`);
@@ -905,7 +926,10 @@ function connect(wsUrl) {
   check('立项后进入开发', started.phase === 'developing' && started.bar === true);
   check('开发界面显示自定义作品名', started.title.indexOf('星海列车') >= 0, started.title);
   check('每日成本显示的是数字不是 NaN', started.cost.indexOf('NaN') < 0 && /\d/.test(started.cost), started.cost);
-  check('立项扣了平台授权费', moneyBefore - started.money >= 6000, 'paid ' + (moneyBefore - started.money));
+  /* 首部作品免授权费：这里只该扣工资，不该扣授权费 */
+  check('首部作品不扣授权费',
+    moneyBefore - started.money < 6000 && moneyBefore - started.money >= 0,
+    'paid ' + (moneyBefore - started.money));
   check('主创被高亮', started.active === 1, 'active=' + started.active);
   check('进度开始推进', started.progress > 0, 'p=' + started.progress.toFixed(3));
 
@@ -1158,6 +1182,9 @@ function connect(wsUrl) {
 
   /* ---------- 8.5b 组合收藏：作品集面板 ---------- */
   var cmUI = await evalJs(`(() => {
+    /* 组合收藏现在在第二个页签里，先切过去 */
+    const comboBtn = document.querySelector('#archive [data-atab="combo"]');
+    if (comboBtn) comboBtn.click();
     const box = document.querySelector('#archive .cm-box');
     const cells = [...document.querySelectorAll('#archive .cm-cell')]
       .filter(c => !c.closest('.cm-legend'));
@@ -1181,6 +1208,31 @@ function connect(wsUrl) {
   check('未解锁的格子占多数', cmUI.locked === 100 - cmUI.combos, 'locked=' + cmUI.locked);
   check('收藏表头显示已解锁 / 王牌', cmUI.stat.indexOf('已解锁') >= 0 && cmUI.stat.indexOf('王牌') >= 0,
     cmUI.stat);
+  /* 作品集页签：作品 / 组合收藏 应该能互相切换 */
+  var archTabs = await evalJs(`(function () {
+    var out = {};
+    try {
+      out.tabs = document.querySelectorAll('#archive [data-atab]').length;
+      var works = document.querySelector('#archive [data-atab="works"]');
+      if (works) works.click();
+      out.worksRows = document.querySelectorAll('#archive .arch-row').length;
+      out.worksCombo = document.querySelectorAll('#archive .cm-box').length;
+      var combo = document.querySelector('#archive [data-atab="combo"]');
+      if (combo) combo.click();
+      out.comboRows = document.querySelectorAll('#archive .cm-row').length;
+      out.comboWorks = document.querySelectorAll('#archive .arch-row').length;
+    } catch (e) { out.err = String((e && e.message) || e); }
+    return out;
+  })()`);
+  check('作品集有两个页签', !archTabs.err && archTabs.tabs === 2,
+    archTabs.err || ('tabs=' + archTabs.tabs));
+  check('作品页签只显示作品列表',
+    archTabs.worksRows >= 1 && archTabs.worksCombo === 0,
+    'rows=' + archTabs.worksRows + ' combo=' + archTabs.worksCombo);
+  check('组合页签不再拖着长列表',
+    archTabs.comboRows === 11 && archTabs.comboWorks === 0,
+    'cmRows=' + archTabs.comboRows + ' works=' + archTabs.comboWorks);
+  await evalJs(`document.querySelector('#archive [data-atab="works"]').click()`);
 
   /* 解锁与王牌达成都会弹提示（引擎队列 -> UI 取走） */
   var cmToast = await evalJs(`(() => {

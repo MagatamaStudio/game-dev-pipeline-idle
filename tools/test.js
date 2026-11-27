@@ -92,11 +92,23 @@ function playOne(s, plan, choice) {
 
 /* ---------- 立项与开发 ---------- */
 (function () {
+  var sFree = E.newGame();
+  var freeBefore = sFree.money;
+  ok('首部作品免授权费', E.startProject(sFree, { genre: 'rpg', theme: 'fantasy', leader: 'zhou' }) === true &&
+    near(sFree.money, freeBefore) && sFree.project.cost === 0,
+    'paid=' + (freeBefore - sFree.money));
   var s = E.newGame();
+  s.history = [{ total: 30 }];   // 第二部起要收授权费
   var before = s.money;
   var plan = { genre: 'rpg', theme: 'fantasy', leader: 'zhou' };
   ok('可以立项', E.startProject(s, plan) === true);
-  ok('立项扣平台授权费', near(s.money, before - E.platform(s).license));
+  ok('第二部扣授权费', near(s.money, before - E.platform(s).license));
+  var s2b = E.newGame();
+  s2b.history = [{ total: 30 }];
+  s2b.money = 1e6;
+  var b2b = s2b.money;
+  E.startProject(s2b, plan);
+  ok('第二部开始收授权费', near(s2b.money, b2b - E.platform(s2b).license));
   ok('进入开发阶段', s.phase === 'developing');
   ok('开发时长按主创速度算', near(s.project.baseDuration, E.devDuration(s, 'zhou')));
 
@@ -181,6 +193,7 @@ function playOne(s, plan, choice) {
 
   /* 总成本 = 授权 + 工资（这次不触发事件） */
   var s5 = E.newGame();
+  s5.history = [{ total: 30 }];   // 跳过首部免费
   E.startProject(s5, plan);
   s5.project.eventsDone = BAL.eventAts.length;
   var guard = 0;
@@ -399,6 +412,7 @@ function playOne(s, plan, choice) {
 /* ---------- 救援 ---------- */
 (function () {
   var s = E.newGame();
+  s.history = [{ total: 30 }];   // 跳过首部免费，才测得到授权费
   s.money = 1000;
   ok('没钱时提示救援', E.needRescue(s) === true);
   ok('没钱不能立项', E.startProject(s, s.plan) === false);
@@ -2078,6 +2092,7 @@ function playOne(s, plan, choice) {
   /* 立项时指定了一个非法平台：退回当前可用平台，按对的授权费扣钱 */
   var s4 = E.newGame();
   s4.money = 1e6;
+  s4.history = [{ total: 30 }];   // 跳过首部免费
   var payPlan = { genre: 'rpg', theme: 'fantasy', leader: s4.staff[0].id, platform: 'v1' };
   var pv = E.preview(s4, payPlan);
   ok('预览用合法平台的授权费', pv.license === E.platform(s4).license,
